@@ -4,6 +4,7 @@ import { AdminShell } from "@/components/admin-shell";
 import { getSessionUser } from "@/lib/auth";
 import { formatKoreanWon } from "@/lib/charge-utils";
 import { getDashboardSummary } from "@/lib/mock-report-service";
+import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
 
 const quickCards = [
   {
@@ -30,7 +31,8 @@ export default async function DashboardPage() {
     redirect("/");
   }
 
-  const summary = getDashboardSummary(user.companyName);
+  const state = await getMockChargeStateFromCookie();
+  const summary = getDashboardSummary(user.companyName, state);
 
   const topMetrics = [
     { label: "도메인", value: summary.domainName },

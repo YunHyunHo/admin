@@ -2,10 +2,14 @@ import { NextResponse } from "next/server";
 
 import { getSessionUser } from "@/lib/auth";
 import {
+  getDefaultChargeRequestState,
   getChargeRequestsByCompany,
   processChargeRequest,
-  resetMockChargeRequests,
 } from "@/lib/mock-api-store";
+import {
+  getMockChargeStateFromCookie,
+  setMockChargeStateCookie,
+} from "@/lib/mock-state-cookie";
 import type { ProcessedRequest } from "@/lib/charge-utils";
 
 const allowedStatuses: ProcessedRequest["status"][] = ["승인", "승인거절"];
@@ -17,7 +21,9 @@ export async function GET() {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
 
-  return NextResponse.json(getChargeRequestsByCompany(user.companyName));
+  const state = await getMockChargeStateFromCookie();
+
+  return NextResponse.json(getChargeRequestsByCompany(user.companyName, state));
 }
 
 export async function POST(request: Request) {
@@ -32,11 +38,17 @@ export async function POST(request: Request) {
     id?: string;
     status?: ProcessedRequest["status"];
   };
+  let state = await getMockChargeStateFromCookie();
 
   if (body.action === "reset") {
-    resetMockChargeRequests();
+    state = getDefaultChargeRequestState();
+    const response = NextResponse.json(
+      getChargeRequestsByCompany(user.companyName, state),
+    );
 
-    return NextResponse.json(getChargeRequestsByCompany(user.companyName));
+    setMockChargeStateCookie(response, state);
+
+    return response;
   }
 
   if (!body.id || !body.status || !allowedStatuses.includes(body.status)) {
@@ -50,6 +62,7 @@ export async function POST(request: Request) {
     user.companyName,
     body.id,
     body.status,
+    state,
   );
 
   if (!processedRequest) {
@@ -59,8 +72,12 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json({
+  const response = NextResponse.json({
     processedRequest,
-    ...getChargeRequestsByCompany(user.companyName),
+    ...getChargeRequestsByCompany(user.companyName, state),
   });
+
+  setMockChargeStateCookie(response, state);
+
+  return response;
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getSessionUser } from "@/lib/auth";
+import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
 import { getDomainSettlement } from "@/lib/mock-report-service";
 
 export async function GET(request: Request) {
@@ -21,7 +22,9 @@ export async function GET(request: Request) {
     );
   }
 
+  const state = await getMockChargeStateFromCookie();
+
   return NextResponse.json(
-    getDomainSettlement(user.companyName, startDate, endDate),
+    getDomainSettlement(user.companyName, startDate, endDate, state),
   );
 }

@@ -11,6 +11,7 @@ import {
   getDefaultReportDateRange,
   getDomainSettlement,
 } from "@/lib/mock-report-service";
+import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
 
 export default async function DomainSettlementPage() {
   const user = await getSessionUser();
@@ -20,10 +21,12 @@ export default async function DomainSettlementPage() {
   }
 
   const defaultRange = getDefaultReportDateRange();
+  const state = await getMockChargeStateFromCookie();
   const initialSettlement = getDomainSettlement(
     user.companyName,
     defaultRange.startDate,
     defaultRange.endDate,
+    state,
   );
 
   return (

@@ -1,6 +1,7 @@
 import {
   getApprovedRequestsByCompany,
   getDashboardSummaryByCompany,
+  type ChargeRequestState,
 } from "@/lib/mock-api-store";
 import {
   getDomainNameByCompany,
@@ -55,11 +56,19 @@ function isInRange(mmddTime: string, startDate: string, endDate: string) {
   return isoDate >= startDate && isoDate <= endDate;
 }
 
-export function getDashboardSummary(companyName: string) {
-  return getDashboardSummaryByCompany(companyName);
+export function getDashboardSummary(
+  companyName: string,
+  state?: ChargeRequestState,
+) {
+  return getDashboardSummaryByCompany(companyName, state);
 }
 
-export function getSettlementProfit(companyName: string, startDate: string, endDate: string) {
+export function getSettlementProfit(
+  companyName: string,
+  startDate: string,
+  endDate: string,
+  state?: ChargeRequestState,
+) {
   const domainName = getDomainNameByCompany(companyName);
   const feeRate = getFeeRateByCompany(companyName);
   const grouped = new Map<
@@ -67,7 +76,7 @@ export function getSettlementProfit(companyName: string, startDate: string, endD
     { date: string; chargeTotal: number; feeTotal: number; payoutTotal: number }
   >();
 
-  for (const request of getApprovedRequestsByCompany(companyName)) {
+  for (const request of getApprovedRequestsByCompany(companyName, state)) {
     if (!isInRange(request.completedAt, startDate, endDate)) {
       continue;
     }
@@ -105,10 +114,15 @@ export function getSettlementProfit(companyName: string, startDate: string, endD
   };
 }
 
-export function getDomainSettlement(companyName: string, startDate: string, endDate: string) {
+export function getDomainSettlement(
+  companyName: string,
+  startDate: string,
+  endDate: string,
+  state?: ChargeRequestState,
+) {
   const domainName = getDomainNameByCompany(companyName);
   const feeRate = getFeeRateByCompany(companyName);
-  const approvedRequests = getApprovedRequestsByCompany(companyName);
+  const approvedRequests = getApprovedRequestsByCompany(companyName, state);
   const rows = createDateRange(startDate, endDate).map((date) => {
     const charge = approvedRequests
       .filter((request) => toIsoDate(request.completedAt) === date)
@@ -137,9 +151,14 @@ export function getDomainSettlement(companyName: string, startDate: string, endD
   };
 }
 
-export function getFeeRecords(companyName: string, startDate: string, endDate: string) {
+export function getFeeRecords(
+  companyName: string,
+  startDate: string,
+  endDate: string,
+  state?: ChargeRequestState,
+) {
   const feeRate = getFeeRateByCompany(companyName);
-  const rows = getApprovedRequestsByCompany(companyName)
+  const rows = getApprovedRequestsByCompany(companyName, state)
     .filter((request) => isInRange(request.completedAt, startDate, endDate))
     .map((request) => {
       const amount = parseKoreanWon(request.amount);

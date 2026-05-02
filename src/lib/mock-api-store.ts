@@ -12,7 +12,7 @@ import {
   type ProcessedRequest,
 } from "@/lib/charge-utils";
 
-type ChargeRequestState = {
+export type ChargeRequestState = {
   pending: PendingRequest[];
   approved: ProcessedRequest[];
   rejected: ProcessedRequest[];
@@ -61,13 +61,22 @@ function getStore() {
   return globalStore.__vendorAdminMockStore;
 }
 
-export function getChargeRequestsByCompany(companyName: string) {
-  const store = getStore();
-
+export function getDefaultChargeRequestState(): ChargeRequestState {
   return {
-    pending: filterRequestsByCompany(store.pending, companyName),
-    approved: filterRequestsByCompany(store.approved, companyName),
-    rejected: filterRequestsByCompany(store.rejected, companyName),
+    pending: clonePending(pendingRequests),
+    approved: cloneProcessed(approvedRequests),
+    rejected: cloneProcessed(rejectedRequests),
+  };
+}
+
+export function getChargeRequestsByCompany(
+  companyName: string,
+  state: ChargeRequestState = getStore(),
+) {
+  return {
+    pending: filterRequestsByCompany(state.pending, companyName),
+    approved: filterRequestsByCompany(state.approved, companyName),
+    rejected: filterRequestsByCompany(state.rejected, companyName),
   };
 }
 
@@ -75,9 +84,9 @@ export function processChargeRequest(
   companyName: string,
   requestId: string,
   status: ProcessedRequest["status"],
+  state: ChargeRequestState = getStore(),
 ) {
-  const store = getStore();
-  const companyPending = filterRequestsByCompany(store.pending, companyName);
+  const companyPending = filterRequestsByCompany(state.pending, companyName);
   const target = companyPending.find((request) => request.id === requestId);
 
   if (!target) {
@@ -90,12 +99,12 @@ export function processChargeRequest(
     status,
   };
 
-  store.pending = store.pending.filter((request) => request.id !== requestId);
+  state.pending = state.pending.filter((request) => request.id !== requestId);
 
   if (status === "승인") {
-    store.approved = [processedRequest, ...store.approved];
+    state.approved = [processedRequest, ...state.approved];
   } else {
-    store.rejected = [processedRequest, ...store.rejected];
+    state.rejected = [processedRequest, ...state.rejected];
   }
 
   return processedRequest;
@@ -104,21 +113,26 @@ export function processChargeRequest(
 export function resetMockChargeRequests() {
   const globalStore = globalThis as GlobalMockStore;
 
-  globalStore.__vendorAdminMockStore = {
-    pending: clonePending(pendingRequests),
-    approved: cloneProcessed(approvedRequests),
-    rejected: cloneProcessed(rejectedRequests),
-  };
+  globalStore.__vendorAdminMockStore = getDefaultChargeRequestState();
 
   return globalStore.__vendorAdminMockStore;
 }
 
-export function getApprovedRequestsByCompany(companyName: string) {
-  return getChargeRequestsByCompany(companyName).approved;
+export function getApprovedRequestsByCompany(
+  companyName: string,
+  state: ChargeRequestState = getStore(),
+) {
+  return getChargeRequestsByCompany(companyName, state).approved;
 }
 
-export function getDashboardSummaryByCompany(companyName: string) {
-  const { pending, approved, rejected } = getChargeRequestsByCompany(companyName);
+export function getDashboardSummaryByCompany(
+  companyName: string,
+  state: ChargeRequestState = getStore(),
+) {
+  const { pending, approved, rejected } = getChargeRequestsByCompany(
+    companyName,
+    state,
+  );
   const domainName = getDomainNameByCompany(companyName);
   const feeRate = getFeeRateByCompany(companyName);
   const approvedChargeTotal = approved.reduce(

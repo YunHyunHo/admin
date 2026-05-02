@@ -4,6 +4,7 @@ import { ChargeRequestsBoard } from "@/components/charge-requests-board";
 import { AdminShell } from "@/components/admin-shell";
 import { getSessionUser } from "@/lib/auth";
 import { getChargeRequestsByCompany } from "@/lib/mock-api-store";
+import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
 
 export default async function ChargesPage() {
   const user = await getSessionUser();
@@ -12,7 +13,8 @@ export default async function ChargesPage() {
     redirect("/");
   }
 
-  const companyRequests = getChargeRequestsByCompany(user.companyName);
+  const state = await getMockChargeStateFromCookie();
+  const companyRequests = getChargeRequestsByCompany(user.companyName, state);
 
   return (
     <AdminShell

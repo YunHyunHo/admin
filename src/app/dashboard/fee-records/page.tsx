@@ -7,6 +7,7 @@ import {
   getDefaultReportDateRange,
   getFeeRecords,
 } from "@/lib/mock-report-service";
+import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
 
 export default async function FeeRecordsPage() {
   const user = await getSessionUser();
@@ -16,10 +17,12 @@ export default async function FeeRecordsPage() {
   }
 
   const defaultRange = getDefaultReportDateRange();
+  const state = await getMockChargeStateFromCookie();
   const initialRecords = getFeeRecords(
     user.companyName,
     defaultRange.startDate,
     defaultRange.endDate,
+    state,
   );
 
   return (
