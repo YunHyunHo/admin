@@ -50,8 +50,19 @@ function getTodayIsoDate() {
   return formatter.format(new Date());
 }
 
-function getMonthStartIsoDate(isoDate: string) {
-  return `${isoDate.slice(0, 8)}01`;
+function getYesterdayIsoDate() {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const now = new Date();
+  const yesterday = new Date(now);
+
+  yesterday.setDate(now.getDate() - 1);
+
+  return formatter.format(yesterday);
 }
 
 function clampDate(value: string, min: string, max: string) {
@@ -73,8 +84,8 @@ export function SettlementProfitBoard({
   initialTotals,
 }: SettlementProfitBoardProps) {
   const todayIsoDate = getTodayIsoDate();
-  const monthStartIsoDate = getMonthStartIsoDate(todayIsoDate);
-  const [startDate, setStartDate] = useState(monthStartIsoDate);
+  const yesterdayIsoDate = getYesterdayIsoDate();
+  const [startDate, setStartDate] = useState(yesterdayIsoDate);
   const [endDate, setEndDate] = useState(todayIsoDate);
   const [domainName, setDomainName] = useState(initialDomainName);
   const [profitRows, setProfitRows] = useState<DailyProfitRow[]>(initialRows);

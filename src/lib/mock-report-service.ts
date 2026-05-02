@@ -19,11 +19,14 @@ export function getDefaultReportDateRange() {
     month: "2-digit",
     day: "2-digit",
   });
-  const endDate = formatter.format(new Date());
+  const now = new Date();
+  const yesterday = new Date(now);
+
+  yesterday.setDate(now.getDate() - 1);
 
   return {
-    startDate: `${endDate.slice(0, 8)}01`,
-    endDate,
+    startDate: formatter.format(yesterday),
+    endDate: formatter.format(now),
   };
 }
 
