@@ -2,20 +2,13 @@
 
 import { useMemo, useState } from "react";
 
-import { formatKoreanWon } from "@/lib/mock-charge-data";
+import { formatKoreanWon } from "@/lib/charge-utils";
 
 type DomainSettlementBoardProps = {
   companyName: string;
   initialFeeRate: number;
   domainName: string;
-};
-
-type DomainSettlementRecord = {
-  domain: string;
-  date: string;
-  charge: number;
-  exchange: number;
-  distributor: number;
+  initialRows: DomainSettlementRow[];
 };
 
 type DomainSettlementRow = {
@@ -25,25 +18,18 @@ type DomainSettlementRow = {
   distributor: number;
 };
 
+type DomainSettlementResponse = {
+  domainName: string;
+  rows: DomainSettlementRow[];
+  total: {
+    charge: number;
+    exchange: number;
+    distributor: number;
+  };
+};
+
 const PAGE_SIZE = 10;
 const MIN_QUERY_DATE = "2026-01-01";
-
-const settlementRecords: DomainSettlementRecord[] = [
-  {
-    domain: "엠페이",
-    date: "2026-04-28",
-    charge: 162_420_000,
-    exchange: 161_770_320,
-    distributor: 324_840,
-  },
-  {
-    domain: "원페이",
-    date: "2026-05-01",
-    charge: 411_300_000,
-    exchange: 409_243_500,
-    distributor: 411_300,
-  },
-];
 
 function getTodayIsoDate() {
   const formatter = new Intl.DateTimeFormat("en-CA", {
@@ -76,23 +62,6 @@ function toDisplayDate(isoDate: string) {
   return isoDate.slice(5);
 }
 
-function createDateRange(startDate: string, endDate: string) {
-  const dates: string[] = [];
-  const cursor = new Date(`${startDate}T00:00:00+09:00`);
-  const end = new Date(`${endDate}T00:00:00+09:00`);
-
-  while (cursor <= end) {
-    const year = cursor.getFullYear();
-    const month = String(cursor.getMonth() + 1).padStart(2, "0");
-    const date = String(cursor.getDate()).padStart(2, "0");
-
-    dates.push(`${year}-${month}-${date}`);
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  return dates;
-}
-
 function formatSettlementValue(value: number, dashWhenZero = false) {
   if (dashWhenZero && value === 0) {
     return "-";
@@ -101,50 +70,18 @@ function formatSettlementValue(value: number, dashWhenZero = false) {
   return formatKoreanWon(value);
 }
 
-function buildDomainRows(domain: string, dates: string[]): DomainSettlementRow[] {
-  return dates.map((date) => {
-    const records = settlementRecords.filter(
-      (record) => record.domain === domain && record.date === date,
-    );
-
-    return records.reduce<DomainSettlementRow>(
-      (row, record) => ({
-        date,
-        charge: row.charge + record.charge,
-        exchange: row.exchange + record.exchange,
-        distributor: row.distributor + record.distributor,
-      }),
-      {
-        date,
-        charge: 0,
-        exchange: 0,
-        distributor: 0,
-      },
-    );
-  });
-}
-
 export function DomainSettlementBoard({
   companyName,
   domainName,
+  initialRows,
 }: DomainSettlementBoardProps) {
   const todayIsoDate = getTodayIsoDate();
   const monthStartIsoDate = getMonthStartIsoDate(todayIsoDate);
   const [startDate, setStartDate] = useState(monthStartIsoDate);
   const [endDate, setEndDate] = useState(todayIsoDate);
-  const [appliedRange, setAppliedRange] = useState({
-    startDate: monthStartIsoDate,
-    endDate: todayIsoDate,
-  });
-
-  const dates = useMemo(
-    () => createDateRange(appliedRange.startDate, appliedRange.endDate),
-    [appliedRange],
-  );
-
   const [currentPage, setCurrentPage] = useState(1);
-
-  const rows = useMemo(() => buildDomainRows(domainName, dates), [domainName, dates]);
+  const [rows, setRows] = useState<DomainSettlementRow[]>(initialRows);
+  const [message, setMessage] = useState("서버 API에서 도메인 정산 데이터를 불러옵니다.");
   const total = useMemo(
     () =>
       rows.reduce(
@@ -167,14 +104,34 @@ export function DomainSettlementBoard({
     currentPage * PAGE_SIZE,
   );
 
+  async function loadRows(nextStartDate: string, nextEndDate: string) {
+    try {
+      const response = await fetch(
+        `/api/domain-settlement?startDate=${nextStartDate}&endDate=${nextEndDate}`,
+      );
+
+      if (!response.ok) {
+        const error = (await response.json()) as { message?: string };
+        throw new Error(error.message ?? "도메인 정산 조회에 실패했습니다.");
+      }
+
+      const data = (await response.json()) as DomainSettlementResponse;
+      setRows(data.rows);
+      setMessage("서버 API 기준 데이터입니다.");
+    } catch (error) {
+      setRows([]);
+      setMessage(error instanceof Error ? error.message : "조회에 실패했습니다.");
+    }
+  }
+
   function applyDateRange() {
     const nextStartDate = clampDate(startDate, MIN_QUERY_DATE, todayIsoDate);
     const nextEndDate = clampDate(endDate, nextStartDate, todayIsoDate);
 
     setStartDate(nextStartDate);
     setEndDate(nextEndDate);
-    setAppliedRange({ startDate: nextStartDate, endDate: nextEndDate });
     setCurrentPage(1);
+    void loadRows(nextStartDate, nextEndDate);
   }
 
   return (
@@ -184,7 +141,9 @@ export function DomainSettlementBoard({
           <div>
             <p className="text-xs text-white/38">정산</p>
             <h2 className="mt-2 text-xl font-semibold text-white">도메인 정산</h2>
-            <p className="mt-2 text-sm text-white/46">{companyName}</p>
+            <p className="mt-2 text-sm text-white/46">
+              {companyName} · {message}
+            </p>
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">

@@ -1,21 +1,14 @@
-export type PendingRequest = {
-  id: string;
-  branch: string;
-  userId: string;
-  topAgent: string;
-  subAgent: string;
-  domain: string;
-  bankName: string;
-  accountNumber: string;
-  depositor: string;
-  amount: string;
-  requestedAt: string;
-};
+export {
+  filterRequestsByCompany,
+  formatKoreanWon,
+  getDomainNameByCompany,
+  getFeeRateByCompany,
+  parseKoreanWon,
+  type PendingRequest,
+  type ProcessedRequest,
+} from "@/lib/charge-utils";
 
-export type ProcessedRequest = PendingRequest & {
-  completedAt: string;
-  status: "승인" | "승인거절";
-};
+import type { PendingRequest, ProcessedRequest } from "@/lib/charge-utils";
 
 export const pendingRequests: PendingRequest[] = [
   {
@@ -171,36 +164,3 @@ export const rejectedRequests: ProcessedRequest[] = [
     status: "승인거절",
   },
 ];
-
-export const companyDomainNames: Record<string, string> = {
-  원페이: "원페이",
-  엠페이: "엠페이",
-};
-
-export const companyFeeRates: Record<string, number> = {
-  원페이: 0.4,
-  엠페이: 0.55,
-};
-
-export function parseKoreanWon(amount: string) {
-  return Number(amount.replace(/[^\d]/g, ""));
-}
-
-export function formatKoreanWon(value: number) {
-  return `${value.toLocaleString("ko-KR")} 원`;
-}
-
-export function getDomainNameByCompany(companyName: string) {
-  return companyDomainNames[companyName] ?? companyName;
-}
-
-export function getFeeRateByCompany(companyName: string) {
-  return companyFeeRates[companyName] ?? 0.4;
-}
-
-export function filterRequestsByCompany<
-  T extends { domain: string }
->(requests: T[], companyName: string) {
-  const domainName = getDomainNameByCompany(companyName);
-  return requests.filter((request) => request.domain === domainName);
-}

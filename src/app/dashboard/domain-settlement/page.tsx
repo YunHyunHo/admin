@@ -6,7 +6,11 @@ import { getSessionUser } from "@/lib/auth";
 import {
   getDomainNameByCompany,
   getFeeRateByCompany,
-} from "@/lib/mock-charge-data";
+} from "@/lib/charge-utils";
+import {
+  getDefaultReportDateRange,
+  getDomainSettlement,
+} from "@/lib/mock-report-service";
 
 export default async function DomainSettlementPage() {
   const user = await getSessionUser();
@@ -14,6 +18,13 @@ export default async function DomainSettlementPage() {
   if (!user) {
     redirect("/");
   }
+
+  const defaultRange = getDefaultReportDateRange();
+  const initialSettlement = getDomainSettlement(
+    user.companyName,
+    defaultRange.startDate,
+    defaultRange.endDate,
+  );
 
   return (
     <AdminShell
@@ -26,6 +37,7 @@ export default async function DomainSettlementPage() {
         companyName={user.companyName}
         initialFeeRate={getFeeRateByCompany(user.companyName)}
         domainName={getDomainNameByCompany(user.companyName)}
+        initialRows={initialSettlement.rows}
       />
     </AdminShell>
   );

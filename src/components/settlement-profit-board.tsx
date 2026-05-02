@@ -1,18 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
-import {
-  approvedRequests,
-  formatKoreanWon,
-  getDomainNameByCompany,
-  getFeeRateByCompany,
-  parseKoreanWon,
-  type ProcessedRequest,
-} from "@/lib/mock-charge-data";
+import { formatKoreanWon } from "@/lib/charge-utils";
 
 type SettlementProfitBoardProps = {
   companyName: string;
+  initialDomainName: string;
+  initialRows: DailyProfitRow[];
+  initialTotals: {
+    chargeTotal: number;
+    feeTotal: number;
+    payoutTotal: number;
+  };
 };
 
 type DailyProfitRow = {
@@ -22,13 +22,17 @@ type DailyProfitRow = {
   payoutTotal: number;
 };
 
-const DISPLAY_YEAR = "2026";
-const MIN_QUERY_DATE = "2026-01-01";
+type SettlementProfitResponse = {
+  domainName: string;
+  rows: DailyProfitRow[];
+  totals: {
+    chargeTotal: number;
+    feeTotal: number;
+    payoutTotal: number;
+  };
+};
 
-function toIsoDate(mmdd: string) {
-  const [month, day] = mmdd.split("-");
-  return `${DISPLAY_YEAR}-${month}-${day}`;
-}
+const MIN_QUERY_DATE = "2026-01-01";
 
 function fromIsoDate(iso: string) {
   const [, month, day] = iso.split("-");
@@ -62,52 +66,43 @@ function clampDate(value: string, min: string, max: string) {
   return value;
 }
 
-function buildProfitRows(
-  requests: ProcessedRequest[],
-  feeRate: number,
-): DailyProfitRow[] {
-  const grouped = new Map<string, DailyProfitRow>();
-
-  for (const request of requests) {
-    const date = request.completedAt.slice(0, 5);
-    const amount = parseKoreanWon(request.amount);
-    const fee = Math.floor(amount * (feeRate / 100));
-    const payout = amount - fee;
-    const current = grouped.get(date) ?? {
-      date,
-      chargeTotal: 0,
-      feeTotal: 0,
-      payoutTotal: 0,
-    };
-
-    current.chargeTotal += amount;
-    current.feeTotal += fee;
-    current.payoutTotal += payout;
-    grouped.set(date, current);
-  }
-
-  return [...grouped.values()].sort((a, b) => a.date.localeCompare(b.date));
-}
-
 export function SettlementProfitBoard({
   companyName,
+  initialDomainName,
+  initialRows,
+  initialTotals,
 }: SettlementProfitBoardProps) {
-  const domainName = getDomainNameByCompany(companyName);
-  const feeRate = getFeeRateByCompany(companyName);
-  const companyRequests = useMemo(
-    () => approvedRequests.filter((request) => request.domain === domainName),
-    [domainName],
-  );
-
   const todayIsoDate = getTodayIsoDate();
   const monthStartIsoDate = getMonthStartIsoDate(todayIsoDate);
-
   const [startDate, setStartDate] = useState(monthStartIsoDate);
   const [endDate, setEndDate] = useState(todayIsoDate);
-  const [appliedRange, setAppliedRange] = useState({
-    startDate: monthStartIsoDate,
-    endDate: todayIsoDate,
-  });
+  const [domainName, setDomainName] = useState(initialDomainName);
+  const [profitRows, setProfitRows] = useState<DailyProfitRow[]>(initialRows);
+  const [totals, setTotals] = useState(initialTotals);
+  const [message, setMessage] = useState("서버 API에서 수익 데이터를 불러옵니다.");
+
+  async function loadRows(nextStartDate: string, nextEndDate: string) {
+    try {
+      const response = await fetch(
+        `/api/settlement-profit?startDate=${nextStartDate}&endDate=${nextEndDate}`,
+      );
+
+      if (!response.ok) {
+        const error = (await response.json()) as { message?: string };
+        throw new Error(error.message ?? "본사/총판 수익 조회에 실패했습니다.");
+      }
+
+      const data = (await response.json()) as SettlementProfitResponse;
+      setDomainName(data.domainName);
+      setProfitRows(data.rows);
+      setTotals(data.totals);
+      setMessage("서버 API 기준 데이터입니다.");
+    } catch (error) {
+      setProfitRows([]);
+      setTotals({ chargeTotal: 0, feeTotal: 0, payoutTotal: 0 });
+      setMessage(error instanceof Error ? error.message : "조회에 실패했습니다.");
+    }
+  }
 
   function applyDateRange() {
     const nextStartDate = clampDate(startDate, MIN_QUERY_DATE, todayIsoDate);
@@ -115,26 +110,8 @@ export function SettlementProfitBoard({
 
     setStartDate(nextStartDate);
     setEndDate(nextEndDate);
-    setAppliedRange({ startDate: nextStartDate, endDate: nextEndDate });
+    void loadRows(nextStartDate, nextEndDate);
   }
-
-  const filteredRequests = useMemo(
-    () =>
-      companyRequests.filter((request) => {
-        const date = toIsoDate(request.completedAt.slice(0, 5));
-        return date >= appliedRange.startDate && date <= appliedRange.endDate;
-      }),
-    [companyRequests, appliedRange],
-  );
-
-  const profitRows = useMemo(
-    () => buildProfitRows(filteredRequests, feeRate),
-    [filteredRequests, feeRate],
-  );
-
-  const chargeTotal = profitRows.reduce((sum, row) => sum + row.chargeTotal, 0);
-  const feeTotal = profitRows.reduce((sum, row) => sum + row.feeTotal, 0);
-  const payoutTotal = profitRows.reduce((sum, row) => sum + row.payoutTotal, 0);
 
   return (
     <div className="space-y-5">
@@ -149,7 +126,7 @@ export function SettlementProfitBoard({
             </h2>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-white/56">
               {companyName} 업체의 승인 완료 건만 기준으로 날짜별 충전액, 수수료,
-              도메인 정산 금액을 확인하는 화면이야.
+              도메인 정산 금액을 확인하는 화면이야. {message}
             </p>
           </div>
 
@@ -161,17 +138,11 @@ export function SettlementProfitBoard({
               <input
                 type="date"
                 value={startDate}
-                onChange={(event) => {
-                  const nextStartDate = clampDate(
-                    event.target.value,
-                    MIN_QUERY_DATE,
-                    endDate,
-                  );
-
-                  setStartDate(nextStartDate);
-                }}
                 min={MIN_QUERY_DATE}
                 max={endDate}
+                onChange={(event) =>
+                  setStartDate(clampDate(event.target.value, MIN_QUERY_DATE, endDate))
+                }
                 className="h-11 w-40 rounded-2xl border border-white/10 bg-black/20 px-4 text-white outline-none [color-scheme:dark]"
               />
             </label>
@@ -182,17 +153,11 @@ export function SettlementProfitBoard({
               <input
                 type="date"
                 value={endDate}
-                onChange={(event) => {
-                  const nextEndDate = clampDate(
-                    event.target.value,
-                    startDate,
-                    todayIsoDate,
-                  );
-
-                  setEndDate(nextEndDate);
-                }}
                 min={startDate}
                 max={todayIsoDate}
+                onChange={(event) =>
+                  setEndDate(clampDate(event.target.value, startDate, todayIsoDate))
+                }
                 className="h-11 w-40 rounded-2xl border border-white/10 bg-black/20 px-4 text-white outline-none [color-scheme:dark]"
               />
             </label>
@@ -211,16 +176,14 @@ export function SettlementProfitBoard({
             <p className="text-[0.72rem] uppercase tracking-[0.18em] text-white/38">
               대상 도메인
             </p>
-            <p className="mt-3 text-2xl font-semibold text-white">
-              {domainName}
-            </p>
+            <p className="mt-3 text-2xl font-semibold text-white">{domainName}</p>
           </article>
           <article className="rounded-2xl border border-white/8 bg-white/[0.03] px-5 py-4">
             <p className="text-[0.72rem] uppercase tracking-[0.18em] text-white/38">
               충전 합계
             </p>
             <p className="mt-3 text-2xl font-semibold text-white">
-              {formatKoreanWon(chargeTotal)}
+              {formatKoreanWon(totals.chargeTotal)}
             </p>
           </article>
           <article className="rounded-2xl border border-white/8 bg-white/[0.03] px-5 py-4">
@@ -228,7 +191,7 @@ export function SettlementProfitBoard({
               수수료 합계
             </p>
             <p className="mt-3 text-2xl font-semibold text-white">
-              {formatKoreanWon(feeTotal)}
+              {formatKoreanWon(totals.feeTotal)}
             </p>
           </article>
           <article className="rounded-2xl border border-cyan-400/16 bg-cyan-500/8 px-5 py-4">
@@ -236,7 +199,7 @@ export function SettlementProfitBoard({
               도메인 정산금
             </p>
             <p className="mt-3 text-2xl font-semibold text-white">
-              {formatKoreanWon(payoutTotal)}
+              {formatKoreanWon(totals.payoutTotal)}
             </p>
           </article>
         </div>
@@ -266,11 +229,17 @@ export function SettlementProfitBoard({
                       className="border-t border-white/8 text-white/84"
                     >
                       <td className="px-4 py-4 text-center">
-                        {fromIsoDate(toIsoDate(row.date))}
+                        {fromIsoDate(`2026-${row.date}`)}
                       </td>
-                      <td className="px-4 py-4 text-right">{formatKoreanWon(row.chargeTotal)}</td>
-                      <td className="px-4 py-4 text-right">{formatKoreanWon(row.feeTotal)}</td>
-                      <td className="px-4 py-4 text-right">{formatKoreanWon(row.payoutTotal)}</td>
+                      <td className="px-4 py-4 text-right">
+                        {formatKoreanWon(row.chargeTotal)}
+                      </td>
+                      <td className="px-4 py-4 text-right">
+                        {formatKoreanWon(row.feeTotal)}
+                      </td>
+                      <td className="px-4 py-4 text-right">
+                        {formatKoreanWon(row.payoutTotal)}
+                      </td>
                     </tr>
                   ))
                 ) : (
@@ -285,9 +254,15 @@ export function SettlementProfitBoard({
                 )}
                 <tr className="border-t border-white/8 bg-white/[0.03] font-semibold text-white">
                   <td className="px-4 py-4 text-center">합계</td>
-                  <td className="px-4 py-4 text-right">{formatKoreanWon(chargeTotal)}</td>
-                  <td className="px-4 py-4 text-right">{formatKoreanWon(feeTotal)}</td>
-                  <td className="px-4 py-4 text-right">{formatKoreanWon(payoutTotal)}</td>
+                  <td className="px-4 py-4 text-right">
+                    {formatKoreanWon(totals.chargeTotal)}
+                  </td>
+                  <td className="px-4 py-4 text-right">
+                    {formatKoreanWon(totals.feeTotal)}
+                  </td>
+                  <td className="px-4 py-4 text-right">
+                    {formatKoreanWon(totals.payoutTotal)}
+                  </td>
                 </tr>
               </tbody>
             </table>

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import type {
   PendingRequest,
   ProcessedRequest,
-} from "@/lib/mock-charge-data";
+} from "@/lib/charge-utils";
 
 type ChargeRequestsBoardProps = {
   initialPendingRequests: PendingRequest[];

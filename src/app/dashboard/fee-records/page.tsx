@@ -3,6 +3,10 @@ import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin-shell";
 import { FeeRecordsBoard } from "@/components/fee-records-board";
 import { getSessionUser } from "@/lib/auth";
+import {
+  getDefaultReportDateRange,
+  getFeeRecords,
+} from "@/lib/mock-report-service";
 
 export default async function FeeRecordsPage() {
   const user = await getSessionUser();
@@ -11,6 +15,13 @@ export default async function FeeRecordsPage() {
     redirect("/");
   }
 
+  const defaultRange = getDefaultReportDateRange();
+  const initialRecords = getFeeRecords(
+    user.companyName,
+    defaultRange.startDate,
+    defaultRange.endDate,
+  );
+
   return (
     <AdminShell
       user={user}
@@ -18,7 +29,10 @@ export default async function FeeRecordsPage() {
       badge="Fee Records"
       helperText="승인 완료 거래 기준으로 발생한 수수료 내역을 확인하는 화면입니다."
     >
-      <FeeRecordsBoard companyName={user.companyName} />
+      <FeeRecordsBoard
+        companyName={user.companyName}
+        initialRows={initialRecords.rows}
+      />
     </AdminShell>
   );
 }

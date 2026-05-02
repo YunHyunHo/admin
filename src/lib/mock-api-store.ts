@@ -1,11 +1,16 @@
 import {
   approvedRequests,
-  filterRequestsByCompany,
   pendingRequests,
   rejectedRequests,
+} from "@/lib/mock-charge-data";
+import {
+  filterRequestsByCompany,
+  getDomainNameByCompany,
+  getFeeRateByCompany,
+  parseKoreanWon,
   type PendingRequest,
   type ProcessedRequest,
-} from "@/lib/mock-charge-data";
+} from "@/lib/charge-utils";
 
 type ChargeRequestState = {
   pending: PendingRequest[];
@@ -106,4 +111,33 @@ export function resetMockChargeRequests() {
   };
 
   return globalStore.__vendorAdminMockStore;
+}
+
+export function getApprovedRequestsByCompany(companyName: string) {
+  return getChargeRequestsByCompany(companyName).approved;
+}
+
+export function getDashboardSummaryByCompany(companyName: string) {
+  const { pending, approved, rejected } = getChargeRequestsByCompany(companyName);
+  const domainName = getDomainNameByCompany(companyName);
+  const feeRate = getFeeRateByCompany(companyName);
+  const approvedChargeTotal = approved.reduce(
+    (sum, request) => sum + parseKoreanWon(request.amount),
+    0,
+  );
+  const pendingChargeTotal = pending.reduce(
+    (sum, request) => sum + parseKoreanWon(request.amount),
+    0,
+  );
+
+  return {
+    domainName,
+    feeRate,
+    pendingCount: pending.length,
+    approvedCount: approved.length,
+    rejectedCount: rejected.length,
+    pendingChargeTotal,
+    approvedChargeTotal,
+    feeTotal: Math.floor(approvedChargeTotal * (feeRate / 100)),
+  };
 }

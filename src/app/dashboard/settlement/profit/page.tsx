@@ -3,6 +3,10 @@ import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin-shell";
 import { SettlementProfitBoard } from "@/components/settlement-profit-board";
 import { getSessionUser } from "@/lib/auth";
+import {
+  getDefaultReportDateRange,
+  getSettlementProfit,
+} from "@/lib/mock-report-service";
 
 export default async function SettlementProfitPage() {
   const user = await getSessionUser();
@@ -11,6 +15,13 @@ export default async function SettlementProfitPage() {
     redirect("/");
   }
 
+  const defaultRange = getDefaultReportDateRange();
+  const initialProfit = getSettlementProfit(
+    user.companyName,
+    defaultRange.startDate,
+    defaultRange.endDate,
+  );
+
   return (
     <AdminShell
       user={user}
@@ -18,7 +29,12 @@ export default async function SettlementProfitPage() {
       badge="Settlement Profit"
       helperText="승인 완료된 충전 데이터 기준으로 본사/총판 수익을 확인하는 화면입니다."
     >
-      <SettlementProfitBoard companyName={user.companyName} />
+      <SettlementProfitBoard
+        companyName={user.companyName}
+        initialDomainName={initialProfit.domainName}
+        initialRows={initialProfit.rows}
+        initialTotals={initialProfit.totals}
+      />
     </AdminShell>
   );
 }

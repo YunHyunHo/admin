@@ -2,16 +2,8 @@ import { redirect } from "next/navigation";
 
 import { AdminShell } from "@/components/admin-shell";
 import { getSessionUser } from "@/lib/auth";
-import {
-  approvedRequests,
-  filterRequestsByCompany,
-  formatKoreanWon,
-  getDomainNameByCompany,
-  getFeeRateByCompany,
-  parseKoreanWon,
-  pendingRequests,
-  rejectedRequests,
-} from "@/lib/mock-charge-data";
+import { formatKoreanWon } from "@/lib/charge-utils";
+import { getDashboardSummary } from "@/lib/mock-report-service";
 
 const quickCards = [
   {
@@ -38,40 +30,17 @@ export default async function DashboardPage() {
     redirect("/");
   }
 
-  const domainName = getDomainNameByCompany(user.companyName);
-  const feeRate = getFeeRateByCompany(user.companyName);
-  const companyPendingRequests = filterRequestsByCompany(
-    pendingRequests,
-    user.companyName,
-  );
-  const companyApprovedRequests = filterRequestsByCompany(
-    approvedRequests,
-    user.companyName,
-  );
-  const companyRejectedRequests = filterRequestsByCompany(
-    rejectedRequests,
-    user.companyName,
-  );
-
-  const approvedChargeTotal = companyApprovedRequests.reduce(
-    (sum, item) => sum + parseKoreanWon(item.amount),
-    0,
-  );
-  const pendingChargeTotal = companyPendingRequests.reduce(
-    (sum, item) => sum + parseKoreanWon(item.amount),
-    0,
-  );
-  const feeTotal = Math.floor(approvedChargeTotal * (feeRate / 100));
+  const summary = getDashboardSummary(user.companyName);
 
   const topMetrics = [
-    { label: "도메인", value: domainName },
-    { label: "대기 건수", value: `${companyPendingRequests.length}건` },
-    { label: "승인 건수", value: `${companyApprovedRequests.length}건` },
-    { label: "거절 건수", value: `${companyRejectedRequests.length}건` },
-    { label: "대기 금액", value: formatKoreanWon(pendingChargeTotal) },
-    { label: "승인 충전", value: formatKoreanWon(approvedChargeTotal) },
-    { label: "수수료", value: formatKoreanWon(feeTotal) },
-    { label: "요율", value: `${feeRate}%` },
+    { label: "도메인", value: summary.domainName },
+    { label: "대기 건수", value: `${summary.pendingCount}건` },
+    { label: "승인 건수", value: `${summary.approvedCount}건` },
+    { label: "거절 건수", value: `${summary.rejectedCount}건` },
+    { label: "대기 금액", value: formatKoreanWon(summary.pendingChargeTotal) },
+    { label: "승인 충전", value: formatKoreanWon(summary.approvedChargeTotal) },
+    { label: "수수료", value: formatKoreanWon(summary.feeTotal) },
+    { label: "요율", value: `${summary.feeRate}%` },
   ];
 
   return (

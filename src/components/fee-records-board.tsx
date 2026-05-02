@@ -1,17 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
-import {
-  approvedRequests,
-  formatKoreanWon,
-  getDomainNameByCompany,
-  getFeeRateByCompany,
-  parseKoreanWon,
-} from "@/lib/mock-charge-data";
+import { formatKoreanWon } from "@/lib/charge-utils";
 
 type FeeRecordsBoardProps = {
   companyName: string;
+  initialRows: FeeRecordRow[];
 };
 
 type FeeRecordRow = {
@@ -30,16 +25,16 @@ type FeeRecordRow = {
   requestedAt: string;
 };
 
-const DISPLAY_YEAR = "2026";
 const MIN_QUERY_DATE = "2026-01-01";
 const PAGE_SIZE = 10;
 
-function toIsoDate(mmddTime: string) {
-  const [mmdd] = mmddTime.split(" ");
-  const [month, day] = mmdd.split("-");
-
-  return `${DISPLAY_YEAR}-${month}-${day}`;
-}
+type FeeRecordsResponse = {
+  rows: FeeRecordRow[];
+  totals: {
+    amount: number;
+    fee: number;
+  };
+};
 
 function getTodayIsoDate() {
   const formatter = new Intl.DateTimeFormat("en-CA", {
@@ -80,54 +75,17 @@ function formatRate(rate: number) {
   return `${rate}%`;
 }
 
-export function FeeRecordsBoard({ companyName }: FeeRecordsBoardProps) {
-  const domainName = getDomainNameByCompany(companyName);
-  const feeRate = getFeeRateByCompany(companyName);
+export function FeeRecordsBoard({
+  companyName,
+  initialRows,
+}: FeeRecordsBoardProps) {
   const todayIsoDate = getTodayIsoDate();
   const monthStartIsoDate = getMonthStartIsoDate(todayIsoDate);
   const [startDate, setStartDate] = useState(monthStartIsoDate);
   const [endDate, setEndDate] = useState(todayIsoDate);
-  const [appliedRange, setAppliedRange] = useState({
-    startDate: monthStartIsoDate,
-    endDate: todayIsoDate,
-  });
   const [currentPage, setCurrentPage] = useState(1);
-
-  const rows = useMemo<FeeRecordRow[]>(
-    () =>
-      approvedRequests
-        .filter((request) => {
-          const date = toIsoDate(request.completedAt);
-
-          return (
-            request.domain === domainName &&
-            date >= appliedRange.startDate &&
-            date <= appliedRange.endDate
-          );
-        })
-        .map((request) => {
-          const amount = parseKoreanWon(request.amount);
-          const fee = Math.floor(amount * (feeRate / 100));
-
-          return {
-            id: request.id,
-            branch: request.branch,
-            topAgent: request.topAgent,
-            subAgent: request.subAgent,
-            acquisitionBranch: companyName,
-            domain: request.domain,
-            uid: request.userId,
-            amount,
-            feeRate,
-            fee,
-            bankName: request.bankName,
-            acquiredAt: request.completedAt,
-            requestedAt: request.requestedAt,
-          };
-        })
-        .sort((a, b) => b.acquiredAt.localeCompare(a.acquiredAt)),
-    [appliedRange, companyName, domainName, feeRate],
-  );
+  const [rows, setRows] = useState<FeeRecordRow[]>(initialRows);
+  const [message, setMessage] = useState("서버 API에서 수수료 기록을 불러옵니다.");
 
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const visibleRows = rows.slice(
@@ -137,21 +95,41 @@ export function FeeRecordsBoard({ companyName }: FeeRecordsBoardProps) {
   const totalFee = rows.reduce((sum, row) => sum + row.fee, 0);
   const totalAmount = rows.reduce((sum, row) => sum + row.amount, 0);
 
+  async function loadRows(nextStartDate: string, nextEndDate: string) {
+    try {
+      const response = await fetch(
+        `/api/fee-records?startDate=${nextStartDate}&endDate=${nextEndDate}`,
+      );
+
+      if (!response.ok) {
+        const error = (await response.json()) as { message?: string };
+        throw new Error(error.message ?? "수수료 기록 조회에 실패했습니다.");
+      }
+
+      const data = (await response.json()) as FeeRecordsResponse;
+      setRows(data.rows);
+      setMessage("서버 API 기준 데이터입니다.");
+    } catch (error) {
+      setRows([]);
+      setMessage(error instanceof Error ? error.message : "조회에 실패했습니다.");
+    }
+  }
+
   function applyDateRange() {
     const nextStartDate = clampDate(startDate, MIN_QUERY_DATE, todayIsoDate);
     const nextEndDate = clampDate(endDate, nextStartDate, todayIsoDate);
 
     setStartDate(nextStartDate);
     setEndDate(nextEndDate);
-    setAppliedRange({ startDate: nextStartDate, endDate: nextEndDate });
     setCurrentPage(1);
+    void loadRows(nextStartDate, nextEndDate);
   }
 
   function refreshRecords() {
     setStartDate(monthStartIsoDate);
     setEndDate(todayIsoDate);
-    setAppliedRange({ startDate: monthStartIsoDate, endDate: todayIsoDate });
     setCurrentPage(1);
+    void loadRows(monthStartIsoDate, todayIsoDate);
   }
 
   return (
@@ -165,7 +143,7 @@ export function FeeRecordsBoard({ companyName }: FeeRecordsBoardProps) {
             <h2 className="mt-2 text-2xl font-semibold text-white">수수료 기록</h2>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-white/56">
               {companyName} 업체의 승인 완료 거래를 기준으로 거래액, 요율,
-              수수료와 입금은행 정보를 기록하는 화면입니다.
+              수수료와 입금은행 정보를 기록하는 화면입니다. {message}
             </p>
           </div>
 

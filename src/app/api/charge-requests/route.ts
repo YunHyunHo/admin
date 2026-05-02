@@ -6,7 +6,7 @@ import {
   processChargeRequest,
   resetMockChargeRequests,
 } from "@/lib/mock-api-store";
-import type { ProcessedRequest } from "@/lib/mock-charge-data";
+import type { ProcessedRequest } from "@/lib/charge-utils";
 
 const allowedStatuses: ProcessedRequest["status"][] = ["승인", "승인거절"];
 
