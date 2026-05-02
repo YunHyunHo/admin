@@ -2,7 +2,7 @@ import {
   approvedRequests,
   pendingRequests,
   rejectedRequests,
-} from "@/lib/mock-charge-data";
+} from "@/lib/server-test-data";
 import {
   filterRequestsByCompany,
   getDomainNameByCompany,
