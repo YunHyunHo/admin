@@ -39,16 +39,16 @@ function toIsoDate(mmddTime: string) {
 
 function createDateRange(startDate: string, endDate: string) {
   const dates: string[] = [];
-  const cursor = new Date(`${startDate}T00:00:00+09:00`);
-  const end = new Date(`${endDate}T00:00:00+09:00`);
+  const cursor = new Date(`${startDate}T00:00:00.000Z`);
+  const end = new Date(`${endDate}T00:00:00.000Z`);
 
   while (cursor <= end) {
-    const year = cursor.getFullYear();
-    const month = String(cursor.getMonth() + 1).padStart(2, "0");
-    const date = String(cursor.getDate()).padStart(2, "0");
+    const year = cursor.getUTCFullYear();
+    const month = String(cursor.getUTCMonth() + 1).padStart(2, "0");
+    const date = String(cursor.getUTCDate()).padStart(2, "0");
 
     dates.push(`${year}-${month}-${date}`);
-    cursor.setDate(cursor.getDate() + 1);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
   return dates;
