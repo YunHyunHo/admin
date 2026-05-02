@@ -5,9 +5,10 @@ import {
 } from "@/lib/mock-api-store";
 import {
   getDomainNameByCompany,
-  getFeeRateByCompany,
+  getFeeRateByCompanyFromSettings,
   parseKoreanWon,
 } from "@/lib/charge-utils";
+import type { AdminSettings } from "@/lib/settings-cookie";
 
 const DISPLAY_YEAR = "2026";
 
@@ -59,8 +60,9 @@ function isInRange(mmddTime: string, startDate: string, endDate: string) {
 export function getDashboardSummary(
   companyName: string,
   state?: ChargeRequestState,
+  settings?: AdminSettings,
 ) {
-  return getDashboardSummaryByCompany(companyName, state);
+  return getDashboardSummaryByCompany(companyName, state, settings);
 }
 
 export function getSettlementProfit(
@@ -68,9 +70,10 @@ export function getSettlementProfit(
   startDate: string,
   endDate: string,
   state?: ChargeRequestState,
+  settings?: AdminSettings,
 ) {
   const domainName = getDomainNameByCompany(companyName);
-  const feeRate = getFeeRateByCompany(companyName);
+  const feeRate = getFeeRateByCompanyFromSettings(companyName, settings);
   const grouped = new Map<
     string,
     { date: string; chargeTotal: number; feeTotal: number; payoutTotal: number }
@@ -119,9 +122,10 @@ export function getDomainSettlement(
   startDate: string,
   endDate: string,
   state?: ChargeRequestState,
+  settings?: AdminSettings,
 ) {
   const domainName = getDomainNameByCompany(companyName);
-  const feeRate = getFeeRateByCompany(companyName);
+  const feeRate = getFeeRateByCompanyFromSettings(companyName, settings);
   const approvedRequests = getApprovedRequestsByCompany(companyName, state);
   const rows = createDateRange(startDate, endDate).map((date) => {
     const charge = approvedRequests
@@ -156,8 +160,9 @@ export function getFeeRecords(
   startDate: string,
   endDate: string,
   state?: ChargeRequestState,
+  settings?: AdminSettings,
 ) {
-  const feeRate = getFeeRateByCompany(companyName);
+  const feeRate = getFeeRateByCompanyFromSettings(companyName, settings);
   const rows = getApprovedRequestsByCompany(companyName, state)
     .filter((request) => isInRange(request.completedAt, startDate, endDate))
     .map((request) => {

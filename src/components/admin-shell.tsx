@@ -30,6 +30,11 @@ const sideMenus = [
     href: "/dashboard/fee-records",
     key: "fee-records",
   },
+  {
+    title: "수수료 설정",
+    href: "/dashboard/settings/fee-rate",
+    key: "fee-rate-settings",
+  },
 ];
 
 type AdminShellProps = {

@@ -6,11 +6,12 @@ import {
 import {
   filterRequestsByCompany,
   getDomainNameByCompany,
-  getFeeRateByCompany,
+  getFeeRateByCompanyFromSettings,
   parseKoreanWon,
   type PendingRequest,
   type ProcessedRequest,
 } from "@/lib/charge-utils";
+import type { AdminSettings } from "@/lib/settings-cookie";
 
 export type ChargeRequestState = {
   pending: PendingRequest[];
@@ -128,13 +129,14 @@ export function getApprovedRequestsByCompany(
 export function getDashboardSummaryByCompany(
   companyName: string,
   state: ChargeRequestState = getStore(),
+  settings?: AdminSettings,
 ) {
   const { pending, approved, rejected } = getChargeRequestsByCompany(
     companyName,
     state,
   );
   const domainName = getDomainNameByCompany(companyName);
-  const feeRate = getFeeRateByCompany(companyName);
+  const feeRate = getFeeRateByCompanyFromSettings(companyName, settings);
   const approvedChargeTotal = approved.reduce(
     (sum, request) => sum + parseKoreanWon(request.amount),
     0,

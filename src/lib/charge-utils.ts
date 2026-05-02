@@ -43,6 +43,13 @@ export function getFeeRateByCompany(companyName: string) {
   return companyFeeRates[companyName] ?? 0.4;
 }
 
+export function getFeeRateByCompanyFromSettings(
+  companyName: string,
+  settings?: { feeRates?: Record<string, number> },
+) {
+  return settings?.feeRates?.[companyName] ?? getFeeRateByCompany(companyName);
+}
+
 export function filterRequestsByCompany<T extends { domain: string }>(
   requests: T[],
   companyName: string,

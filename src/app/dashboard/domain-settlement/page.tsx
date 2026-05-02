@@ -5,13 +5,14 @@ import { DomainSettlementBoard } from "@/components/domain-settlement-board";
 import { getSessionUser } from "@/lib/auth";
 import {
   getDomainNameByCompany,
-  getFeeRateByCompany,
+  getFeeRateByCompanyFromSettings,
 } from "@/lib/charge-utils";
 import {
   getDefaultReportDateRange,
   getDomainSettlement,
 } from "@/lib/mock-report-service";
 import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
+import { getAdminSettingsFromCookie } from "@/lib/settings-cookie";
 
 export default async function DomainSettlementPage() {
   const user = await getSessionUser();
@@ -22,11 +23,13 @@ export default async function DomainSettlementPage() {
 
   const defaultRange = getDefaultReportDateRange();
   const state = await getMockChargeStateFromCookie();
+  const settings = await getAdminSettingsFromCookie();
   const initialSettlement = getDomainSettlement(
     user.companyName,
     defaultRange.startDate,
     defaultRange.endDate,
     state,
+    settings,
   );
 
   return (
@@ -38,7 +41,10 @@ export default async function DomainSettlementPage() {
     >
       <DomainSettlementBoard
         companyName={user.companyName}
-        initialFeeRate={getFeeRateByCompany(user.companyName)}
+        initialFeeRate={getFeeRateByCompanyFromSettings(
+          user.companyName,
+          settings,
+        )}
         domainName={getDomainNameByCompany(user.companyName)}
         initialRows={initialSettlement.rows}
       />
