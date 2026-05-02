@@ -21,6 +21,11 @@ const sideMenus = [
     key: "domain-settlement",
   },
   {
+    title: "충전신청",
+    href: "/dashboard/transactions/charges",
+    key: "charges",
+  },
+  {
     title: "수수료 기록",
     href: "/dashboard/fee-records",
     key: "fee-records",

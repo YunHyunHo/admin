@@ -12,6 +12,12 @@ type ChargeRequestsBoardProps = {
   initialRejectedRequests: ProcessedRequest[];
 };
 
+type ChargeRequestsResponse = {
+  pending: PendingRequest[];
+  approved: ProcessedRequest[];
+  rejected: ProcessedRequest[];
+};
+
 function SectionCard({
   title,
   count,
@@ -49,17 +55,6 @@ function Table({ children }: { children: React.ReactNode }) {
   );
 }
 
-function getNowStamp() {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const date = String(now.getDate()).padStart(2, "0");
-  const hours = String(now.getHours()).padStart(2, "0");
-  const minutes = String(now.getMinutes()).padStart(2, "0");
-  const seconds = String(now.getSeconds()).padStart(2, "0");
-
-  return `${month}-${date} ${hours}:${minutes}:${seconds}`;
-}
-
 export function ChargeRequestsBoard({
   initialPendingRequests,
   initialApprovedRequests,
@@ -69,6 +64,58 @@ export function ChargeRequestsBoard({
   const [approvedRequests, setApprovedRequests] = useState(initialApprovedRequests);
   const [rejectedRequests, setRejectedRequests] = useState(initialRejectedRequests);
   const [searchKeyword, setSearchKeyword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [message, setMessage] = useState("임시 서버 API로 테스트 중입니다.");
+
+  function applyServerData(data: ChargeRequestsResponse) {
+    setPendingRequests(data.pending);
+    setApprovedRequests(data.approved);
+    setRejectedRequests(data.rejected);
+  }
+
+  async function requestChargeData(body?: Record<string, string>) {
+    const response = await fetch("/api/charge-requests", {
+      method: body ? "POST" : "GET",
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    if (!response.ok) {
+      const error = (await response.json()) as { message?: string };
+      throw new Error(error.message ?? "임시 API 요청에 실패했습니다.");
+    }
+
+    return (await response.json()) as ChargeRequestsResponse;
+  }
+
+  async function refreshRequests() {
+    setIsLoading(true);
+    setMessage("임시 서버 API에서 최신 데이터를 불러오는 중입니다.");
+
+    try {
+      applyServerData(await requestChargeData());
+      setMessage("임시 서버 API 데이터가 갱신되었습니다.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "데이터 갱신에 실패했습니다.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function resetRequests() {
+    setIsLoading(true);
+    setMessage("임시 데이터를 초기화하는 중입니다.");
+
+    try {
+      applyServerData(await requestChargeData({ action: "reset" }));
+      setMessage("임시 서버 데이터가 초기 상태로 복구되었습니다.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "초기화에 실패했습니다.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   const filteredPendingRequests = useMemo(() => {
     const keyword = searchKeyword.trim().toLowerCase();
@@ -85,28 +132,18 @@ export function ChargeRequestsBoard({
     );
   }, [pendingRequests, searchKeyword]);
 
-  function moveRequest(targetId: string, nextStatus: "승인" | "승인거절") {
-    setPendingRequests((currentPending) => {
-      const target = currentPending.find((item) => item.id === targetId);
+  async function moveRequest(targetId: string, nextStatus: "승인" | "승인거절") {
+    setProcessingId(targetId);
+    setMessage(`${targetId} 요청을 ${nextStatus} 처리 중입니다.`);
 
-      if (!target) {
-        return currentPending;
-      }
-
-      const nextRow: ProcessedRequest = {
-        ...target,
-        completedAt: getNowStamp(),
-        status: nextStatus,
-      };
-
-      if (nextStatus === "승인") {
-        setApprovedRequests((currentApproved) => [nextRow, ...currentApproved]);
-      } else {
-        setRejectedRequests((currentRejected) => [nextRow, ...currentRejected]);
-      }
-
-      return currentPending.filter((item) => item.id !== targetId);
-    });
+    try {
+      applyServerData(await requestChargeData({ id: targetId, status: nextStatus }));
+      setMessage(`${targetId} 요청이 ${nextStatus} 처리되었습니다.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "처리에 실패했습니다.");
+    } finally {
+      setProcessingId(null);
+    }
   }
 
   return (
@@ -121,7 +158,8 @@ export function ChargeRequestsBoard({
               충전신청
             </h2>
             <p className="mt-3 text-sm leading-6 text-white/58">
-              좌측 메뉴에서 `거래내역`을 펼치고 `충전신청`을 누르면 이 화면이 나와.
+              임시 서버 API에서 업체별 충전신청을 받아오고 승인/거절 처리까지
+              테스트합니다.
             </p>
           </section>
 
@@ -145,9 +183,9 @@ export function ChargeRequestsBoard({
           <SectionCard title="충전신청" count={filteredPendingRequests.length}>
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="text-sm text-white/52">
-                API로 들어온 신규 요청을 먼저 확인하고 승인 또는 거절합니다.
+                {message}
               </div>
-              <div className="flex gap-3">
+              <div className="flex flex-wrap gap-3">
                 <input
                   value={searchKeyword}
                   onChange={(event) => setSearchKeyword(event.target.value)}
@@ -159,6 +197,22 @@ export function ChargeRequestsBoard({
                   className="rounded-2xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950"
                 >
                   검색
+                </button>
+                <button
+                  type="button"
+                  onClick={refreshRequests}
+                  disabled={isLoading}
+                  className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  새로고침
+                </button>
+                <button
+                  type="button"
+                  onClick={resetRequests}
+                  disabled={isLoading}
+                  className="rounded-2xl border border-amber-300/20 bg-amber-400/10 px-4 py-2 text-sm font-semibold text-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  임시데이터 초기화
                 </button>
               </div>
             </div>
@@ -210,14 +264,16 @@ export function ChargeRequestsBoard({
                             <button
                               type="button"
                               onClick={() => moveRequest(row.id, "승인")}
-                              className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-slate-950"
+                              disabled={processingId === row.id}
+                              className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               승인
                             </button>
                             <button
                               type="button"
                               onClick={() => moveRequest(row.id, "승인거절")}
-                              className="rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white"
+                              disabled={processingId === row.id}
+                              className="rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               거절
                             </button>
