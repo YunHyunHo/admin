@@ -1,20 +1,24 @@
-import { AdminPlaceholderPage } from "@/components/admin-placeholder-page";
-import {
-  defaultNextSteps,
-  transactionColumns,
-} from "@/lib/admin-placeholder-config";
+import { redirect } from "next/navigation";
 
-export default function TransactionCreatePage() {
+import { AdminShell } from "@/components/admin-shell";
+import { TransactionCreateBoard } from "@/components/transaction-create-board";
+import { getSessionUser } from "@/lib/auth";
+
+export default async function TransactionCreatePage() {
+  const user = await getSessionUser();
+
+  if (!user) {
+    redirect("/");
+  }
+
   return (
-    <AdminPlaceholderPage
+    <AdminShell
+      user={user}
       activeItem="transaction-create"
-      badge="Create Transaction"
-      helperText="관리자가 수동 거래를 생성해야 할 때 사용하는 화면입니다."
-      eyebrow="Transaction View"
-      title="거래생성"
-      description="예외 처리, 테스트 거래, 수동 정정 거래를 생성할 수 있는 탭입니다."
-      columns={transactionColumns}
-      nextSteps={defaultNextSteps}
-    />
+      badge="Transaction Create"
+      helperText="입금 거래 생성/조회 내역을 확인하는 화면입니다."
+    >
+      <TransactionCreateBoard />
+    </AdminShell>
   );
 }

@@ -69,11 +69,6 @@ const sideMenuGroups = [
         key: "charges",
       },
       {
-        title: "환전신청",
-        href: "/dashboard/transactions/exchanges",
-        key: "exchanges",
-      },
-      {
         title: "거래생성",
         href: "/dashboard/transactions/create",
         key: "transaction-create",
