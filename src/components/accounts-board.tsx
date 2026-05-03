@@ -11,7 +11,14 @@ type AccountRow = {
   accountNumber: string;
   createdAt: string;
   isActive: boolean;
-  linkedDomains: string[];
+  linkedDomains: LinkedDomain[];
+};
+
+type LinkedDomain = {
+  id: string;
+  name: string;
+  address: string;
+  userCount: number;
 };
 
 const bankOptions = [
@@ -35,7 +42,14 @@ const initialAccounts: AccountRow[] = [
     accountNumber: "010-805521-6565",
     createdAt: "03-19 22:46:48",
     isActive: true,
-    linkedDomains: ["원페이"],
+    linkedDomains: [
+      {
+        id: "25920d80-0cb8-10e6-974c-001",
+        name: "원페이",
+        address: "onepay.laylow.me",
+        userCount: 2,
+      },
+    ],
   },
   {
     id: "ACC-002",
@@ -123,7 +137,14 @@ const initialAccounts: AccountRow[] = [
     accountNumber: "702910-02-171289",
     createdAt: "01-24 17:38:54",
     isActive: false,
-    linkedDomains: ["엠페이"],
+    linkedDomains: [
+      {
+        id: "7f18a620-1c3b-44d2-8821-002",
+        name: "엠페이",
+        address: "mpay.laylow.me",
+        userCount: 2,
+      },
+    ],
   },
 ];
 
@@ -141,7 +162,13 @@ function getNowStamp() {
 export function AccountsBoard() {
   const [accounts, setAccounts] = useState(initialAccounts);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [selectedDomains, setSelectedDomains] = useState<string[] | null>(null);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(
+    null,
+  );
+  const [editingField, setEditingField] = useState<{
+    accountId: string;
+    field: "holder" | "accountNumber";
+  } | null>(null);
   const [branchName, setBranchName] = useState("");
   const [bankName, setBankName] = useState("");
   const [holder, setHolder] = useState("");
@@ -171,6 +198,21 @@ export function AccountsBoard() {
 
   function handleDelete(id: string) {
     setAccounts((current) => current.filter((account) => account.id !== id));
+  }
+
+  function unlinkDomain(accountId: string, domainId: string) {
+    setAccounts((current) =>
+      current.map((account) =>
+        account.id === accountId
+          ? {
+              ...account,
+              linkedDomains: account.linkedDomains.filter(
+                (domain) => domain.id !== domainId,
+              ),
+            }
+          : account,
+      ),
+    );
   }
 
   function handleCreate() {
@@ -258,18 +300,26 @@ export function AccountsBoard() {
                   <td className="px-4 py-4 text-center">{account.bankName}</td>
                   <td className="px-4 py-4">
                     <EditableField
+                      accountId={account.id}
+                      field="holder"
                       value={account.holder}
                       onChange={(value) =>
                         updateAccount(account.id, "holder", value)
                       }
+                      editingField={editingField}
+                      setEditingField={setEditingField}
                     />
                   </td>
                   <td className="px-4 py-4">
                     <EditableField
+                      accountId={account.id}
+                      field="accountNumber"
                       value={account.accountNumber}
                       onChange={(value) =>
                         updateAccount(account.id, "accountNumber", value)
                       }
+                      editingField={editingField}
+                      setEditingField={setEditingField}
                     />
                   </td>
                   <td className="px-4 py-4 text-center text-white/60">
@@ -302,7 +352,7 @@ export function AccountsBoard() {
                       <span>{account.linkedDomains.length}개</span>
                       <button
                         type="button"
-                        onClick={() => setSelectedDomains(account.linkedDomains)}
+                        onClick={() => setSelectedAccountId(account.id)}
                         className="rounded-xl bg-teal-400/80 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-teal-300"
                       >
                         보기
@@ -404,35 +454,77 @@ export function AccountsBoard() {
         </div>
       ) : null}
 
-      {selectedDomains ? (
+      {selectedAccountId ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-[420px] rounded-[28px] border border-white/10 bg-[#0d1017] p-6 text-white shadow-[0_28px_120px_rgba(0,0,0,0.58)]">
+          <div className="w-full max-w-5xl rounded-[18px] border border-white/10 bg-[#202020] p-6 text-white shadow-[0_28px_120px_rgba(0,0,0,0.58)]">
             <div className="flex items-center justify-between">
-              <h3 className="text-xl font-semibold">연결된 도메인</h3>
+              <h3 className="text-2xl font-semibold tracking-[-0.03em]">
+                연결된 도메인
+              </h3>
               <button
                 type="button"
-                onClick={() => setSelectedDomains(null)}
+                onClick={() => setSelectedAccountId(null)}
                 className="rounded-xl border border-white/10 px-3 py-2 text-sm text-white/70 hover:bg-white/[0.06]"
               >
                 닫기
               </button>
             </div>
 
-            <div className="mt-5 space-y-2">
-              {selectedDomains.length ? (
-                selectedDomains.map((domain) => (
-                  <div
-                    key={domain}
-                    className="rounded-2xl border border-white/8 bg-white/[0.04] px-4 py-3 text-sm text-white/78"
-                  >
-                    {domain}
-                  </div>
-                ))
-              ) : (
-                <p className="rounded-2xl border border-white/8 bg-white/[0.04] px-4 py-5 text-center text-sm text-white/44">
+            <div className="mt-8 overflow-x-auto">
+              <table className="w-full min-w-[760px] border-collapse text-sm">
+                <thead className="bg-black text-white">
+                  <tr>
+                    {["ID", "도메인명", "도메인주소", "사용자수", "관리"].map(
+                      (header) => (
+                        <th
+                          key={header}
+                          className="border border-white/55 px-4 py-4 text-center font-semibold"
+                        >
+                          {header}
+                        </th>
+                      ),
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {accounts
+                    .find((account) => account.id === selectedAccountId)
+                    ?.linkedDomains.map((domain) => (
+                      <tr key={domain.id} className="text-white/86">
+                        <td className="border border-white/55 px-4 py-4 font-mono text-xs">
+                          {domain.id}
+                        </td>
+                        <td className="border border-white/55 px-4 py-4 text-center font-semibold">
+                          {domain.name}
+                        </td>
+                        <td className="border border-white/55 px-4 py-4 text-center">
+                          {domain.address}
+                        </td>
+                        <td className="border border-white/55 px-4 py-4 text-center">
+                          {domain.userCount}
+                        </td>
+                        <td className="border border-white/55 px-4 py-4 text-center">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              unlinkDomain(selectedAccountId, domain.id)
+                            }
+                            className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-500"
+                          >
+                            연결해제
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+
+              {!accounts.find((account) => account.id === selectedAccountId)
+                ?.linkedDomains.length ? (
+                <p className="border border-t-0 border-white/55 px-4 py-8 text-center text-sm text-white/48">
                   연결된 도메인이 없습니다.
                 </p>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
@@ -442,24 +534,51 @@ export function AccountsBoard() {
 }
 
 function EditableField({
+  accountId,
+  field,
   value,
   onChange,
+  editingField,
+  setEditingField,
 }: {
+  accountId: string;
+  field: "holder" | "accountNumber";
   value: string;
   onChange: (value: string) => void;
+  editingField: {
+    accountId: string;
+    field: "holder" | "accountNumber";
+  } | null;
+  setEditingField: (
+    value: {
+      accountId: string;
+      field: "holder" | "accountNumber";
+    } | null,
+  ) => void;
 }) {
+  const isEditing =
+    editingField?.accountId === accountId && editingField.field === field;
+
   return (
     <div className="flex items-center gap-2">
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-10 min-w-[210px] flex-1 rounded-xl border border-white/10 bg-white px-3 text-sm text-slate-950 outline-none focus:border-cyan-300"
+        disabled={!isEditing}
+        className={`h-10 min-w-[210px] flex-1 rounded-xl border px-3 text-sm outline-none transition ${
+          isEditing
+            ? "border-cyan-300 bg-white text-slate-950"
+            : "border-white/8 bg-white/35 text-slate-900"
+        }`}
       />
       <button
         type="button"
+        onClick={() =>
+          setEditingField(isEditing ? null : { accountId, field })
+        }
         className="rounded-xl bg-blue-700 px-3 py-2 text-xs font-semibold text-white"
       >
-        수정
+        {isEditing ? "완료" : "수정"}
       </button>
     </div>
   );
