@@ -1,5 +1,10 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## 운영 설계 문서
+
+- [Admin 운영 구조 설계](./docs/operational-architecture.md)
+- [PostgreSQL 스키마 초안](./docs/database-schema.sql)
+
 ## Getting Started
 
 First, run the development server:
