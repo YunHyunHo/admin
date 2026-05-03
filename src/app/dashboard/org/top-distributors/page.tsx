@@ -1,20 +1,24 @@
-import { AdminPlaceholderPage } from "@/components/admin-placeholder-page";
-import {
-  defaultNextSteps,
-  organizationColumns,
-} from "@/lib/admin-placeholder-config";
+import { redirect } from "next/navigation";
 
-export default function TopDistributorsPage() {
+import { AdminShell } from "@/components/admin-shell";
+import { TopDistributorsBoard } from "@/components/top-distributors-board";
+import { getSessionUser } from "@/lib/auth";
+
+export default async function TopDistributorsPage() {
+  const user = await getSessionUser();
+
+  if (!user) {
+    redirect("/");
+  }
+
   return (
-    <AdminPlaceholderPage
+    <AdminShell
+      user={user}
       activeItem="org-top-distributors"
       badge="Organization"
-      helperText="상위총판 계정과 연결 업체 범위를 관리하는 화면입니다."
-      eyebrow="Organization View"
-      title="상위총판 리스트"
-      description="상위총판 생성, 사용/중지, 연결된 총판 및 업체 수를 확인하는 탭입니다."
-      columns={organizationColumns}
-      nextSteps={defaultNextSteps}
-    />
+      helperText="상위총판 생성과 목록 관리를 먼저 실제 화면으로 구성했습니다."
+    >
+      <TopDistributorsBoard />
+    </AdminShell>
   );
 }
