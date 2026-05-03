@@ -1,20 +1,24 @@
-import { AdminPlaceholderPage } from "@/components/admin-placeholder-page";
-import {
-  accountColumns,
-  defaultNextSteps,
-} from "@/lib/admin-placeholder-config";
+import { redirect } from "next/navigation";
 
-export default function AccountsPage() {
+import { AccountsBoard } from "@/components/accounts-board";
+import { AdminShell } from "@/components/admin-shell";
+import { getSessionUser } from "@/lib/auth";
+
+export default async function AccountsPage() {
+  const user = await getSessionUser();
+
+  if (!user) {
+    redirect("/");
+  }
+
   return (
-    <AdminPlaceholderPage
+    <AdminShell
+      user={user}
       activeItem="accounts"
       badge="Accounts"
-      helperText="충전 입금 확인에 사용할 계좌를 관리하는 화면입니다."
-      eyebrow="Account View"
-      title="계좌관리"
-      description="은행명, 예금주, 계좌번호, 연결 도메인, 사용 여부를 관리하는 탭입니다."
-      columns={accountColumns}
-      nextSteps={defaultNextSteps}
-    />
+      helperText="충전 입금 확인에 사용할 계좌를 생성하고 관리하는 화면입니다."
+    >
+      <AccountsBoard />
+    </AdminShell>
   );
 }
