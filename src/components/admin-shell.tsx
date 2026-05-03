@@ -19,11 +19,6 @@ const sideMenuGroups = [
     title: "조직 관리",
     items: [
       {
-        title: "본사",
-        href: "/dashboard/org/headquarters",
-        key: "org-headquarters",
-      },
-      {
         title: "상위총판",
         href: "/dashboard/org/top-distributors",
         key: "org-top-distributors",
@@ -32,11 +27,6 @@ const sideMenuGroups = [
         title: "총판",
         href: "/dashboard/org/distributors",
         key: "org-distributors",
-      },
-      {
-        title: "대리점",
-        href: "/dashboard/org/agencies",
-        key: "org-agencies",
       },
       {
         title: "수수료관리",
@@ -62,11 +52,6 @@ const sideMenuGroups = [
         title: "도메인",
         href: "/dashboard/domains",
         key: "domains",
-      },
-      {
-        title: "도메인유저",
-        href: "/dashboard/domains/users",
-        key: "domain-users",
       },
       {
         title: "도메인환전",
@@ -132,16 +117,6 @@ const sideMenuGroups = [
         title: "어드민 리스트",
         href: "/dashboard/admins",
         key: "admins",
-      },
-    ],
-  },
-  {
-    title: "고객센터",
-    items: [
-      {
-        title: "고객센터",
-        href: "/dashboard/customer-center",
-        key: "customer-center",
       },
     ],
   },

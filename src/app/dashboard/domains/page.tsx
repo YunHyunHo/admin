@@ -1,17 +1,24 @@
-import { AdminPlaceholderPage } from "@/components/admin-placeholder-page";
-import { defaultNextSteps, domainColumns } from "@/lib/admin-placeholder-config";
+import { redirect } from "next/navigation";
 
-export default function DomainsPage() {
+import { AdminShell } from "@/components/admin-shell";
+import { DomainManagementBoard } from "@/components/domain-management-board";
+import { getSessionUser } from "@/lib/auth";
+
+export default async function DomainsPage() {
+  const user = await getSessionUser();
+
+  if (!user) {
+    redirect("/");
+  }
+
   return (
-    <AdminPlaceholderPage
+    <AdminShell
+      user={user}
       activeItem="domains"
       badge="Domains"
-      helperText="업체별 도메인과 API 연동 정보를 관리하는 화면입니다."
-      eyebrow="Domain View"
-      title="도메인 리스트"
-      description="업체명, URL, 연결 조직, 출금은행 정보, API 상태를 관리하는 탭입니다."
-      columns={domainColumns}
-      nextSteps={defaultNextSteps}
-    />
+      helperText="도메인과 도메인 유저를 한 화면에서 확인하는 통합 관리 화면입니다."
+    >
+      <DomainManagementBoard />
+    </AdminShell>
   );
 }
