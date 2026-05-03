@@ -1,20 +1,24 @@
-import { AdminPlaceholderPage } from "@/components/admin-placeholder-page";
-import {
-  defaultNextSteps,
-  transactionColumns,
-} from "@/lib/admin-placeholder-config";
+import { redirect } from "next/navigation";
 
-export default function TransactionPage() {
+import { AdminShell } from "@/components/admin-shell";
+import { TransactionLedgerBoard } from "@/components/transaction-ledger-board";
+import { getSessionUser } from "@/lib/auth";
+
+export default async function TransactionPage() {
+  const user = await getSessionUser();
+
+  if (!user) {
+    redirect("/");
+  }
+
   return (
-    <AdminPlaceholderPage
+    <AdminShell
+      user={user}
       activeItem="transaction"
       badge="Transaction"
-      helperText="충전, 환전, 수수료 등 전체 거래 원장을 조회하는 화면입니다."
-      eyebrow="Transaction Ledger"
-      title="Transaction"
-      description="전체 거래를 한 원장에서 조회하고 추적하기 위한 탭입니다."
-      columns={transactionColumns}
-      nextSteps={defaultNextSteps}
-    />
+      helperText="전체 거래 원장을 조회하고 승인 상태를 확인하는 화면입니다."
+    >
+      <TransactionLedgerBoard />
+    </AdminShell>
   );
 }

@@ -177,22 +177,25 @@ export function AdminShell({
                   );
 
                   return (
-                    <div
+                    <details
                       key={group.title}
+                      open={isGroupActive}
                       className={`rounded-[24px] border p-2 ${
                         isGroupActive
                           ? "border-cyan-400/14 bg-cyan-500/[0.04]"
                           : "border-white/6 bg-white/[0.025]"
                       }`}
                     >
-                      <div className="flex items-center justify-between px-3 py-2">
+                      <summary className="group flex cursor-pointer list-none items-center justify-between rounded-2xl px-3 py-2 transition hover:bg-white/[0.04] [&::-webkit-details-marker]:hidden">
                         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/42">
                           {group.title}
                         </p>
-                        <span className="text-white/24">⌄</span>
-                      </div>
+                        <span className="text-white/24 transition group-open:rotate-180">
+                          ⌄
+                        </span>
+                      </summary>
 
-                      <div className="space-y-1">
+                      <div className="mt-1 space-y-1">
                         {group.items.map((menu) => (
                           <Link
                             key={menu.key}
@@ -207,7 +210,7 @@ export function AdminShell({
                           </Link>
                         ))}
                       </div>
-                    </div>
+                    </details>
                   );
                 })}
               </div>
