@@ -4,36 +4,146 @@ import type { ReactNode } from "react";
 import { logoutAction } from "@/app/actions/auth";
 import type { SessionUser } from "@/lib/auth";
 
-const sideMenus = [
+const sideMenuGroups = [
   {
     title: "대시보드",
-    href: "/dashboard",
-    key: "dashboard-home",
+    items: [
+      {
+        title: "대시보드",
+        href: "/dashboard",
+        key: "dashboard-home",
+      },
+    ],
   },
   {
-    title: "본사/총판 수익",
-    href: "/dashboard/settlement/profit",
-    key: "settlement-profit",
+    title: "조직 관리",
+    items: [
+      {
+        title: "본사",
+        href: "/dashboard/org/headquarters",
+        key: "org-headquarters",
+      },
+      {
+        title: "상위총판",
+        href: "/dashboard/org/top-distributors",
+        key: "org-top-distributors",
+      },
+      {
+        title: "총판",
+        href: "/dashboard/org/distributors",
+        key: "org-distributors",
+      },
+      {
+        title: "대리점",
+        href: "/dashboard/org/agencies",
+        key: "org-agencies",
+      },
+      {
+        title: "수수료관리",
+        href: "/dashboard/settings/fee-rate",
+        key: "fee-rate-settings",
+      },
+    ],
   },
   {
-    title: "도메인 정산",
-    href: "/dashboard/domain-settlement",
-    key: "domain-settlement",
+    title: "계좌",
+    items: [
+      {
+        title: "계좌관리",
+        href: "/dashboard/accounts",
+        key: "accounts",
+      },
+    ],
   },
   {
-    title: "충전신청",
-    href: "/dashboard/transactions/charges",
-    key: "charges",
+    title: "도메인",
+    items: [
+      {
+        title: "도메인",
+        href: "/dashboard/domains",
+        key: "domains",
+      },
+      {
+        title: "도메인유저",
+        href: "/dashboard/domains/users",
+        key: "domain-users",
+      },
+      {
+        title: "도메인환전",
+        href: "/dashboard/domains/exchanges",
+        key: "domain-exchanges",
+      },
+    ],
   },
   {
-    title: "수수료 기록",
-    href: "/dashboard/fee-records",
-    key: "fee-records",
+    title: "거래내역",
+    items: [
+      {
+        title: "충전신청",
+        href: "/dashboard/transactions/charges",
+        key: "charges",
+      },
+      {
+        title: "환전신청",
+        href: "/dashboard/transactions/exchanges",
+        key: "exchanges",
+      },
+      {
+        title: "거래생성",
+        href: "/dashboard/transactions/create",
+        key: "transaction-create",
+      },
+      {
+        title: "Transaction",
+        href: "/dashboard/transactions/transaction",
+        key: "transaction",
+      },
+    ],
   },
   {
-    title: "수수료 설정",
-    href: "/dashboard/settings/fee-rate",
-    key: "fee-rate-settings",
+    title: "정산",
+    items: [
+      {
+        title: "본사/총판 수익",
+        href: "/dashboard/settlement/profit",
+        key: "settlement-profit",
+      },
+      {
+        title: "도메인 정산",
+        href: "/dashboard/domain-settlement",
+        key: "domain-settlement",
+      },
+      {
+        title: "수수료 기록",
+        href: "/dashboard/fee-records",
+        key: "fee-records",
+      },
+      {
+        title: "총판 환전내역",
+        href: "/dashboard/settlement/distributor-withdrawals",
+        key: "distributor-withdrawals",
+      },
+    ],
+  },
+  {
+    title: "어드민",
+    items: [
+      {
+        title: "어드민 리스트",
+        href: "/dashboard/admins",
+        key: "admins",
+      },
+    ],
+  },
+  {
+    title: "고객센터",
+    items: [
+      {
+        title: "고객센터",
+        href: "/dashboard/customer-center",
+        key: "customer-center",
+      },
+    ],
   },
 ];
 
@@ -90,20 +200,46 @@ export function AdminShell({
             </div>
 
             <nav className="flex-1 px-4 py-5">
-              <div className="space-y-2">
-                {sideMenus.map((menu) => (
-                  <Link
-                    key={menu.key}
-                    href={menu.href}
-                    className={`block rounded-2xl px-4 py-4 text-[0.96rem] font-medium ring-1 transition ${
-                      menu.key === activeItem
-                        ? "bg-cyan-500/14 text-cyan-100 ring-cyan-400/18"
-                        : "bg-white/[0.03] text-white/68 ring-white/6 hover:bg-white/[0.05] hover:text-white/88"
-                    }`}
-                  >
-                    {menu.title}
-                  </Link>
-                ))}
+              <div className="space-y-4">
+                {sideMenuGroups.map((group) => {
+                  const isGroupActive = group.items.some(
+                    (menu) => menu.key === activeItem,
+                  );
+
+                  return (
+                    <div
+                      key={group.title}
+                      className={`rounded-[24px] border p-2 ${
+                        isGroupActive
+                          ? "border-cyan-400/14 bg-cyan-500/[0.04]"
+                          : "border-white/6 bg-white/[0.025]"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between px-3 py-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/42">
+                          {group.title}
+                        </p>
+                        <span className="text-white/24">⌄</span>
+                      </div>
+
+                      <div className="space-y-1">
+                        {group.items.map((menu) => (
+                          <Link
+                            key={menu.key}
+                            href={menu.href}
+                            className={`block rounded-2xl px-4 py-3 text-[0.94rem] font-medium ring-1 transition ${
+                              menu.key === activeItem
+                                ? "bg-cyan-500/14 text-cyan-100 ring-cyan-400/18"
+                                : "bg-transparent text-white/62 ring-transparent hover:bg-white/[0.05] hover:text-white/88"
+                            }`}
+                          >
+                            {menu.title}
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </nav>
           </aside>
