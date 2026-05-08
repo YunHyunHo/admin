@@ -19,12 +19,10 @@ export type ProcessedRequest = PendingRequest & {
 
 export const companyDomainNames: Record<string, string> = {
   원페이: "원페이",
-  엠페이: "엠페이",
 };
 
 export const companyFeeRates: Record<string, number> = {
   원페이: 0.4,
-  엠페이: 0.55,
 };
 
 export function parseKoreanWon(amount: string) {

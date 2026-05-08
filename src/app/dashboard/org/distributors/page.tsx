@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { AdminShell } from "@/components/admin-shell";
 import { DistributorsBoard } from "@/components/distributors-board";
+import { getAllAdminAccounts } from "@/lib/admin-accounts";
 import { getSessionUser } from "@/lib/auth";
 
 export default async function DistributorsPage() {
@@ -11,14 +12,16 @@ export default async function DistributorsPage() {
     redirect("/");
   }
 
+  const adminAccounts = await getAllAdminAccounts();
+
   return (
     <AdminShell
       user={user}
       activeItem="org-distributors"
       badge="Organization"
-      helperText="총판 생성과 목록 관리를 실제 화면으로 구성했습니다."
+      helperText="어드민 리스트에서 생성한 하부계정이 총판 목록에 표시됩니다."
     >
-      <DistributorsBoard />
+      <DistributorsBoard adminAccounts={adminAccounts} />
     </AdminShell>
   );
 }

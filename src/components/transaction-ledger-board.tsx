@@ -232,7 +232,7 @@ const ledgerRows: LedgerRow[] = [
   },
 ];
 
-const rowsPerPage = 15;
+const rowsPerPage = 10;
 
 function formatKoreanWon(value: number) {
   return `${value.toLocaleString("ko-KR")} 원`;
@@ -313,7 +313,6 @@ export function TransactionLedgerBoard() {
             <option>업체 전체</option>
             <option>아이락스</option>
             <option>원페이</option>
-            <option>엠페이</option>
           </select>
           <select
             value={transactionType}
@@ -474,7 +473,7 @@ export function TransactionLedgerBoard() {
               ‹
             </button>
 
-            {Array.from({ length: Math.min(pageCount, 15) }, (_, index) => {
+            {Array.from({ length: Math.min(pageCount, 10) }, (_, index) => {
               const pageNumber = index + 1;
 
               return (

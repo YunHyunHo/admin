@@ -26,7 +26,7 @@ export async function loginAction(
     };
   }
 
-  const account = findAccount(username, password);
+  const account = await findAccount(username, password);
 
   if (!account) {
     return {
@@ -35,10 +35,20 @@ export async function loginAction(
   }
 
   const sessionUser: SessionUser = {
-    username: account.username,
+    id: account.id,
+    username: account.loginId,
+    loginId: account.loginId,
+    nickname: account.nickname,
+    role: account.role,
+    status: account.status,
     companyId: account.companyId,
     companyName: account.companyName,
     apiLabel: account.apiLabel,
+    managedCompanies: account.managedCompanies,
+    createdBy: account.createdBy,
+    lastLoginAt: account.lastLoginAt,
+    createdAt: account.createdAt,
+    updatedAt: account.updatedAt,
   };
 
   await createSession(sessionUser);

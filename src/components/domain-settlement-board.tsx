@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 import { formatKoreanWon } from "@/lib/charge-utils";
 
 type DomainSettlementBoardProps = {
-  companyName: string;
   initialFeeRate: number;
   domainName: string;
   initialRows: DomainSettlementRow[];
@@ -82,7 +81,6 @@ function formatSettlementValue(value: number, dashWhenZero = false) {
 }
 
 export function DomainSettlementBoard({
-  companyName,
   domainName,
   initialRows,
 }: DomainSettlementBoardProps) {
@@ -114,6 +112,14 @@ export function DomainSettlementBoard({
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE,
   );
+  const splitCommission = (value: number) => {
+    const topDistributor = Math.floor(value / 2);
+
+    return {
+      topDistributor,
+      distributor: value - topDistributor,
+    };
+  };
 
   async function loadRows(nextStartDate: string, nextEndDate: string) {
     try {
@@ -153,7 +159,7 @@ export function DomainSettlementBoard({
             <p className="text-xs text-white/38">정산</p>
             <h2 className="mt-2 text-xl font-semibold text-white">도메인 정산</h2>
             <p className="mt-2 text-sm text-white/46">
-              {companyName} · {message}
+              {domainName} · {message}
             </p>
           </div>
 
@@ -221,40 +227,56 @@ export function DomainSettlementBoard({
             <table className="min-w-full table-fixed text-sm">
               <thead>
                 <tr className="border-b border-white/40 text-white">
-                  <th className="w-1/4 border-r border-white/40 px-3 py-1.5 text-center font-semibold">
+                  <th className="w-1/6 border-r border-white/40 px-3 py-1.5 text-center font-semibold">
                     날짜
                   </th>
-                  <th className="w-1/4 border-r border-white/40 px-3 py-1.5 text-center font-semibold">
+                  <th className="w-1/6 border-r border-white/40 px-3 py-1.5 text-center font-semibold">
                     충전
                   </th>
-                  <th className="w-1/4 border-r border-white/40 px-3 py-1.5 text-center font-semibold">
-                    환전
+                  <th className="w-1/6 border-r border-white/40 px-3 py-1.5 text-center font-semibold">
+                    수수료
                   </th>
-                  <th className="w-1/4 px-3 py-1.5 text-center font-semibold">
+                  <th className="w-1/6 border-r border-white/40 px-3 py-1.5 text-center font-semibold">
+                    환전(도메인)
+                  </th>
+                  <th className="w-1/6 border-r border-white/40 px-3 py-1.5 text-center font-semibold">
+                    상위총판
+                  </th>
+                  <th className="w-1/6 px-3 py-1.5 text-center font-semibold">
                     총판
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {visibleRows.map((row) => (
-                  <tr
-                    key={`${domainName}-${row.date}`}
-                    className="border-b border-white/30 text-white/90"
-                  >
-                    <td className="border-r border-white/30 px-3 py-1.5 text-center">
-                      {toDisplayDate(row.date)}
-                    </td>
-                    <td className="border-r border-white/30 px-3 py-1.5 text-right">
-                      {formatSettlementValue(row.charge)}
-                    </td>
-                    <td className="border-r border-white/30 px-3 py-1.5 text-right">
-                      {formatSettlementValue(row.exchange)}
-                    </td>
-                    <td className="px-3 py-1.5 text-right">
-                      {formatSettlementValue(row.distributor, true)}
-                    </td>
-                  </tr>
-                ))}
+                {visibleRows.map((row) => {
+                  const commission = splitCommission(row.distributor);
+
+                  return (
+                    <tr
+                      key={`${domainName}-${row.date}`}
+                      className="border-b border-white/30 text-white/90"
+                    >
+                      <td className="border-r border-white/30 px-3 py-1.5 text-center">
+                        {toDisplayDate(row.date)}
+                      </td>
+                      <td className="border-r border-white/30 px-3 py-1.5 text-right">
+                        {formatSettlementValue(row.charge)}
+                      </td>
+                      <td className="border-r border-white/30 px-3 py-1.5 text-right">
+                        {formatSettlementValue(row.distributor)}
+                      </td>
+                      <td className="border-r border-white/30 px-3 py-1.5 text-right">
+                        {formatSettlementValue(row.exchange)}
+                      </td>
+                      <td className="border-r border-white/30 px-3 py-1.5 text-right">
+                        {formatSettlementValue(commission.topDistributor)}
+                      </td>
+                      <td className="px-3 py-1.5 text-right">
+                        {formatSettlementValue(commission.distributor, true)}
+                      </td>
+                    </tr>
+                  );
+                })}
                 <tr className="bg-white/10 font-semibold text-white">
                   <td className="border-r border-white/30 px-3 py-1.5 text-center">
                     합계
@@ -263,10 +285,20 @@ export function DomainSettlementBoard({
                     {formatSettlementValue(total.charge)}
                   </td>
                   <td className="border-r border-white/30 px-3 py-1.5 text-right">
+                    {formatSettlementValue(total.distributor)}
+                  </td>
+                  <td className="border-r border-white/30 px-3 py-1.5 text-right">
                     {formatSettlementValue(total.exchange)}
                   </td>
+                  <td className="border-r border-white/30 px-3 py-1.5 text-right">
+                    {formatSettlementValue(
+                      splitCommission(total.distributor).topDistributor,
+                    )}
+                  </td>
                   <td className="px-3 py-1.5 text-right">
-                    {formatSettlementValue(total.distributor)}
+                    {formatSettlementValue(
+                      splitCommission(total.distributor).distributor,
+                    )}
                   </td>
                 </tr>
               </tbody>

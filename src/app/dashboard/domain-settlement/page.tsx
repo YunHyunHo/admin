@@ -40,7 +40,6 @@ export default async function DomainSettlementPage() {
       helperText="승인된 충전금액만 집계해서 날짜별 충전액과 수수료를 확인하는 화면입니다."
     >
       <DomainSettlementBoard
-        companyName={user.companyName}
         initialFeeRate={getFeeRateByCompanyFromSettings(
           user.companyName,
           settings,

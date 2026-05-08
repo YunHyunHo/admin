@@ -1,35 +1,18 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 
+import {
+  getAllAdminAccounts,
+  getMasterAccount,
+  type AdminAccountRecord,
+} from "@/lib/admin-accounts";
+
 const SESSION_COOKIE = "vendor_admin_session";
 const LOCAL_SESSION_SECRET = "local-dev-secret-change-me";
 
-type AccountRecord = {
+export type SessionUser = Omit<AdminAccountRecord, "password"> & {
   username: string;
-  password: string;
-  companyId: string;
-  companyName: string;
-  apiLabel: string;
 };
-
-export type SessionUser = Omit<AccountRecord, "password">;
-
-const TEST_ACCOUNTS: AccountRecord[] = [
-  {
-    username: "admin1",
-    password: process.env.ADMIN1_PASSWORD ?? "0000",
-    companyId: "vendor-a",
-    companyName: "원페이",
-    apiLabel: "원페이 연동 API",
-  },
-  {
-    username: "admin2",
-    password: process.env.ADMIN2_PASSWORD ?? "0000",
-    companyId: "vendor-b",
-    companyName: "엠페이",
-    apiLabel: "엠페이 연동 API",
-  },
-];
 
 function getSessionSecret() {
   const secret = process.env.SESSION_SECRET ?? LOCAL_SESSION_SECRET;
@@ -85,10 +68,14 @@ function decodeSession(value: string | undefined): SessionUser | null {
   }
 }
 
-export function findAccount(username: string, password: string) {
-  return TEST_ACCOUNTS.find(
+export async function findAccount(username: string, password: string) {
+  const accounts = await getAllAdminAccounts();
+
+  return accounts.find(
     (account) =>
-      account.username === username.trim() && account.password === password,
+      account.loginId === username.trim() &&
+      account.password === password &&
+      account.status === "ACTIVE",
   );
 }
 
@@ -116,8 +103,13 @@ export async function getSessionUser() {
 }
 
 export function getTestAccounts() {
-  return TEST_ACCOUNTS.map(({ password, ...account }) => ({
-    ...account,
-    passwordHint: password,
-  }));
+  const { password, ...account } = getMasterAccount();
+
+  return [
+    {
+      ...account,
+      username: account.loginId,
+      passwordHint: password,
+    },
+  ];
 }

@@ -5,11 +5,9 @@
 배포 서버에는 `.env.example`을 기준으로 아래 값을 등록합니다.
 
 - `SESSION_SECRET`: 세션 쿠키 서명용 긴 랜덤 문자열
-- `ADMIN1_PASSWORD`: 원페이 관리자 비밀번호
-- `ADMIN2_PASSWORD`: 엠페이 관리자 비밀번호
+- `MASTER_PASSWORD`: 마스터 관리자 비밀번호
 - `NEXT_PUBLIC_APP_URL`: 실제 관리자 도메인 주소
 - `ONEPAY_API_BASE_URL`, `ONEPAY_API_KEY`: 원페이 API 연결 정보
-- `MPAY_API_BASE_URL`, `MPAY_API_KEY`: 엠페이 API 연결 정보
 
 ## 2. 배포 검증
 

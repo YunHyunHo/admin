@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+
+import type { AdminAccountRecord } from "@/lib/admin-accounts";
 
 type Distributor = {
   id: string;
@@ -14,129 +16,56 @@ type Distributor = {
   managedCompaniesCount: number;
   balance: number;
   createdAt: string;
-  memo?: string;
-  phone?: string;
+  password: string;
 };
 
-const topDistributorOptions = [
-  "코인뱅크",
-  "비비",
-  "댕댕이",
-  "칠성파",
-  "개발테스트 상위총판A",
-  "개발테스트 상위총판B",
-];
-
-const initialDistributors: Distributor[] = [
-  {
-    id: "D-SIRA-001",
-    manager: "시라소니",
-    loginId: "asd147",
-    branch: "본사",
-    topDistributor: "코인뱅크",
-    name: "시라소니",
-    agenciesCount: 0,
-    childDistributorsCount: 0,
-    managedCompaniesCount: 5,
-    balance: 5_691_401,
-    createdAt: "04-10 17:47:59",
-  },
-  {
-    id: "D-SHOHEI-001",
-    manager: "비랜드 오실장",
-    loginId: "Shohei77",
-    branch: "본사",
-    topDistributor: "비비",
-    name: "비랜드오실장",
-    agenciesCount: 0,
-    childDistributorsCount: 0,
-    managedCompaniesCount: 1,
-    balance: 0,
-    createdAt: "01-16 17:26:21",
-  },
-  {
-    id: "D-AONE-001",
-    manager: "에이원 오실장",
-    loginId: "oh1111",
-    branch: "본사",
-    topDistributor: "비비",
-    name: "에이원 오실장",
-    agenciesCount: 0,
-    childDistributorsCount: 1,
-    managedCompaniesCount: 6,
-    balance: 0,
-    createdAt: "01-05 20:02:22",
-  },
-  {
-    id: "D-SUJA-001",
-    manager: "수水",
-    loginId: "asd456",
-    branch: "본사",
-    topDistributor: "댕댕이",
-    name: "수水",
-    agenciesCount: 0,
-    childDistributorsCount: 0,
-    managedCompaniesCount: 3,
-    balance: 242_794,
-    createdAt: "03-26 13:15:33",
-  },
-];
+const rowsPerPage = 10;
 
 function formatKoreanWon(value: number) {
   return `${value.toLocaleString("ko-KR")} 원`;
 }
 
-function getNowStamp() {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const date = String(now.getDate()).padStart(2, "0");
-  const hours = String(now.getHours()).padStart(2, "0");
-  const minutes = String(now.getMinutes()).padStart(2, "0");
-  const seconds = String(now.getSeconds()).padStart(2, "0");
+type DistributorsBoardProps = {
+  adminAccounts: AdminAccountRecord[];
+};
 
-  return `${month}-${date} ${hours}:${minutes}:${seconds}`;
-}
+function toDistributorRows(accounts: AdminAccountRecord[]): Distributor[] {
+  const masterAccount = accounts.find((account) => account.role === "MASTER");
+  const topDistributor = masterAccount?.companyName ?? "전체관리";
 
-export function DistributorsBoard() {
-  const [distributors, setDistributors] = useState(initialDistributors);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [topDistributor, setTopDistributor] = useState("");
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [memo, setMemo] = useState("");
-
-  function handleCreate() {
-    if (!topDistributor || !name) {
-      return;
-    }
-
-    const newDistributor: Distributor = {
-      id: `D-${Date.now().toString().slice(-6)}`,
-      manager: name,
-      loginId: name.toLowerCase().replace(/\s+/g, "_"),
+  return accounts
+    .filter((account) => account.role !== "MASTER")
+    .map((account) => ({
+      id: account.id,
+      manager: account.nickname,
+      loginId: account.loginId,
       branch: "본사",
       topDistributor,
-      name,
+      name: account.nickname,
       agenciesCount: 0,
       childDistributorsCount: 0,
-      managedCompaniesCount: 0,
+      managedCompaniesCount: account.managedCompanies.length,
       balance: 0,
-      createdAt: getNowStamp(),
-      phone,
-      memo,
-    };
+      createdAt: account.createdAt,
+      password: account.password,
+    }));
+}
 
-    setDistributors((current) => [newDistributor, ...current]);
-    setTopDistributor("");
-    setName("");
-    setPhone("");
-    setMemo("");
-    setIsCreateModalOpen(false);
-  }
+export function DistributorsBoard({ adminAccounts }: DistributorsBoardProps) {
+  const distributors = useMemo(
+    () => toDistributorRows(adminAccounts),
+    [adminAccounts],
+  );
+  const [page, setPage] = useState(1);
+  const [visiblePasswordId, setVisiblePasswordId] = useState<string | null>(
+    null,
+  );
 
-  function handleDelete(id: string) {
-    setDistributors((current) => current.filter((row) => row.id !== id));
-  }
+  const pageCount = Math.max(1, Math.ceil(distributors.length / rowsPerPage));
+  const visibleDistributors = distributors.slice(
+    (page - 1) * rowsPerPage,
+    page * rowsPerPage,
+  );
 
   return (
     <section className="rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
@@ -155,10 +84,12 @@ export function DistributorsBoard() {
 
         <button
           type="button"
-          onClick={() => setIsCreateModalOpen(true)}
+          onClick={() => {
+            window.location.href = "/dashboard/admins";
+          }}
           className="rounded-2xl bg-fuchsia-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-fuchsia-400"
         >
-          총판 생성
+          어드민에서 하부계정 생성
         </button>
       </div>
 
@@ -191,7 +122,7 @@ export function DistributorsBoard() {
               </tr>
             </thead>
             <tbody>
-              {distributors.map((row) => (
+              {visibleDistributors.map((row) => (
                 <tr
                   key={row.id}
                   className="border-b border-white/8 text-white/76 last:border-b-0"
@@ -205,12 +136,19 @@ export function DistributorsBoard() {
                     <span>{row.loginId}</span>
                   </td>
                   <td className="px-4 py-4 text-center">
-                    <button
-                      type="button"
-                      className="rounded-xl bg-teal-400/80 px-3 py-2 text-xs font-semibold text-slate-950"
-                    >
-                      비밀번호 확인
-                    </button>
+                    {visiblePasswordId === row.id ? (
+                      <span className="rounded-xl border border-teal-300/25 bg-teal-300/10 px-3 py-2 font-mono text-xs font-semibold text-teal-100">
+                        {row.password}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setVisiblePasswordId(row.id)}
+                        className="rounded-xl bg-teal-400/80 px-3 py-2 text-xs font-semibold text-slate-950"
+                      >
+                        비밀번호 확인
+                      </button>
+                    )}
                   </td>
                   <td className="px-4 py-4 text-center">{row.branch}</td>
                   <td className="px-4 py-4 text-center">{row.topDistributor}</td>
@@ -234,97 +172,37 @@ export function DistributorsBoard() {
                   <td className="px-4 py-4 text-center text-white/62">
                     {row.createdAt}
                   </td>
-                  <td className="px-4 py-4 text-center">
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(row.id)}
-                      className="rounded-xl border border-red-300/20 bg-red-500/12 px-3 py-2 text-xs font-semibold text-red-100 transition hover:bg-red-500/20"
-                    >
-                      삭제
-                    </button>
+                  <td className="px-4 py-4 text-center text-white/38">
+                    -
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+
+          {distributors.length > rowsPerPage ? (
+            <div className="flex items-center justify-center gap-2 border-t border-white/8 px-4 py-5">
+              {Array.from({ length: pageCount }, (_, index) => index + 1).map(
+                (pageNumber) => (
+                  <button
+                    key={pageNumber}
+                    type="button"
+                    onClick={() => setPage(pageNumber)}
+                    className={`h-10 min-w-10 rounded-xl px-3 text-lg font-semibold ${
+                      page === pageNumber
+                        ? "bg-white text-slate-950"
+                        : "bg-black text-white"
+                    }`}
+                  >
+                    {pageNumber}
+                  </button>
+                ),
+              )}
+            </div>
+          ) : null}
         </div>
       </div>
 
-      {isCreateModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-[440px] rounded-[28px] border border-white/10 bg-white p-6 text-slate-950 shadow-[0_28px_120px_rgba(0,0,0,0.58)]">
-            <h3 className="text-xl font-semibold tracking-[-0.03em]">
-              총판 생성
-            </h3>
-
-            <div className="mt-7 space-y-4">
-              <label className="block">
-                <span className="sr-only">상위총판 선택</span>
-                <select
-                  value={topDistributor}
-                  onChange={(event) => setTopDistributor(event.target.value)}
-                  className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-slate-500"
-                >
-                  <option value="">상위총판 선택</option>
-                  {topDistributorOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="block">
-                <span className="sr-only">총판명</span>
-                <input
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="총판명"
-                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
-                />
-              </label>
-
-              <label className="block">
-                <span className="sr-only">핸드폰번호</span>
-                <input
-                  value={phone}
-                  onChange={(event) => setPhone(event.target.value)}
-                  placeholder="핸드폰번호 [필수 X]"
-                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
-                />
-              </label>
-
-              <label className="block">
-                <span className="sr-only">메모</span>
-                <input
-                  value={memo}
-                  onChange={(event) => setMemo(event.target.value)}
-                  placeholder="메모 [필수 X]"
-                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
-                />
-              </label>
-            </div>
-
-            <div className="mt-10 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={handleCreate}
-                disabled={!topDistributor || !name}
-                className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
-              >
-                생성
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsCreateModalOpen(false)}
-                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
-              >
-                취소
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </section>
   );
 }

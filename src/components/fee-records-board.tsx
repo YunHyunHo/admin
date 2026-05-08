@@ -11,7 +11,6 @@ type FeeRecordsBoardProps = {
 
 type FeeRecordRow = {
   id: string;
-  branch: string;
   topAgent: string;
   subAgent: string;
   acquisitionBranch: string;
@@ -253,7 +252,6 @@ export function FeeRecordsBoard({
               <tr className="bg-black/60 text-white">
                 {[
                   "ID",
-                  "본사",
                   "상위총판",
                   "총판",
                   "획득지점",
@@ -284,9 +282,6 @@ export function FeeRecordsBoard({
                   >
                     <td className="border border-white/14 px-4 py-4 text-center font-mono text-xs text-white/72">
                       {truncateId(row.id)}
-                    </td>
-                    <td className="border border-white/14 px-4 py-4 text-center">
-                      {row.branch}
                     </td>
                     <td className="border border-white/14 px-4 py-4 text-center">
                       {row.topAgent}
@@ -326,7 +321,7 @@ export function FeeRecordsBoard({
               ) : (
                 <tr>
                   <td
-                    colSpan={13}
+                    colSpan={12}
                     className="border border-white/14 px-4 py-14 text-center text-white/48"
                   >
                     선택한 기간에 수수료 기록이 없습니다.

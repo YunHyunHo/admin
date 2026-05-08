@@ -137,16 +137,11 @@ const initialAccounts: AccountRow[] = [
     accountNumber: "702910-02-171289",
     createdAt: "01-24 17:38:54",
     isActive: false,
-    linkedDomains: [
-      {
-        id: "7f18a620-1c3b-44d2-8821-002",
-        name: "엠페이",
-        address: "mpay.laylow.me",
-        userCount: 2,
-      },
-    ],
+    linkedDomains: [],
   },
 ];
+
+const rowsPerPage = 10;
 
 function getNowStamp() {
   const now = new Date();
@@ -161,10 +156,12 @@ function getNowStamp() {
 
 export function AccountsBoard() {
   const [accounts, setAccounts] = useState(initialAccounts);
+  const [page, setPage] = useState(1);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(
     null,
   );
+  const [linkedDomainPage, setLinkedDomainPage] = useState(1);
   const [editingField, setEditingField] = useState<{
     accountId: string;
     field: "holder" | "accountNumber";
@@ -173,6 +170,23 @@ export function AccountsBoard() {
   const [bankName, setBankName] = useState("");
   const [holder, setHolder] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
+  const pageCount = Math.max(1, Math.ceil(accounts.length / rowsPerPage));
+  const visibleAccounts = accounts.slice(
+    (page - 1) * rowsPerPage,
+    page * rowsPerPage,
+  );
+  const selectedAccount = accounts.find(
+    (account) => account.id === selectedAccountId,
+  );
+  const linkedDomainPageCount = Math.max(
+    1,
+    Math.ceil((selectedAccount?.linkedDomains.length ?? 0) / rowsPerPage),
+  );
+  const visibleLinkedDomains =
+    selectedAccount?.linkedDomains.slice(
+      (linkedDomainPage - 1) * rowsPerPage,
+      linkedDomainPage * rowsPerPage,
+    ) ?? [];
 
   function updateAccount(
     id: string,
@@ -198,6 +212,7 @@ export function AccountsBoard() {
 
   function handleDelete(id: string) {
     setAccounts((current) => current.filter((account) => account.id !== id));
+    setPage(1);
   }
 
   function unlinkDomain(accountId: string, domainId: string) {
@@ -233,6 +248,7 @@ export function AccountsBoard() {
     };
 
     setAccounts((current) => [nextAccount, ...current]);
+    setPage(1);
     setBranchName("");
     setBankName("");
     setHolder("");
@@ -290,7 +306,7 @@ export function AccountsBoard() {
               </tr>
             </thead>
             <tbody>
-              {accounts.map((account) => (
+              {visibleAccounts.map((account) => (
                 <tr
                   key={account.id}
                   className="border-b border-white/8 text-white/76 last:border-b-0"
@@ -352,7 +368,10 @@ export function AccountsBoard() {
                       <span>{account.linkedDomains.length}개</span>
                       <button
                         type="button"
-                        onClick={() => setSelectedAccountId(account.id)}
+                        onClick={() => {
+                          setSelectedAccountId(account.id);
+                          setLinkedDomainPage(1);
+                        }}
                         className="rounded-xl bg-teal-400/80 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-teal-300"
                       >
                         보기
@@ -372,6 +391,27 @@ export function AccountsBoard() {
               ))}
             </tbody>
           </table>
+
+          {accounts.length > rowsPerPage ? (
+            <div className="flex items-center justify-center gap-2 border-t border-white/8 px-4 py-5">
+              {Array.from({ length: pageCount }, (_, index) => index + 1).map(
+                (pageNumber) => (
+                  <button
+                    key={pageNumber}
+                    type="button"
+                    onClick={() => setPage(pageNumber)}
+                    className={`h-10 min-w-10 rounded-xl px-3 text-lg font-semibold ${
+                      page === pageNumber
+                        ? "bg-white text-slate-950"
+                        : "bg-black text-white"
+                    }`}
+                  >
+                    {pageNumber}
+                  </button>
+                ),
+              )}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -487,9 +527,7 @@ export function AccountsBoard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {accounts
-                    .find((account) => account.id === selectedAccountId)
-                    ?.linkedDomains.map((domain) => (
+                  {visibleLinkedDomains.map((domain) => (
                       <tr key={domain.id} className="text-white/86">
                         <td className="border border-white/55 px-4 py-4 font-mono text-xs">
                           {domain.id}
@@ -519,8 +557,29 @@ export function AccountsBoard() {
                 </tbody>
               </table>
 
-              {!accounts.find((account) => account.id === selectedAccountId)
-                ?.linkedDomains.length ? (
+              {(selectedAccount?.linkedDomains.length ?? 0) > rowsPerPage ? (
+                <div className="flex items-center justify-center gap-2 border-x border-b border-white/55 px-4 py-5">
+                  {Array.from(
+                    { length: linkedDomainPageCount },
+                    (_, index) => index + 1,
+                  ).map((pageNumber) => (
+                    <button
+                      key={pageNumber}
+                      type="button"
+                      onClick={() => setLinkedDomainPage(pageNumber)}
+                      className={`h-10 min-w-10 rounded-xl px-3 text-lg font-semibold ${
+                        linkedDomainPage === pageNumber
+                          ? "bg-white text-slate-950"
+                          : "bg-black text-white"
+                      }`}
+                    >
+                      {pageNumber}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              {!selectedAccount?.linkedDomains.length ? (
                 <p className="border border-t-0 border-white/55 px-4 py-8 text-center text-sm text-white/48">
                   연결된 도메인이 없습니다.
                 </p>

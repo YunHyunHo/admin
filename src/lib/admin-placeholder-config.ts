@@ -23,7 +23,7 @@ export const domainColumns = [
   { label: "본사", value: "본사" },
   { label: "상위총판", value: "-" },
   { label: "총판", value: "-" },
-  { label: "업체명", value: "원페이 / 엠페이" },
+  { label: "업체명", value: "원페이" },
   { label: "URL", value: "도메인 URL" },
   { label: "API 상태", value: "연결 대기" },
   { label: "관리", value: "계좌관리 / 삭제" },

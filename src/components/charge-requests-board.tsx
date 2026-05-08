@@ -18,6 +18,8 @@ type ChargeRequestsResponse = {
   rejected: ProcessedRequest[];
 };
 
+const rowsPerPage = 10;
+
 function SectionCard({
   title,
   count,
@@ -55,6 +57,37 @@ function Table({ children }: { children: React.ReactNode }) {
   );
 }
 
+function PaginationControls({
+  page,
+  pageCount,
+  onPageChange,
+}: {
+  page: number;
+  pageCount: number;
+  onPageChange: (page: number) => void;
+}) {
+  return (
+    <div className="flex items-center justify-center gap-2 border-x border-b border-white/8 px-4 py-5">
+      {Array.from({ length: pageCount }, (_, index) => index + 1).map(
+        (pageNumber) => (
+          <button
+            key={pageNumber}
+            type="button"
+            onClick={() => onPageChange(pageNumber)}
+            className={`h-10 min-w-10 rounded-xl px-3 text-lg font-semibold ${
+              page === pageNumber
+                ? "bg-white text-slate-950"
+                : "bg-black text-white"
+            }`}
+          >
+            {pageNumber}
+          </button>
+        ),
+      )}
+    </div>
+  );
+}
+
 export function ChargeRequestsBoard({
   initialPendingRequests,
   initialApprovedRequests,
@@ -64,6 +97,9 @@ export function ChargeRequestsBoard({
   const [approvedRequests, setApprovedRequests] = useState(initialApprovedRequests);
   const [rejectedRequests, setRejectedRequests] = useState(initialRejectedRequests);
   const [searchKeyword, setSearchKeyword] = useState("");
+  const [pendingPage, setPendingPage] = useState(1);
+  const [approvedPage, setApprovedPage] = useState(1);
+  const [rejectedPage, setRejectedPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [message, setMessage] = useState("임시 서버 API로 테스트 중입니다.");
@@ -72,6 +108,9 @@ export function ChargeRequestsBoard({
     setPendingRequests(data.pending);
     setApprovedRequests(data.approved);
     setRejectedRequests(data.rejected);
+    setPendingPage(1);
+    setApprovedPage(1);
+    setRejectedPage(1);
   }
 
   async function requestChargeData(body?: Record<string, string>) {
@@ -131,6 +170,30 @@ export function ChargeRequestsBoard({
         row.accountNumber.toLowerCase().includes(keyword),
     );
   }, [pendingRequests, searchKeyword]);
+  const pendingPageCount = Math.max(
+    1,
+    Math.ceil(filteredPendingRequests.length / rowsPerPage),
+  );
+  const visiblePendingRequests = filteredPendingRequests.slice(
+    (pendingPage - 1) * rowsPerPage,
+    pendingPage * rowsPerPage,
+  );
+  const approvedPageCount = Math.max(
+    1,
+    Math.ceil(approvedRequests.length / rowsPerPage),
+  );
+  const visibleApprovedRequests = approvedRequests.slice(
+    (approvedPage - 1) * rowsPerPage,
+    approvedPage * rowsPerPage,
+  );
+  const rejectedPageCount = Math.max(
+    1,
+    Math.ceil(rejectedRequests.length / rowsPerPage),
+  );
+  const visibleRejectedRequests = rejectedRequests.slice(
+    (rejectedPage - 1) * rowsPerPage,
+    rejectedPage * rowsPerPage,
+  );
 
   async function moveRequest(targetId: string, nextStatus: "승인" | "승인거절") {
     setProcessingId(targetId);
@@ -188,7 +251,10 @@ export function ChargeRequestsBoard({
               <div className="flex flex-wrap gap-3">
                 <input
                   value={searchKeyword}
-                  onChange={(event) => setSearchKeyword(event.target.value)}
+                  onChange={(event) => {
+                    setSearchKeyword(event.target.value);
+                    setPendingPage(1);
+                  }}
                   placeholder="입금자 / 유저ID / 계좌번호 검색"
                   className="h-11 w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 text-sm text-white outline-none placeholder:text-white/28 lg:w-72"
                 />
@@ -246,7 +312,7 @@ export function ChargeRequestsBoard({
                 </thead>
                 <tbody>
                   {filteredPendingRequests.length ? (
-                    filteredPendingRequests.map((row) => (
+                    visiblePendingRequests.map((row) => (
                       <tr key={row.id} className="border-t border-white/8 text-white/82">
                         <td className="px-4 py-4">{row.id}</td>
                         <td className="px-4 py-4">{row.branch}</td>
@@ -294,6 +360,13 @@ export function ChargeRequestsBoard({
                 </tbody>
               </table>
             </Table>
+            {filteredPendingRequests.length > rowsPerPage ? (
+              <PaginationControls
+                page={pendingPage}
+                pageCount={pendingPageCount}
+                onPageChange={setPendingPage}
+              />
+            ) : null}
           </SectionCard>
 
           <div className="space-y-5">
@@ -323,7 +396,7 @@ export function ChargeRequestsBoard({
                     </tr>
                   </thead>
                   <tbody>
-                    {approvedRequests.map((row) => (
+                    {visibleApprovedRequests.map((row) => (
                       <tr key={row.id} className="border-t border-white/8 text-white/82">
                         <td className="px-4 py-4">{row.id}</td>
                         <td className="px-4 py-4">{row.userId}</td>
@@ -343,6 +416,13 @@ export function ChargeRequestsBoard({
                   </tbody>
                 </table>
               </Table>
+              {approvedRequests.length > rowsPerPage ? (
+                <PaginationControls
+                  page={approvedPage}
+                  pageCount={approvedPageCount}
+                  onPageChange={setApprovedPage}
+                />
+              ) : null}
             </SectionCard>
 
             <SectionCard title="승인거절내역" count={rejectedRequests.length}>
@@ -371,7 +451,7 @@ export function ChargeRequestsBoard({
                     </tr>
                   </thead>
                   <tbody>
-                    {rejectedRequests.map((row) => (
+                    {visibleRejectedRequests.map((row) => (
                       <tr key={row.id} className="border-t border-white/8 text-white/82">
                         <td className="px-4 py-4">{row.id}</td>
                         <td className="px-4 py-4">{row.userId}</td>
@@ -391,6 +471,13 @@ export function ChargeRequestsBoard({
                   </tbody>
                 </table>
               </Table>
+              {rejectedRequests.length > rowsPerPage ? (
+                <PaginationControls
+                  page={rejectedPage}
+                  pageCount={rejectedPageCount}
+                  onPageChange={setRejectedPage}
+                />
+              ) : null}
             </SectionCard>
           </div>
         </div>

@@ -1,21 +1,37 @@
-import { AdminPlaceholderPage } from "@/components/admin-placeholder-page";
-import { adminColumns } from "@/lib/admin-placeholder-config";
+import { redirect } from "next/navigation";
 
-export default function AdminsPage() {
+import { AdminShell } from "@/components/admin-shell";
+import { AdminsBoard } from "@/components/admins-board";
+import {
+  getManagedCompanyOptions,
+  getPublicAdminAccounts,
+} from "@/lib/admin-accounts";
+import { getSessionUser } from "@/lib/auth";
+
+export default async function AdminsPage() {
+  const user = await getSessionUser();
+
+  if (!user) {
+    redirect("/");
+  }
+
+  const [adminAccounts, managedCompanies] = await Promise.all([
+    getPublicAdminAccounts(),
+    getManagedCompanyOptions(),
+  ]);
+
   return (
-    <AdminPlaceholderPage
+    <AdminShell
+      user={user}
       activeItem="admins"
       badge="Admins"
-      helperText="도메인별 어드민 계정을 생성하고 연결 범위를 관리하는 화면입니다."
-      eyebrow="Admin View"
-      title="어드민 리스트"
-      description="도메인별 어드민 계정, 권한, 상태, 접속 URL, 최근 로그인 일시를 관리하는 탭입니다."
-      columns={adminColumns}
-      nextSteps={[
-        "admins와 admin_domain_mappings 테이블을 연결합니다.",
-        "DOMAIN_ADMIN은 서버에서 domain_id 접근 범위를 반드시 검증합니다.",
-        "비밀번호 초기화와 사용/중지 처리를 추가합니다.",
-      ]}
-    />
+      helperText="도메인별 어드민 계정과 업체 연결 범위를 관리하는 화면입니다."
+    >
+      <AdminsBoard
+        initialAdmins={adminAccounts}
+        managedCompanies={managedCompanies}
+        canManageAdmins={user.role === "MASTER"}
+      />
+    </AdminShell>
   );
 }

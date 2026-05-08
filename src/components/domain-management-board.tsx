@@ -69,48 +69,26 @@ const domainRows: DomainRow[] = [
       },
     ],
   },
-  {
-    id: "DOM-MPAY-001",
-    headquarters: "본사",
-    topDistributor: "비비",
-    distributor: "엠페이",
-    loginId: "mpay_admin",
-    companyName: "엠페이",
-    url: "mpay.laylow.me",
-    bankName: "신한은행",
-    accountNumber: "200-0002-0002",
-    accountHolder: "엠페이",
-    depositEnabled: false,
-    createdAt: "05-02 10:05:00",
-    users: [
-      {
-        id: "USR-MPAY-001",
-        branch: "본사",
-        topDistributor: "비비",
-        distributor: "엠페이",
-        wallet: "-",
-        totalDeposit: "200,000 원",
-        domain: "엠페이",
-        username: "mpay_user_01",
-        createdAt: "05-02 10:11:42",
-      },
-      {
-        id: "USR-MPAY-002",
-        branch: "본사",
-        topDistributor: "비비",
-        distributor: "엠페이",
-        wallet: "-",
-        totalDeposit: "300,000 원",
-        domain: "엠페이",
-        username: "mpay_user_02",
-        createdAt: "05-02 10:12:03",
-      },
-    ],
-  },
 ];
+
+const rowsPerPage = 10;
 
 export function DomainManagementBoard() {
   const [selectedDomain, setSelectedDomain] = useState<DomainRow | null>(null);
+  const [domainPage, setDomainPage] = useState(1);
+  const [userPage, setUserPage] = useState(1);
+
+  const domainPageCount = Math.max(1, Math.ceil(domainRows.length / rowsPerPage));
+  const visibleDomainRows = domainRows.slice(
+    (domainPage - 1) * rowsPerPage,
+    domainPage * rowsPerPage,
+  );
+  const selectedUsers = selectedDomain?.users ?? [];
+  const userPageCount = Math.max(1, Math.ceil(selectedUsers.length / rowsPerPage));
+  const visibleSelectedUsers = selectedUsers.slice(
+    (userPage - 1) * rowsPerPage,
+    userPage * rowsPerPage,
+  );
 
   return (
     <section className="rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
@@ -163,7 +141,7 @@ export function DomainManagementBoard() {
               </tr>
             </thead>
             <tbody>
-              {domainRows.map((row) => (
+              {visibleDomainRows.map((row) => (
                 <tr
                   key={row.id}
                   className="border-b border-white/8 text-white/76 last:border-b-0"
@@ -198,9 +176,12 @@ export function DomainManagementBoard() {
                     </span>
                   </td>
                   <td className="px-4 py-5 text-center">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedDomain(row)}
+                      <button
+                        type="button"
+                      onClick={() => {
+                        setSelectedDomain(row);
+                        setUserPage(1);
+                      }}
                       className="rounded-xl bg-blue-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-400"
                     >
                       유저 보기 {row.users.length}
@@ -229,6 +210,27 @@ export function DomainManagementBoard() {
               ))}
             </tbody>
           </table>
+
+          {domainRows.length > rowsPerPage ? (
+            <div className="flex items-center justify-center gap-2 border-t border-white/8 px-4 py-5">
+              {Array.from({ length: domainPageCount }, (_, index) => index + 1).map(
+                (pageNumber) => (
+                  <button
+                    key={pageNumber}
+                    type="button"
+                    onClick={() => setDomainPage(pageNumber)}
+                    className={`h-10 min-w-10 rounded-xl px-3 text-lg font-semibold ${
+                      domainPage === pageNumber
+                        ? "bg-white text-slate-950"
+                        : "bg-black text-white"
+                    }`}
+                  >
+                    {pageNumber}
+                  </button>
+                ),
+              )}
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-5 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-4 text-sm leading-6 text-white/52">
@@ -282,7 +284,7 @@ export function DomainManagementBoard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedDomain.users.map((user) => (
+                  {visibleSelectedUsers.map((user) => (
                     <tr
                       key={user.id}
                       className="border-b border-white/8 text-white/72 last:border-b-0"
@@ -308,6 +310,27 @@ export function DomainManagementBoard() {
                   ))}
                 </tbody>
               </table>
+
+              {selectedUsers.length > rowsPerPage ? (
+                <div className="flex items-center justify-center gap-2 border-x border-b border-white/8 px-4 py-5">
+                  {Array.from({ length: userPageCount }, (_, index) => index + 1).map(
+                    (pageNumber) => (
+                      <button
+                        key={pageNumber}
+                        type="button"
+                        onClick={() => setUserPage(pageNumber)}
+                        className={`h-10 min-w-10 rounded-xl px-3 text-lg font-semibold ${
+                          userPage === pageNumber
+                            ? "bg-white text-slate-950"
+                            : "bg-black text-white"
+                        }`}
+                      >
+                        {pageNumber}
+                      </button>
+                    ),
+                  )}
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
