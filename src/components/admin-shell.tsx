@@ -69,6 +69,16 @@ const sideMenuGroups = [
         href: "/dashboard/transactions/charges",
         key: "charges",
       },
+      {
+        title: "거래생성",
+        href: "/dashboard/transactions/create",
+        key: "transaction-create",
+      },
+      {
+        title: "Transaction",
+        href: "/dashboard/transactions/transaction",
+        key: "transaction",
+      },
     ],
   },
   {
@@ -88,6 +98,11 @@ const sideMenuGroups = [
         title: "수수료 기록",
         href: "/dashboard/fee-records",
         key: "fee-records",
+      },
+      {
+        title: "총판 환전내역",
+        href: "/dashboard/settlement/distributor-withdrawals",
+        key: "distributor-withdrawals",
       },
     ],
   },
