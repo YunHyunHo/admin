@@ -19,6 +19,8 @@ import {
 } from "@/lib/mock-state-cookie";
 import type { SessionUser } from "@/lib/auth";
 
+const DEFAULT_ROW_LIMIT = 300;
+
 type ChargeRequestRow = {
   id: string;
   user_uid: string;
@@ -135,6 +137,7 @@ async function getDbChargeRequests(user: SessionUser) {
       where 1 = 1
         ${scope.sql}
       order by cr.requested_at desc, cr.created_at desc
+      limit ${DEFAULT_ROW_LIMIT}
     `,
     scope.values,
   );

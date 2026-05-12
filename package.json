@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "db:init": "node scripts/db-init.mjs",
+    "db:optimize": "node scripts/db-optimize.mjs",
     "db:clean-smoke": "node scripts/db-clean-smoke.mjs",
     "ops:check": "node scripts/ops-check.mjs"
   },

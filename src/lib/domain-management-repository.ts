@@ -6,6 +6,8 @@ import type {
   DomainRow,
 } from "@/lib/domain-management-types";
 
+const DEFAULT_ROW_LIMIT = 200;
+
 type DomainDbRow = {
   id: string;
   distributor_id: string | null;
@@ -113,6 +115,7 @@ export async function getDomainManagementRows(
       where dom.status <> 'DELETED'
         ${scope.sql}
       order by dom.created_at desc
+      limit ${DEFAULT_ROW_LIMIT}
     `,
     scope.values,
   );
@@ -138,6 +141,7 @@ export async function getDomainBoardData(fallbackRows: DomainRow[], user?: Sessi
         where dist.status = 'ACTIVE'
           ${user ? getScopedDistributorCondition(user).sql : ""}
         order by name asc
+        limit ${DEFAULT_ROW_LIMIT}
       `,
       user ? getScopedDistributorCondition(user).values : [],
     ),

@@ -5,6 +5,8 @@ import { getAdminSettingsFromCookie } from "@/lib/settings-cookie";
 import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
 import type { SessionUser } from "@/lib/auth";
 
+const DEFAULT_ROW_LIMIT = 200;
+
 export type FeeRecordRow = {
   id: string;
   topAgent: string;
@@ -109,6 +111,7 @@ export async function getFeeRecordsForUser(
         and co.created_at < ($2::date + interval '1 day')
         ${scope.sql.replace("$1", "$3")}
       order by co.created_at desc
+      limit ${DEFAULT_ROW_LIMIT}
     `,
     [startDate, endDate, user.id],
   );

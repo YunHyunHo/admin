@@ -1,5 +1,9 @@
 import { hasDatabaseUrl, query } from "@/lib/db";
+import { getScopedDistributorCondition } from "@/lib/master-scope";
+import type { SessionUser } from "@/lib/auth";
 import type { TransactionCreateRow } from "@/lib/transaction-create-types";
+
+const DEFAULT_ROW_LIMIT = 200;
 
 type TransactionCreateDbRow = {
   id: string;
@@ -58,10 +62,14 @@ function toTransactionCreateRow(row: TransactionCreateDbRow): TransactionCreateR
 
 export async function getTransactionCreateRows(
   fallbackRows: TransactionCreateRow[],
+  user?: SessionUser,
 ) {
   if (!hasDatabaseUrl()) {
     return fallbackRows;
   }
+  const scope = user
+    ? getScopedDistributorCondition(user)
+    : { sql: "", values: [] as string[] };
 
   const result = await query<TransactionCreateDbRow>(
     `
@@ -77,8 +85,14 @@ export async function getTransactionCreateRows(
         cr.requested_at
       from charge_requests cr
       join domains dom on dom.id = cr.domain_id
+      left join distributors dist on dist.id = cr.distributor_id
+      left join admins dist_admin on dist_admin.id = dist.admin_id
+      where 1 = 1
+        ${scope.sql}
       order by cr.requested_at desc
+      limit ${DEFAULT_ROW_LIMIT}
     `,
+    scope.values,
   );
 
   return result.rows.map(toTransactionCreateRow);

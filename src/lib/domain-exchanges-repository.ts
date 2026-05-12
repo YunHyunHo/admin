@@ -3,6 +3,8 @@ import { getScopedDistributorCondition } from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
 import type { DomainExchangeRow } from "@/lib/domain-exchanges-types";
 
+const DEFAULT_ROW_LIMIT = 200;
+
 type ExchangeRequestDbRow = {
   id: string;
   distributor_name: string | null;
@@ -107,6 +109,7 @@ export async function getDomainExchangeRows(
       where 1 = 1
         ${scope.sql}
       order by er.requested_at desc
+      limit ${DEFAULT_ROW_LIMIT}
     `,
     scope.values,
   );

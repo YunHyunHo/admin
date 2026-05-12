@@ -3,6 +3,8 @@ import { getScopedDistributorCondition } from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
 import type { LedgerRow, TransactionStatus } from "@/lib/transaction-ledger-types";
 
+const DEFAULT_ROW_LIMIT = 200;
+
 type TransactionLedgerDbRow = {
   id: string;
   request_type: "CHARGE" | "EXCHANGE";
@@ -134,6 +136,7 @@ export async function getTransactionLedgerRows(
           ${scopedSql}
       ) ledger
       order by requested_at desc
+      limit ${DEFAULT_ROW_LIMIT}
     `,
     scope.values,
   );

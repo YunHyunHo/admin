@@ -1,4 +1,8 @@
 import { hasDatabaseUrl, query } from "@/lib/db";
+import { getScopedDistributorCondition } from "@/lib/master-scope";
+import type { SessionUser } from "@/lib/auth";
+
+const DEFAULT_ROW_LIMIT = 200;
 
 export type DistributorWithdrawalRow = {
   id: string;
@@ -79,10 +83,14 @@ function toWithdrawalRow(row: WithdrawalDbRow): DistributorWithdrawalRow {
 
 export async function getDistributorWithdrawalRows(
   fallbackRows: DistributorWithdrawalRow[],
+  user?: SessionUser,
 ) {
   if (!hasDatabaseUrl()) {
     return fallbackRows;
   }
+  const scope = user
+    ? getScopedDistributorCondition(user, "d", "dist_admin")
+    : { sql: "", values: [] as string[] };
 
   const withdrawals = await query<WithdrawalDbRow>(
     `
@@ -100,9 +108,14 @@ export async function getDistributorWithdrawalRows(
         dw.status::text as status
       from distributor_withdrawals dw
       join distributors d on d.id = dw.distributor_id
-      left join admins master on master.role = 'MASTER' and master.status = 'ACTIVE'
+      left join admins dist_admin on dist_admin.id = d.admin_id
+      left join admins master on master.id = dist_admin.created_by
+      where 1 = 1
+        ${scope.sql}
       order by dw.requested_at desc
+      limit ${DEFAULT_ROW_LIMIT}
     `,
+    scope.values,
   );
 
   if (withdrawals.rows.length) {
@@ -117,10 +130,14 @@ export async function getDistributorWithdrawalRows(
         d.name,
         d.current_balance::text
       from distributors d
-      left join admins master on master.role = 'MASTER' and master.status = 'ACTIVE'
+      left join admins dist_admin on dist_admin.id = d.admin_id
+      left join admins master on master.id = dist_admin.created_by
       where d.status = 'ACTIVE'
+        ${scope.sql}
       order by d.created_at desc
+      limit ${DEFAULT_ROW_LIMIT}
     `,
+    scope.values,
   );
 
   return balances.rows.map((row) => ({

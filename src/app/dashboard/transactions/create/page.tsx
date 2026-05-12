@@ -15,7 +15,7 @@ export default async function TransactionCreatePage() {
     redirect("/");
   }
 
-  const transactionRows = await getTransactionCreateRows(fallbackTransactions);
+  const transactionRows = await getTransactionCreateRows(fallbackTransactions, user);
 
   return (
     <AdminShell

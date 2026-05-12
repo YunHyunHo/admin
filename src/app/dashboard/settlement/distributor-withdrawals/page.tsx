@@ -17,6 +17,7 @@ export default async function DistributorWithdrawalsPage() {
 
   const withdrawalRows = await getDistributorWithdrawalRows(
     fallbackDistributorWithdrawals,
+    user,
   );
 
   return (
