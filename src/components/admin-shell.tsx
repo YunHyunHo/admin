@@ -69,16 +69,6 @@ const sideMenuGroups = [
         href: "/dashboard/transactions/charges",
         key: "charges",
       },
-      {
-        title: "거래생성",
-        href: "/dashboard/transactions/create",
-        key: "transaction-create",
-      },
-      {
-        title: "Transaction",
-        href: "/dashboard/transactions/transaction",
-        key: "transaction",
-      },
     ],
   },
   {
@@ -98,11 +88,6 @@ const sideMenuGroups = [
         title: "수수료 기록",
         href: "/dashboard/fee-records",
         key: "fee-records",
-      },
-      {
-        title: "총판 환전내역",
-        href: "/dashboard/settlement/distributor-withdrawals",
-        key: "distributor-withdrawals",
       },
     ],
   },
@@ -239,7 +224,7 @@ export function AdminShell({
 
           <section className="flex min-h-screen min-w-0 flex-1 flex-col">
             <header className="border-b border-white/8 bg-black/18 backdrop-blur-xl">
-              <div className="flex min-h-[88px] items-center justify-between gap-3 px-4 sm:px-6">
+              <div className="flex min-h-[72px] items-center justify-between gap-3 px-4 sm:px-6">
                 <div className="flex shrink-0 items-center gap-2">
                   <button
                     type="button"
@@ -248,20 +233,12 @@ export function AdminShell({
                   >
                     ☰
                   </button>
-                  <div className="hidden items-center gap-2 xl:flex">
-                    <div className="grid h-11 w-11 place-items-center rounded-2xl border border-white/8 bg-white/[0.03] text-white/65">
-                      ☰
-                    </div>
-                    <div className="grid h-11 w-11 place-items-center rounded-2xl border border-white/8 bg-white/[0.03] text-white/65">
-                      ‹›
-                    </div>
-                    <div className="grid h-11 w-11 place-items-center rounded-2xl border border-white/8 bg-white/[0.03] text-white/65">
-                      ▦
-                    </div>
-                  </div>
                 </div>
-                <div className="hidden rounded-full border border-white/8 bg-white/[0.03] px-4 py-2 text-sm text-white/46 md:block">
-                  Vendor Admin Workspace
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-white/88">
+                    {user.companyName}
+                  </p>
+                  <p className="mt-1 text-xs text-white/42">{user.username}</p>
                 </div>
                 <ThemeToggle />
               </div>
@@ -273,15 +250,17 @@ export function AdminShell({
                   <span className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-1 text-xs uppercase tracking-[0.2em] text-white/42">
                     {badge}
                   </span>
-                  <span className="font-medium text-white/88">{user.companyName}</span>
-                  <span className="text-white/20">/</span>
-                  <span>{user.apiLabel}</span>
+                  <span className="font-medium text-white/88">
+                    {user.companyName}
+                  </span>
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <span className="hidden text-white/48 md:block">
-                    {helperText}
-                  </span>
+                  {helperText ? (
+                    <span className="hidden text-white/48 md:block">
+                      {helperText}
+                    </span>
+                  ) : null}
                   <form action={logoutAction}>
                     <button
                       type="submit"
