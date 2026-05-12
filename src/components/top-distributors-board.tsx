@@ -56,9 +56,6 @@ export function TopDistributorsBoard({
     [adminAccounts],
   );
   const [page, setPage] = useState(1);
-  const [visiblePasswordId, setVisiblePasswordId] = useState<string | null>(
-    null,
-  );
 
   const pageCount = Math.max(1, Math.ceil(topDistributors.length / rowsPerPage));
   const visibleTopDistributors = topDistributors.slice(
@@ -128,19 +125,7 @@ export function TopDistributorsBoard({
                     <span>{row.loginId}</span>
                   </td>
                   <td className="px-4 py-4 text-center">
-                    {visiblePasswordId === row.id ? (
-                      <span className="inline-block rounded-xl border border-teal-300/25 bg-teal-300/10 px-3 py-2 text-xs font-semibold text-teal-100">
-                        마스터 계정은 재설정 불가
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setVisiblePasswordId(row.id)}
-                        className="rounded-xl bg-teal-400/80 px-3 py-2 text-xs font-semibold text-slate-950"
-                      >
-                        비밀번호 확인
-                      </button>
-                    )}
+                    <span className="text-white/38">-</span>
                   </td>
                   <td className="px-4 py-4 text-center">{row.branch}</td>
                   <td className="px-4 py-4 text-center">
