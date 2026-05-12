@@ -56,116 +56,140 @@ function isAdminRole(value: string | undefined): value is AdminRole {
 }
 
 export async function GET() {
-  const user = await getSessionUser();
+  try {
+    const user = await getSessionUser();
 
-  if (!user) {
-    return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
-  }
-
-  return NextResponse.json({
-    accounts: await getPublicAdminAccounts(user),
-    managedCompanies: await getManagedCompanyOptions(),
-  });
-}
-
-export async function POST(request: Request) {
-  const user = await getSessionUser();
-
-  if (!user || !isWritableRole(user.role)) {
-    return NextResponse.json(
-      { message: "하위 계정을 생성할 권한이 없습니다." },
-      { status: 403 },
-    );
-  }
-
-  const payload = (await request.json()) as CreateAdminPayload;
-  const loginId = payload.loginId?.trim() ?? "";
-  const password = payload.password ?? "";
-  const nickname = payload.nickname?.trim() ?? "";
-  const role = payload.role;
-  const managedCompanyOptions = await getManagedCompanyOptions();
-  const managedCompanies =
-    payload.managedCompanies?.filter((company) =>
-      managedCompanyOptions.includes(company),
-    ) ?? [];
-
-  if (!isAdminRole(role)) {
-    return NextResponse.json(
-      { message: "생성할 계정 권한을 선택해주세요." },
-      { status: 400 },
-    );
-  }
-
-  if (!/^[A-Za-z][A-Za-z0-9_]{3,}$/.test(loginId)) {
-    return NextResponse.json(
-      { message: "아이디는 영문 시작, 4글자 이상이어야 합니다." },
-      { status: 400 },
-    );
-  }
-
-  if (nickname.length < 2) {
-    return NextResponse.json(
-      { message: "닉네임은 2글자 이상 입력해주세요." },
-      { status: 400 },
-    );
-  }
-
-  if (!/^(?=.*[A-Za-z])(?=.*\d).{6,}$/.test(password)) {
-    return NextResponse.json(
-      { message: "비밀번호는 6글자 이상, 영문과 숫자를 포함해야 합니다." },
-      { status: 400 },
-    );
-  }
-
-  const issuedAccounts = await getIssuedAdminAccountsFromCookie(user);
-  const allAccounts = await getAllAdminAccounts();
-
-  if (allAccounts.some((account) => account.loginId === loginId)) {
-    return NextResponse.json(
-      { message: "이미 사용 중인 아이디입니다." },
-      { status: 409 },
-    );
-  }
-
-  if (hasDatabaseUrl()) {
-    await createPersistedAdminAccount({
-      loginId,
-      password,
-      nickname,
-      role,
-      managedCompanies,
-      createdBy: user.loginId,
-      createdById: user.id,
-    });
+    if (!user) {
+      return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
+    }
 
     return NextResponse.json({
       accounts: await getPublicAdminAccounts(user),
+      managedCompanies: await getManagedCompanyOptions(),
+    });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        message:
+          error instanceof Error
+            ? error.message
+            : "어드민 목록을 불러오지 못했습니다.",
+      },
+      { status: 500 },
+    );
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const user = await getSessionUser();
+
+    if (!user || !isWritableRole(user.role)) {
+      return NextResponse.json(
+        { message: "하위 계정을 생성할 권한이 없습니다." },
+        { status: 403 },
+      );
+    }
+
+    const payload = (await request.json()) as CreateAdminPayload;
+    const loginId = payload.loginId?.trim() ?? "";
+    const password = payload.password ?? "";
+    const nickname = payload.nickname?.trim() ?? "";
+    const role = payload.role;
+    const managedCompanyOptions = await getManagedCompanyOptions();
+    const managedCompanies =
+      payload.managedCompanies?.filter((company) =>
+        managedCompanyOptions.includes(company),
+      ) ?? [];
+
+    if (!isAdminRole(role)) {
+      return NextResponse.json(
+        { message: "생성할 계정 권한을 선택해주세요." },
+        { status: 400 },
+      );
+    }
+
+    if (!/^[A-Za-z][A-Za-z0-9_]{3,}$/.test(loginId)) {
+      return NextResponse.json(
+        { message: "아이디는 영문 시작, 4글자 이상이어야 합니다." },
+        { status: 400 },
+      );
+    }
+
+    if (nickname.length < 2) {
+      return NextResponse.json(
+        { message: "닉네임은 2글자 이상 입력해주세요." },
+        { status: 400 },
+      );
+    }
+
+    if (!/^(?=.*[A-Za-z])(?=.*\d).{6,}$/.test(password)) {
+      return NextResponse.json(
+        { message: "비밀번호는 6글자 이상, 영문과 숫자를 포함해야 합니다." },
+        { status: 400 },
+      );
+    }
+
+    const issuedAccounts = await getIssuedAdminAccountsFromCookie(user);
+    const allAccounts = await getAllAdminAccounts();
+
+    if (allAccounts.some((account) => account.loginId === loginId)) {
+      return NextResponse.json(
+        { message: "이미 사용 중인 아이디입니다." },
+        { status: 409 },
+      );
+    }
+
+    if (hasDatabaseUrl()) {
+      await createPersistedAdminAccount({
+        loginId,
+        password,
+        nickname,
+        role,
+        managedCompanies,
+        createdBy: user.loginId,
+        createdById: user.id,
+      });
+
+      return NextResponse.json({
+        accounts: await getPublicAdminAccounts(user),
+        managedCompanies: managedCompanyOptions,
+        message: `${loginId} 계정이 생성되었습니다.`,
+      });
+    }
+
+    const nextAccounts = [
+      createIssuedAdminAccount({
+        loginId,
+        password,
+        nickname,
+        role,
+        managedCompanies,
+        createdBy: user.loginId,
+        createdById: user.id,
+      }),
+      ...issuedAccounts,
+    ];
+    const response = NextResponse.json({
+      accounts: toPublicList([allAccounts[0], ...nextAccounts]),
       managedCompanies: managedCompanyOptions,
       message: `${loginId} 계정이 생성되었습니다.`,
     });
+
+    setIssuedAdminAccountsCookie(response, nextAccounts);
+
+    return response;
+  } catch (error) {
+    return NextResponse.json(
+      {
+        message:
+          error instanceof Error
+            ? error.message
+            : "하부계정 생성 중 오류가 발생했습니다.",
+      },
+      { status: 500 },
+    );
   }
-
-  const nextAccounts = [
-    createIssuedAdminAccount({
-      loginId,
-      password,
-      nickname,
-      role,
-      managedCompanies,
-      createdBy: user.loginId,
-      createdById: user.id,
-    }),
-    ...issuedAccounts,
-  ];
-  const response = NextResponse.json({
-    accounts: toPublicList([allAccounts[0], ...nextAccounts]),
-    managedCompanies: managedCompanyOptions,
-    message: `${loginId} 계정이 생성되었습니다.`,
-  });
-
-  setIssuedAdminAccountsCookie(response, nextAccounts);
-
-  return response;
 }
 
 export async function PATCH(request: Request) {

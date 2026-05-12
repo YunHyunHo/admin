@@ -88,7 +88,10 @@ export function AdminsBoard({
       body: JSON.stringify(body),
     });
 
-    const data = (await response.json()) as
+    const responseText = await response.text();
+    const data = (responseText
+      ? safeParseJson(responseText)
+      : { message: "서버 응답이 비어 있습니다." }) as
       | {
           accounts: PublicAdminAccount[];
           managedCompanies: string[];
@@ -106,6 +109,14 @@ export function AdminsBoard({
 
     applyAccountResponse(data);
     return data;
+  }
+
+  function safeParseJson(text: string) {
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      return { message: text || "서버 응답을 읽지 못했습니다." };
+    }
   }
 
   async function handleCreateAdmin() {
