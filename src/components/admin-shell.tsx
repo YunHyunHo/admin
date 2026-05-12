@@ -125,7 +125,6 @@ const masterOnlyMenuKeys = new Set([
   "org-top-distributors",
   "org-distributors",
   "fee-rate-settings",
-  "accounts",
   "domains",
   "admins",
 ]);

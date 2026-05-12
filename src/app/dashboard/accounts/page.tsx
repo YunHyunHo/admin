@@ -14,10 +14,6 @@ export default async function AccountsPage() {
     redirect("/");
   }
 
-  if (!canManageMasterResources(user)) {
-    redirect("/dashboard");
-  }
-
   const accountData = await getBankAccountBoardData(user);
   const isDatabaseBacked = hasDatabaseUrl();
 
