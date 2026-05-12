@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
 import { hasDatabaseUrl, query } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
@@ -34,6 +35,7 @@ type DbAdminRow = {
   id: string;
   login_id: string;
   password_hash: string;
+  password_ciphertext: string | null;
   name: string;
   role: AdminRole;
   status: AdminStatus | "DELETED";
@@ -43,6 +45,55 @@ type DbAdminRow = {
   updated_at: Date | string;
   managed_companies: string[] | null;
 };
+
+const hiddenPasswordMessage = "저장된 비밀번호를 확인할 수 없습니다.";
+
+function getPasswordCipherKey() {
+  const secret = process.env.SESSION_SECRET ?? process.env.MASTER_PASSWORD ?? "local-dev-secret";
+
+  return createHash("sha256").update(secret).digest();
+}
+
+function encryptVisiblePassword(password: string) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", getPasswordCipherKey(), iv);
+  const encrypted = Buffer.concat([
+    cipher.update(password, "utf8"),
+    cipher.final(),
+  ]);
+  const tag = cipher.getAuthTag();
+
+  return `v1:${iv.toString("base64url")}:${tag.toString("base64url")}:${encrypted.toString("base64url")}`;
+}
+
+function decryptVisiblePassword(value: string | null) {
+  if (!value?.startsWith("v1:")) {
+    return hiddenPasswordMessage;
+  }
+
+  try {
+    const [, ivText, tagText, encryptedText] = value.split(":");
+
+    if (!ivText || !tagText || !encryptedText) {
+      return hiddenPasswordMessage;
+    }
+
+    const decipher = createDecipheriv(
+      "aes-256-gcm",
+      getPasswordCipherKey(),
+      Buffer.from(ivText, "base64url"),
+    );
+
+    decipher.setAuthTag(Buffer.from(tagText, "base64url"));
+
+    return Buffer.concat([
+      decipher.update(Buffer.from(encryptedText, "base64url")),
+      decipher.final(),
+    ]).toString("utf8");
+  } catch {
+    return hiddenPasswordMessage;
+  }
+}
 
 export function normalizeManagedCompanies(
   companies: string[],
@@ -150,7 +201,7 @@ function toAdminAccountRecord(
   return {
     id: row.id,
     loginId: row.login_id,
-    password: "저장된 비밀번호는 보안상 확인할 수 없습니다.",
+    password: decryptVisiblePassword(row.password_ciphertext),
     nickname: row.name,
     role: row.role,
     status: row.status,
@@ -191,6 +242,7 @@ async function getDbAdminAccounts(user?: Pick<SessionUser, "id" | "role"> | null
         a.id::text,
         a.login_id,
         a.password_hash,
+        a.password_ciphertext,
         a.name,
         a.role::text as role,
         a.status::text as status,
@@ -364,22 +416,33 @@ export async function createPersistedAdminAccount(input: {
     companyOptions,
   );
   const passwordHash = await hashPassword(input.password);
+  const encryptedPassword = encryptVisiblePassword(input.password);
   const result = await query<{ id: string }>(
     `
-      insert into admins (login_id, password_hash, name, role, status, created_by)
+      insert into admins (
+        login_id,
+        password_hash,
+        password_ciphertext,
+        name,
+        role,
+        status,
+        created_by
+      )
       values (
         $1,
         $2,
         $3,
         $4,
+        $5,
         'ACTIVE',
-        $5::uuid
+        $6::uuid
       )
       returning id::text
     `,
     [
       input.loginId,
       passwordHash,
+      encryptedPassword,
       input.nickname,
       input.role,
       input.role === "MASTER" ? null : input.createdById ?? null,
@@ -532,44 +595,6 @@ export async function updatePersistedAdminAccount(input: {
   }
 
   return targetAccount;
-}
-
-export async function resetPersistedAdminPassword(input: {
-  id: string;
-  user: Pick<SessionUser, "id" | "role">;
-  nextPassword?: string;
-}) {
-  if (!hasDatabaseUrl()) {
-    return null;
-  }
-
-  const nextPassword = input.nextPassword ?? "0000";
-  const passwordHash = await hashPassword(nextPassword);
-  const result = await query<{ login_id: string }>(
-    `
-      update admins target
-      set password_hash = $2, updated_at = now()
-      from admins owner
-      where target.id = $1::uuid
-        and target.role <> 'MASTER'
-        and target.status <> 'DELETED'
-        and owner.id = target.created_by
-        and owner.id = $3::uuid
-        and $4::text = 'MASTER'
-      returning target.login_id
-    `,
-    [input.id, passwordHash, input.user.id, input.user.role],
-  );
-  const loginId = result.rows[0]?.login_id;
-
-  if (!loginId) {
-    return null;
-  }
-
-  return {
-    loginId,
-    password: nextPassword,
-  };
 }
 
 export async function recordAdminLogin(loginId: string) {

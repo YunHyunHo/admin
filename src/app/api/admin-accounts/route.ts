@@ -9,7 +9,6 @@ import {
   getNowStamp,
   getPublicAdminAccounts,
   normalizeManagedCompanies,
-  resetPersistedAdminPassword,
   setIssuedAdminAccountsCookie,
   updatePersistedAdminAccount,
   type AdminAccountRecord,
@@ -30,7 +29,7 @@ type CreateAdminPayload = {
 
 type PatchAdminPayload = {
   id?: string;
-  action?: "toggle-status" | "delete" | "set-companies" | "reset-password";
+  action?: "toggle-status" | "delete" | "set-companies";
   managedCompanies?: string[];
 };
 
@@ -191,28 +190,6 @@ export async function PATCH(request: Request) {
   const issuedAccounts = await getIssuedAdminAccountsFromCookie(user);
   const targetAccount = issuedAccounts.find((account) => account.id === payload.id);
 
-  if (hasDatabaseUrl() && payload.action === "reset-password") {
-    const resetResult = await resetPersistedAdminPassword({
-      id: payload.id,
-      user,
-      nextPassword: "0000",
-    });
-
-    if (!resetResult) {
-      return NextResponse.json(
-        { message: "비밀번호를 재설정할 하부계정을 찾을 수 없습니다." },
-        { status: 404 },
-      );
-    }
-
-    return NextResponse.json({
-      accounts: await getPublicAdminAccounts(user),
-      managedCompanies: await getManagedCompanyOptions(),
-      password: resetResult.password,
-      message: `${resetResult.loginId} 계정 비밀번호를 0000으로 재설정했습니다.`,
-    });
-  }
-
   if (!targetAccount) {
     return NextResponse.json(
       { message: "수정할 하부계정을 찾을 수 없습니다." },
@@ -223,13 +200,6 @@ export async function PATCH(request: Request) {
   if (targetAccount.role === "MASTER") {
     return NextResponse.json(
       { message: "마스터 계정은 수정할 수 없습니다." },
-      { status: 400 },
-    );
-  }
-
-  if (payload.action === "reset-password") {
-    return NextResponse.json(
-      { message: "비밀번호 재설정은 DB 연결 환경에서만 가능합니다." },
       { status: 400 },
     );
   }

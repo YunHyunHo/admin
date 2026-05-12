@@ -35,6 +35,7 @@ create table admins (
   id uuid primary key default gen_random_uuid(),
   login_id text not null unique,
   password_hash text not null,
+  password_ciphertext text,
   name text not null,
   role admin_role not null,
   status admin_status not null default 'ACTIVE',
