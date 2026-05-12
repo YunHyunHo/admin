@@ -1,5 +1,6 @@
 import { getFeeRateByCompanyFromSettings } from "@/lib/charge-utils";
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
+import { getScopedDistributorCondition } from "@/lib/master-scope";
 import {
   getAdminSettingsFromCookie,
 } from "@/lib/settings-cookie";
@@ -86,6 +87,7 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
       ],
     };
   }
+  const scope = getScopedDistributorCondition(user);
 
   const result = await query<FeeRateDbRow>(
     `
@@ -93,7 +95,7 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
         coalesce(fr.id::text, dist.id::text) as id,
         dist.id::text as distributor_id,
         dist.name as distributor_name,
-        master.name as master_name,
+        owner_master.name as master_name,
         null::text as domain_name,
         c.company_name,
         coalesce(fr.company_rate, 0.4)::text as company_rate,
@@ -102,7 +104,8 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
         coalesce(fr.updated_at, dist.updated_at) as updated_at
       from distributors dist
       join companies c on c.id = dist.company_id
-      left join admins master on master.role = 'MASTER' and master.status = 'ACTIVE'
+      left join admins dist_admin on dist_admin.id = dist.admin_id
+      left join admins owner_master on owner_master.id = dist_admin.created_by
       left join lateral (
         select *
         from fee_rates fee
@@ -124,8 +127,10 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
         limit 1
       ) fr on true
       where dist.status = 'ACTIVE'
+        ${scope.sql}
       order by dist.created_at desc
     `,
+    scope.values,
   );
   const rows = result.rows.map(toSettingsRow);
   const fallbackRows =
@@ -136,7 +141,7 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
             id: "FEE-DEFAULT",
             domainName: "하부계정 없음",
             totalRate: 0.4,
-            topDistributor: "마스터 관리자",
+            topDistributor: user.nickname,
             topDistributorRate: 0.4,
             distributor: "하부계정 없음",
             distributorRate: 0,
@@ -172,17 +177,24 @@ export async function saveFeeRateSettings(input: {
           distributor_id: string | null;
         }>(
           `
-            select id::text, company_id::text, domain_id::text, distributor_id::text
-            from fee_rates
+            select
+              fee.id::text,
+              fee.company_id::text,
+              fee.domain_id::text,
+              fee.distributor_id::text
+            from fee_rates fee
+            join distributors dist on dist.id = fee.distributor_id
+            left join admins dist_admin on dist_admin.id = dist.admin_id
             where
-              distributor_id = $1::uuid
-              and starts_at <= now()
-              and (ends_at is null or ends_at > now())
-            order by starts_at desc, created_at desc
+              fee.distributor_id = $1::uuid
+              and ${input.user.role === "MASTER" ? "dist_admin.created_by = $2::uuid" : "dist.admin_id = $2::uuid"}
+              and fee.starts_at <= now()
+              and (fee.ends_at is null or fee.ends_at > now())
+            order by fee.starts_at desc, fee.created_at desc
             limit 1
             for update
           `,
-          [input.distributorId],
+          [input.distributorId, input.user.id],
         )
       : await client.query<{
           id: string;
@@ -193,11 +205,12 @@ export async function saveFeeRateSettings(input: {
           `
             select id::text, company_id::text, domain_id::text, distributor_id::text
             from fee_rates
-            where starts_at <= now() and (ends_at is null or ends_at > now())
+            where created_by = $1::uuid and starts_at <= now() and (ends_at is null or ends_at > now())
             order by starts_at desc, created_at desc
             limit 1
             for update
           `,
+          [input.user.id],
         );
     const current = currentResult.rows[0];
     let companyId = current?.company_id ?? null;
@@ -209,9 +222,11 @@ export async function saveFeeRateSettings(input: {
         `
           select company_id::text
           from distributors
-          where id = $1::uuid
+          left join admins dist_admin on dist_admin.id = distributors.admin_id
+          where distributors.id = $1::uuid
+            and ${input.user.role === "MASTER" ? "dist_admin.created_by = $2::uuid" : "distributors.admin_id = $2::uuid"}
         `,
-        [distributorId],
+        [distributorId, input.user.id],
       );
 
       companyId = distributorResult.rows[0]?.company_id ?? null;

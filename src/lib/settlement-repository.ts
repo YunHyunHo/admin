@@ -5,6 +5,7 @@ import {
 import { getAdminSettingsFromCookie } from "@/lib/settings-cookie";
 import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
 import { hasDatabaseUrl, query } from "@/lib/db";
+import { getScopedDistributorCondition } from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
 
 type SettlementAggregateRow = {
@@ -19,7 +20,12 @@ function toMmDd(isoDate: string) {
   return isoDate.slice(5);
 }
 
-async function getCommissionAggregates(startDate: string, endDate: string) {
+async function getCommissionAggregates(
+  user: SessionUser,
+  startDate: string,
+  endDate: string,
+) {
+  const scope = getScopedDistributorCondition(user);
   const result = await query<SettlementAggregateRow>(
     `
       select
@@ -37,10 +43,13 @@ async function getCommissionAggregates(startDate: string, endDate: string) {
           co.saved_commission as fee_total
         from commission_records co
         join domains d on d.id = co.domain_id
+        left join distributors dist on dist.id = co.distributor_id
+        left join admins dist_admin on dist_admin.id = dist.admin_id
         where
           co.status in ('APPROVED', 'COMPLETED')
           and co.created_at >= $1::date
           and co.created_at < ($2::date + interval '1 day')
+          ${scope.sql.replace("$1", "$3")}
 
         union all
 
@@ -52,16 +61,19 @@ async function getCommissionAggregates(startDate: string, endDate: string) {
           0::numeric as fee_total
         from exchange_requests er
         join domains d on d.id = er.domain_id
+        left join distributors dist on dist.id = er.distributor_id
+        left join admins dist_admin on dist_admin.id = dist.admin_id
         where
           er.status in ('APPROVED', 'COMPLETED')
           and er.processed_at is not null
           and er.processed_at >= $1::date
           and er.processed_at < ($2::date + interval '1 day')
+          ${scope.sql.replace("$1", "$3")}
       ) daily
       group by date, domain_name
       order by date asc
     `,
-    [startDate, endDate],
+    [startDate, endDate, user.id],
   );
 
   return result.rows;
@@ -79,7 +91,7 @@ export async function getSettlementProfitForUser(
     return getSettlementProfit(user.companyName, startDate, endDate, state, settings);
   }
 
-  const aggregateRows = await getCommissionAggregates(startDate, endDate);
+  const aggregateRows = await getCommissionAggregates(user, startDate, endDate);
   const domainName = aggregateRows[0]?.domain_name ?? "전체";
   const rows = aggregateRows.map((row) => {
     const chargeTotal = Number(row.charge_total);
@@ -121,7 +133,7 @@ export async function getDomainSettlementForUser(
     return getDomainSettlement(user.companyName, startDate, endDate, state, settings);
   }
 
-  const aggregateRows = await getCommissionAggregates(startDate, endDate);
+  const aggregateRows = await getCommissionAggregates(user, startDate, endDate);
   const domainName = aggregateRows[0]?.domain_name ?? "전체";
   const rows = aggregateRows.map((row) => {
     const charge = Number(row.charge_total);

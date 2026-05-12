@@ -20,7 +20,7 @@ export default async function DomainsPage() {
     redirect("/dashboard");
   }
 
-  const domainData = await getDomainBoardData(fallbackDomainRows);
+  const domainData = await getDomainBoardData(fallbackDomainRows, user);
 
   return (
     <AdminShell

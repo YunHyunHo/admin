@@ -15,7 +15,7 @@ export default async function TransactionPage() {
     redirect("/");
   }
 
-  const ledgerRows = await getTransactionLedgerRows(fallbackLedgerRows);
+  const ledgerRows = await getTransactionLedgerRows(fallbackLedgerRows, user);
 
   return (
     <AdminShell

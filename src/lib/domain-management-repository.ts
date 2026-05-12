@@ -1,4 +1,6 @@
 import { hasDatabaseUrl, query } from "@/lib/db";
+import { getScopedDistributorCondition } from "@/lib/master-scope";
+import type { SessionUser } from "@/lib/auth";
 import type {
   DomainDistributorOption,
   DomainRow,
@@ -66,10 +68,16 @@ function toDomainRow(row: DomainDbRow): DomainRow {
   };
 }
 
-export async function getDomainManagementRows(fallbackRows: DomainRow[]) {
+export async function getDomainManagementRows(
+  fallbackRows: DomainRow[],
+  user?: SessionUser,
+) {
   if (!hasDatabaseUrl()) {
     return fallbackRows;
   }
+  const scope = user
+    ? getScopedDistributorCondition(user)
+    : { sql: "", values: [] as string[] };
 
   const result = await query<DomainDbRow>(
     `
@@ -80,7 +88,7 @@ export async function getDomainManagementRows(fallbackRows: DomainRow[]) {
         c.company_name,
         dist.name as distributor_name,
         dist_admin.login_id as distributor_login_id,
-        master.name as master_name,
+        owner_master.name as master_name,
         ba.bank_name,
         ba.account_number,
         ba.account_holder,
@@ -90,7 +98,7 @@ export async function getDomainManagementRows(fallbackRows: DomainRow[]) {
       join companies c on c.id = dom.company_id
       left join distributors dist on dist.id = dom.distributor_id
       left join admins dist_admin on dist_admin.id = dist.admin_id
-      left join admins master on master.role = 'MASTER' and master.status = 'ACTIVE'
+      left join admins owner_master on owner_master.id = dist_admin.created_by
       left join lateral (
         select bank_name, account_number, account_holder
         from bank_accounts ba
@@ -103,14 +111,16 @@ export async function getDomainManagementRows(fallbackRows: DomainRow[]) {
         limit 1
       ) ba on true
       where dom.status <> 'DELETED'
+        ${scope.sql}
       order by dom.created_at desc
     `,
+    scope.values,
   );
 
   return result.rows.map(toDomainRow);
 }
 
-export async function getDomainBoardData(fallbackRows: DomainRow[]) {
+export async function getDomainBoardData(fallbackRows: DomainRow[], user?: SessionUser) {
   if (!hasDatabaseUrl()) {
     return {
       rows: fallbackRows,
@@ -119,14 +129,17 @@ export async function getDomainBoardData(fallbackRows: DomainRow[]) {
   }
 
   const [rows, distributorOptions] = await Promise.all([
-    getDomainManagementRows(fallbackRows),
+    getDomainManagementRows(fallbackRows, user),
     query<DistributorOptionDbRow>(
       `
-        select id::text, name
-        from distributors
-        where status = 'ACTIVE'
+        select dist.id::text, dist.name
+        from distributors dist
+        left join admins dist_admin on dist_admin.id = dist.admin_id
+        where dist.status = 'ACTIVE'
+          ${user ? getScopedDistributorCondition(user).sql : ""}
         order by name asc
       `,
+      user ? getScopedDistributorCondition(user).values : [],
     ),
   ]);
 

@@ -368,6 +368,7 @@ export function AdminsBoard({
                 className="h-14 w-full rounded border border-slate-300 bg-white px-3 text-sm text-slate-500 outline-none"
               >
                 <option value="">레벨 선택</option>
+                <option value="MASTER">MASTER</option>
                 <option value="ADMIN">ADMIN</option>
                 <option value="VIEWER">VIEWER</option>
                 <option value="DOMAIN_ADMIN">DOMAIN_ADMIN</option>

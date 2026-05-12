@@ -44,7 +44,7 @@ export async function GET() {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
 
-  return NextResponse.json(await getDomainBoardData([]));
+  return NextResponse.json(await getDomainBoardData([], user));
 }
 
 export async function POST(request: Request) {
@@ -91,7 +91,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({
-      ...(await getDomainBoardData([])),
+      ...(await getDomainBoardData([], user)),
       message: "도메인이 생성되었습니다.",
     });
   }
@@ -172,7 +172,7 @@ export async function PATCH(request: Request) {
     }
 
     return NextResponse.json({
-      ...(await getDomainBoardData([])),
+      ...(await getDomainBoardData([], user)),
       message:
         payload.action === "delete"
           ? "도메인이 삭제되었습니다."

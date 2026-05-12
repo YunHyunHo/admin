@@ -63,7 +63,7 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    accounts: await getPublicAdminAccounts(),
+    accounts: await getPublicAdminAccounts(user),
     managedCompanies: await getManagedCompanyOptions(),
   });
 }
@@ -89,9 +89,9 @@ export async function POST(request: Request) {
       managedCompanyOptions.includes(company),
     ) ?? [];
 
-  if (!isAdminRole(role) || role === "MASTER") {
+  if (!isAdminRole(role)) {
     return NextResponse.json(
-      { message: "하위 계정 권한을 선택해주세요." },
+      { message: "생성할 계정 권한을 선택해주세요." },
       { status: 400 },
     );
   }
@@ -117,7 +117,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const issuedAccounts = await getIssuedAdminAccountsFromCookie();
+  const issuedAccounts = await getIssuedAdminAccountsFromCookie(user);
   const allAccounts = await getAllAdminAccounts();
 
   if (allAccounts.some((account) => account.loginId === loginId)) {
@@ -135,10 +135,11 @@ export async function POST(request: Request) {
       role,
       managedCompanies,
       createdBy: user.loginId,
+      createdById: user.id,
     });
 
     return NextResponse.json({
-      accounts: await getPublicAdminAccounts(),
+      accounts: await getPublicAdminAccounts(user),
       managedCompanies: managedCompanyOptions,
       message: `${loginId} 계정이 생성되었습니다.`,
     });
@@ -152,6 +153,7 @@ export async function POST(request: Request) {
       role,
       managedCompanies,
       createdBy: user.loginId,
+      createdById: user.id,
     }),
     ...issuedAccounts,
   ];
@@ -185,7 +187,7 @@ export async function PATCH(request: Request) {
     );
   }
 
-  const issuedAccounts = await getIssuedAdminAccountsFromCookie();
+  const issuedAccounts = await getIssuedAdminAccountsFromCookie(user);
   const targetAccount = issuedAccounts.find((account) => account.id === payload.id);
 
   if (!targetAccount) {
@@ -210,7 +212,7 @@ export async function PATCH(request: Request) {
     });
 
     return NextResponse.json({
-      accounts: await getPublicAdminAccounts(),
+      accounts: await getPublicAdminAccounts(user),
       managedCompanies: await getManagedCompanyOptions(),
       message:
         payload.action === "delete"
@@ -277,7 +279,7 @@ export async function PATCH(request: Request) {
   }
 
   const response = NextResponse.json({
-    accounts: toPublicList([...(await getAllAdminAccounts()).slice(0, 1), ...nextAccounts]),
+    accounts: toPublicList([...(await getAllAdminAccounts(user)).slice(0, 1), ...nextAccounts]),
     managedCompanies: await getManagedCompanyOptions(),
     message,
   });

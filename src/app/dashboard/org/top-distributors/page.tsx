@@ -17,7 +17,7 @@ export default async function TopDistributorsPage() {
     redirect("/dashboard");
   }
 
-  const adminAccounts = await getAllAdminAccounts();
+  const adminAccounts = await getAllAdminAccounts(user);
 
   return (
     <AdminShell

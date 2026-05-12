@@ -91,6 +91,7 @@ export async function POST(request: Request) {
       accountNumber: body.accountNumber,
       domainName: body.domainName,
       rawPayload: body,
+      user,
     });
 
     return NextResponse.json(await getChargeRequestsForUser(user), { status: 201 });

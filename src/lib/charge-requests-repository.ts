@@ -6,6 +6,7 @@ import {
   type ProcessedRequest,
 } from "@/lib/charge-utils";
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
+import { getScopedDistributorCondition } from "@/lib/master-scope";
 import {
   getDefaultChargeRequestState,
   getChargeRequestsByCompany,
@@ -107,7 +108,8 @@ function splitRows(rows: ChargeRequestRow[]): ChargeRequestsResponse {
   };
 }
 
-async function getDbChargeRequests() {
+async function getDbChargeRequests(user: SessionUser) {
+  const scope = getScopedDistributorCondition(user);
   const result = await query<ChargeRequestRow>(
     `
       select
@@ -122,15 +124,19 @@ async function getDbChargeRequests() {
         cr.processed_at,
         c.company_name,
         d.domain_name,
-        master.name as master_name,
+        owner_master.name as master_name,
         dist.name as distributor_name
       from charge_requests cr
       join companies c on c.id = cr.company_id
       join domains d on d.id = cr.domain_id
-      left join admins master on master.role = 'MASTER' and master.status = 'ACTIVE'
       left join distributors dist on dist.id = cr.distributor_id
+      left join admins dist_admin on dist_admin.id = dist.admin_id
+      left join admins owner_master on owner_master.id = dist_admin.created_by
+      where 1 = 1
+        ${scope.sql}
       order by cr.requested_at desc, cr.created_at desc
     `,
+    scope.values,
   );
 
   return splitRows(result.rows);
@@ -138,7 +144,7 @@ async function getDbChargeRequests() {
 
 export async function getChargeRequestsForUser(user: SessionUser) {
   if (hasDatabaseUrl()) {
-    return getDbChargeRequests();
+    return getDbChargeRequests(user);
   }
 
   const state = await getMockChargeStateFromCookie();
@@ -156,45 +162,45 @@ export async function getChargeRequestsForUser(user: SessionUser) {
   return companyRequests;
 }
 
-async function ensureDbScope(domainName = "전체") {
-  const companyResult = await query<{ id: string }>(
+async function ensureDbScope(domainName = "전체", user: SessionUser) {
+  const scope = getScopedDistributorCondition(user);
+  const existingDomain = await query<{
+    company_id: string;
+    domain_id: string;
+    distributor_id: string | null;
+  }>(
     `
-      insert into companies (company_name, status)
-      values ('전체', 'ACTIVE')
-      on conflict (company_name) do update
-      set status = 'ACTIVE', updated_at = now()
-      returning id::text
+      select
+        dom.company_id::text,
+        dom.id::text as domain_id,
+        dom.distributor_id::text
+      from domains dom
+      join distributors dist on dist.id = dom.distributor_id
+      left join admins dist_admin on dist_admin.id = dist.admin_id
+      where dom.domain_name = $2 and dom.status <> 'DELETED'
+        ${scope.sql}
+      order by dom.created_at desc
+      limit 1
     `,
+    [...scope.values, domainName],
   );
-  const companyId = companyResult.rows[0]?.id;
+  const domain = existingDomain.rows[0];
 
-  if (!companyId) {
-    throw new Error("기본 범위를 찾을 수 없습니다.");
+  if (!domain) {
+    throw new Error("충전신청을 연결할 도메인을 찾을 수 없습니다.");
   }
 
-  const domainResult = await query<{ id: string; distributor_id: string | null }>(
-    `
-      insert into domains (domain_name, company_id, status)
-      values ($1, $2::uuid, 'ACTIVE')
-      on conflict (domain_name) do update
-      set company_id = excluded.company_id, status = 'ACTIVE', updated_at = now()
-      returning id::text, distributor_id::text
-    `,
-    [domainName, companyId],
-  );
-  const domainId = domainResult.rows[0]?.id;
-  const distributorId = domainResult.rows[0]?.distributor_id ?? null;
-
-  if (!domainId) {
-    throw new Error("기본 도메인을 찾을 수 없습니다.");
-  }
-
-  return { companyId, domainId, distributorId };
+  return {
+    companyId: domain.company_id,
+    domainId: domain.domain_id,
+    distributorId: domain.distributor_id,
+  };
 }
 
-export async function createDbChargeRequest(input: CreateChargeRequestInput) {
+export async function createDbChargeRequest(input: CreateChargeRequestInput & { user: SessionUser }) {
   const { companyId, domainId, distributorId } = await ensureDbScope(
     input.domainName,
+    input.user,
   );
   const result = await query<{ id: string }>(
     `
@@ -282,7 +288,13 @@ export async function processDbChargeRequest(input: {
           processed_at,
           (select company_name from companies where id = charge_requests.company_id) as company_name,
           (select domain_name from domains where id = charge_requests.domain_id) as domain_name,
-          (select name from admins where role = 'MASTER' and status = 'ACTIVE' limit 1) as master_name,
+          (
+            select owner_master.name
+            from distributors dist
+            join admins dist_admin on dist_admin.id = dist.admin_id
+            left join admins owner_master on owner_master.id = dist_admin.created_by
+            where dist.id = charge_requests.distributor_id
+          ) as master_name,
           (select name from distributors where id = charge_requests.distributor_id) as distributor_name
       `,
       [input.id, nextStatus, input.processedBy],
@@ -452,7 +464,7 @@ export async function processDbChargeRequest(input: {
 
 export async function resetChargeRequestsForUser(user: SessionUser) {
   if (hasDatabaseUrl()) {
-    return getDbChargeRequests();
+    return getDbChargeRequests(user);
   }
 
   const state = getDefaultChargeRequestState();

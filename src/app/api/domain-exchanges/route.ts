@@ -43,7 +43,7 @@ export async function GET() {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
 
-  return NextResponse.json({ rows: await getDomainExchangeRows([]) });
+  return NextResponse.json({ rows: await getDomainExchangeRows([], user) });
 }
 
 export async function POST(request: Request) {
@@ -88,6 +88,7 @@ export async function POST(request: Request) {
       accountNumber: payload.accountNumber,
       domainName: payload.domainName,
       rawPayload: payload,
+      user,
     });
   } catch (error) {
     return NextResponse.json(
@@ -103,7 +104,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json(
     {
-      rows: await getDomainExchangeRows([]),
+      rows: await getDomainExchangeRows([], user),
       message: "환전신청이 생성되었습니다.",
     },
     { status: 201 },
@@ -148,7 +149,7 @@ export async function PATCH(request: Request) {
     }
 
     return NextResponse.json({
-      rows: await getDomainExchangeRows([]),
+      rows: await getDomainExchangeRows([], user),
       message:
         payload.action === "approve"
           ? "환전 요청이 승인되었습니다."

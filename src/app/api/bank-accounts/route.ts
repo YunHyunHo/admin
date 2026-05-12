@@ -46,7 +46,7 @@ export async function GET() {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
 
-  return NextResponse.json(await getBankAccountBoardData());
+  return NextResponse.json(await getBankAccountBoardData(user));
 }
 
 export async function POST(request: Request) {
@@ -107,7 +107,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({
-      ...(await getBankAccountBoardData()),
+      ...(await getBankAccountBoardData(user)),
       message: "계좌가 생성되었습니다.",
     });
   }
@@ -169,7 +169,7 @@ export async function PATCH(request: Request) {
     }
 
     return NextResponse.json({
-      ...(await getBankAccountBoardData()),
+      ...(await getBankAccountBoardData(user)),
       message:
         payload.action === "delete"
           ? "계좌가 삭제되었습니다."

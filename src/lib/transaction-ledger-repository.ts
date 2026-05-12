@@ -1,4 +1,6 @@
 import { hasDatabaseUrl, query } from "@/lib/db";
+import { getScopedDistributorCondition } from "@/lib/master-scope";
+import type { SessionUser } from "@/lib/auth";
 import type { LedgerRow, TransactionStatus } from "@/lib/transaction-ledger-types";
 
 type TransactionLedgerDbRow = {
@@ -67,10 +69,17 @@ function toLedgerRow(row: TransactionLedgerDbRow): LedgerRow {
   };
 }
 
-export async function getTransactionLedgerRows(fallbackRows: LedgerRow[]) {
+export async function getTransactionLedgerRows(
+  fallbackRows: LedgerRow[],
+  user?: SessionUser,
+) {
   if (!hasDatabaseUrl()) {
     return fallbackRows;
   }
+  const scope = user
+    ? getScopedDistributorCondition(user)
+    : { sql: "", values: [] as string[] };
+  const scopedSql = scope.sql.replace("$1", "$1");
 
   const result = await query<TransactionLedgerDbRow>(
     `
@@ -80,7 +89,7 @@ export async function getTransactionLedgerRows(fallbackRows: LedgerRow[]) {
           cr.id::text,
           'CHARGE'::text as request_type,
           cr.user_uid,
-          master.name as master_name,
+          owner_master.name as master_name,
           dist.name as distributor_name,
           dom.domain_name,
           cr.bank_name,
@@ -94,7 +103,10 @@ export async function getTransactionLedgerRows(fallbackRows: LedgerRow[]) {
         from charge_requests cr
         join domains dom on dom.id = cr.domain_id
         left join distributors dist on dist.id = cr.distributor_id
-        left join admins master on master.role = 'MASTER' and master.status = 'ACTIVE'
+        left join admins dist_admin on dist_admin.id = dist.admin_id
+        left join admins owner_master on owner_master.id = dist_admin.created_by
+        where 1 = 1
+          ${scopedSql}
 
         union all
 
@@ -102,7 +114,7 @@ export async function getTransactionLedgerRows(fallbackRows: LedgerRow[]) {
           er.id::text,
           'EXCHANGE'::text as request_type,
           er.user_uid,
-          master.name as master_name,
+          owner_master.name as master_name,
           dist.name as distributor_name,
           dom.domain_name,
           er.bank_name,
@@ -116,10 +128,14 @@ export async function getTransactionLedgerRows(fallbackRows: LedgerRow[]) {
         from exchange_requests er
         join domains dom on dom.id = er.domain_id
         left join distributors dist on dist.id = er.distributor_id
-        left join admins master on master.role = 'MASTER' and master.status = 'ACTIVE'
+        left join admins dist_admin on dist_admin.id = dist.admin_id
+        left join admins owner_master on owner_master.id = dist_admin.created_by
+        where 1 = 1
+          ${scopedSql}
       ) ledger
       order by requested_at desc
     `,
+    scope.values,
   );
 
   return result.rows.map(toLedgerRow);

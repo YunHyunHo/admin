@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 
 import { hasDatabaseUrl, query } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
+import type { SessionUser } from "@/lib/auth";
 
 const ADMIN_ACCOUNTS_COOKIE = "vendor_admin_issued_accounts";
 
@@ -169,7 +170,20 @@ function toAdminAccountRecord(
   };
 }
 
-async function getDbAdminAccounts() {
+function filterAccountsForUser(
+  accounts: AdminAccountRecord[],
+  user?: Pick<SessionUser, "id" | "role"> | null,
+) {
+  if (!user || user.role !== "MASTER") {
+    return accounts;
+  }
+
+  return accounts.filter(
+    (account) => account.id === user.id || account.createdBy === user.id,
+  );
+}
+
+async function getDbAdminAccounts(user?: Pick<SessionUser, "id" | "role"> | null) {
   const companyOptions = await getDbManagedCompanyOptions();
   const result = await query<DbAdminRow>(
     `
@@ -202,9 +216,11 @@ async function getDbAdminAccounts() {
     .map((row) => toAdminAccountRecord(row, companyOptions))
     .filter((account): account is AdminAccountRecord => Boolean(account));
 
-  return accounts.some((account) => account.role === "MASTER")
+  const nextAccounts = accounts.some((account) => account.role === "MASTER")
     ? accounts
     : [getMasterAccount(), ...accounts];
+
+  return filterAccountsForUser(nextAccounts, user);
 }
 
 function encodeAccounts(accounts: AdminAccountRecord[]) {
@@ -232,9 +248,11 @@ function decodeAccounts(value: string | undefined): AdminAccountRecord[] {
   }
 }
 
-export async function getIssuedAdminAccountsFromCookie() {
+export async function getIssuedAdminAccountsFromCookie(
+  user?: Pick<SessionUser, "id" | "role"> | null,
+) {
   if (hasDatabaseUrl()) {
-    const accounts = await getDbAdminAccounts();
+    const accounts = await getDbAdminAccounts(user);
 
     return accounts.filter((account) => account.role !== "MASTER");
   }
@@ -244,16 +262,18 @@ export async function getIssuedAdminAccountsFromCookie() {
   return decodeAccounts(cookieStore.get(ADMIN_ACCOUNTS_COOKIE)?.value);
 }
 
-export async function getAllAdminAccounts() {
+export async function getAllAdminAccounts(user?: Pick<SessionUser, "id" | "role"> | null) {
   if (hasDatabaseUrl()) {
-    return getDbAdminAccounts();
+    return getDbAdminAccounts(user);
   }
 
   return [getMasterAccount(), ...(await getIssuedAdminAccountsFromCookie())];
 }
 
-export async function getPublicAdminAccounts() {
-  const accounts = await getAllAdminAccounts();
+export async function getPublicAdminAccounts(
+  user?: Pick<SessionUser, "id" | "role"> | null,
+) {
+  const accounts = await getAllAdminAccounts(user);
 
   return accounts.map((account) => {
     const { password, ...publicAccount } = account;
@@ -295,6 +315,7 @@ export function createIssuedAdminAccount(input: {
   role: AdminRole;
   managedCompanies: string[];
   createdBy: string;
+  createdById?: string | null;
 }): AdminAccountRecord {
   const normalizedCompanies = normalizeManagedCompanies(input.managedCompanies);
   const companyName =
@@ -317,7 +338,7 @@ export function createIssuedAdminAccount(input: {
         ? `${normalizedCompanies[0]} 연동 API`
         : "권한 범위 API",
     managedCompanies: normalizedCompanies,
-    createdBy: input.createdBy,
+    createdBy: input.role === "MASTER" ? null : input.createdBy,
     lastLoginAt: null,
     createdAt: now,
     updatedAt: now,
@@ -331,6 +352,7 @@ export async function createPersistedAdminAccount(input: {
   role: AdminRole;
   managedCompanies: string[];
   createdBy: string;
+  createdById?: string | null;
 }) {
   if (!hasDatabaseUrl()) {
     return createIssuedAdminAccount(input);
@@ -351,11 +373,17 @@ export async function createPersistedAdminAccount(input: {
         $3,
         $4,
         'ACTIVE',
-        (select id from admins where login_id = $5 limit 1)
+        $5::uuid
       )
       returning id::text
     `,
-    [input.loginId, passwordHash, input.nickname, input.role, input.createdBy],
+    [
+      input.loginId,
+      passwordHash,
+      input.nickname,
+      input.role,
+      input.role === "MASTER" ? null : input.createdById ?? null,
+    ],
   );
   const adminId = result.rows[0]?.id;
 
@@ -386,7 +414,7 @@ export async function createPersistedAdminAccount(input: {
     [adminId, normalizedCompanies],
   );
 
-  if (primaryCompanyId) {
+  if (primaryCompanyId && input.role !== "MASTER") {
     await query(
       `
         update distributors

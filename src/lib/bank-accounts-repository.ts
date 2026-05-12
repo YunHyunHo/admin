@@ -1,4 +1,6 @@
 import { hasDatabaseUrl, query } from "@/lib/db";
+import { getScopedDistributorCondition } from "@/lib/master-scope";
+import type { SessionUser } from "@/lib/auth";
 import type {
   AccountBranchOption,
   AccountRow,
@@ -58,13 +60,16 @@ function toAccountRow(row: BankAccountDbRow): AccountRow {
   };
 }
 
-export async function getBankAccountBoardData() {
+export async function getBankAccountBoardData(user?: SessionUser) {
   if (!hasDatabaseUrl()) {
     return {
       accounts: [] satisfies AccountRow[],
       branchOptions: [] satisfies AccountBranchOption[],
     };
   }
+  const scope = user
+    ? getScopedDistributorCondition(user)
+    : { sql: "", values: [] as string[] };
 
   const [accounts, branchOptions] = await Promise.all([
     query<BankAccountDbRow>(
@@ -73,7 +78,7 @@ export async function getBankAccountBoardData() {
           ba.id::text,
           ba.distributor_id::text,
           d.name as distributor_name,
-          master.name as creator_name,
+          owner_master.name as creator_name,
           ba.bank_name,
           ba.account_number,
           ba.account_holder,
@@ -92,19 +97,26 @@ export async function getBankAccountBoardData() {
           ) as linked_domains
         from bank_accounts ba
         left join distributors d on d.id = ba.distributor_id
-        left join admins master on master.role = 'MASTER' and master.status = 'ACTIVE'
+        left join admins dist_admin on dist_admin.id = d.admin_id
+        left join admins owner_master on owner_master.id = dist_admin.created_by
         left join domains dom on dom.company_id = ba.company_id
-        group by ba.id, d.name, master.name
+        where 1 = 1
+          ${scope.sql.replaceAll("dist.", "d.")}
+        group by ba.id, d.name, owner_master.name
         order by ba.created_at desc
       `,
+      scope.values,
     ),
     query<DistributorOptionDbRow>(
       `
-        select id::text, name
-        from distributors
-        where status = 'ACTIVE'
+        select dist.id::text, dist.name
+        from distributors dist
+        left join admins dist_admin on dist_admin.id = dist.admin_id
+        where dist.status = 'ACTIVE'
+          ${scope.sql}
         order by name asc
       `,
+      scope.values,
     ),
   ]);
 

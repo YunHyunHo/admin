@@ -1,4 +1,6 @@
 import { hasDatabaseUrl, query } from "@/lib/db";
+import { getScopedDistributorCondition } from "@/lib/master-scope";
+import type { SessionUser } from "@/lib/auth";
 import type { DomainExchangeRow } from "@/lib/domain-exchanges-types";
 
 type ExchangeRequestDbRow = {
@@ -71,10 +73,16 @@ function toExchangeRow(row: ExchangeRequestDbRow): DomainExchangeRow {
   };
 }
 
-export async function getDomainExchangeRows(fallbackRows: DomainExchangeRow[]) {
+export async function getDomainExchangeRows(
+  fallbackRows: DomainExchangeRow[],
+  user?: SessionUser,
+) {
   if (!hasDatabaseUrl()) {
     return fallbackRows;
   }
+  const scope = user
+    ? getScopedDistributorCondition(user)
+    : { sql: "", values: [] as string[] };
 
   const result = await query<ExchangeRequestDbRow>(
     `
@@ -82,7 +90,7 @@ export async function getDomainExchangeRows(fallbackRows: DomainExchangeRow[]) {
         er.id::text,
         dist.name as distributor_name,
         dist_admin.login_id as distributor_login_id,
-        master.name as master_name,
+        owner_master.name as master_name,
         dom.domain_name,
         er.bank_name,
         er.account_holder,
@@ -95,15 +103,19 @@ export async function getDomainExchangeRows(fallbackRows: DomainExchangeRow[]) {
       join domains dom on dom.id = er.domain_id
       left join distributors dist on dist.id = er.distributor_id
       left join admins dist_admin on dist_admin.id = dist.admin_id
-      left join admins master on master.role = 'MASTER' and master.status = 'ACTIVE'
+      left join admins owner_master on owner_master.id = dist_admin.created_by
+      where 1 = 1
+        ${scope.sql}
       order by er.requested_at desc
     `,
+    scope.values,
   );
 
   return result.rows.map(toExchangeRow);
 }
 
-async function findExchangeScope(domainName = "전체") {
+async function findExchangeScope(domainName = "전체", user: SessionUser) {
+  const scope = getScopedDistributorCondition(user);
   const result = await query<{
     company_id: string;
     domain_id: string;
@@ -115,23 +127,26 @@ async function findExchangeScope(domainName = "전체") {
         dom.id::text as domain_id,
         dom.distributor_id::text
       from domains dom
-      where dom.domain_name = $1 and dom.status <> 'DELETED'
+      join distributors dist on dist.id = dom.distributor_id
+      left join admins dist_admin on dist_admin.id = dist.admin_id
+      where dom.domain_name = $2 and dom.status <> 'DELETED'
+        ${scope.sql}
       order by dom.created_at desc
       limit 1
     `,
-    [domainName],
+    [...scope.values, domainName],
   );
-  const scope = result.rows[0];
+  const domainScope = result.rows[0];
 
-  if (!scope) {
+  if (!domainScope) {
     throw new Error("환전신청을 연결할 도메인을 찾을 수 없습니다.");
   }
 
-  return scope;
+  return domainScope;
 }
 
-export async function createDomainExchange(input: CreateDomainExchangeInput) {
-  const scope = await findExchangeScope(input.domainName);
+export async function createDomainExchange(input: CreateDomainExchangeInput & { user: SessionUser }) {
+  const scope = await findExchangeScope(input.domainName, input.user);
   const result = await query<{ id: string }>(
     `
       insert into exchange_requests (

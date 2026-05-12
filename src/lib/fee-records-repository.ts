@@ -1,5 +1,6 @@
 import { getFeeRecords } from "@/lib/mock-report-service";
 import { hasDatabaseUrl, query } from "@/lib/db";
+import { getScopedDistributorCondition } from "@/lib/master-scope";
 import { getAdminSettingsFromCookie } from "@/lib/settings-cookie";
 import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
 import type { SessionUser } from "@/lib/auth";
@@ -78,12 +79,13 @@ export async function getFeeRecordsForUser(
 
     return getFeeRecords(user.companyName, startDate, endDate, state, settings);
   }
+  const scope = getScopedDistributorCondition(user);
 
   const result = await query<FeeRecordDbRow>(
     `
       select
         cr.id::text,
-        master.name as top_agent,
+        owner_master.name as top_agent,
         dist.name as sub_agent,
         coalesce(dist.name, c.company_name) as acquisition_branch,
         d.domain_name as domain,
@@ -98,15 +100,17 @@ export async function getFeeRecordsForUser(
       join charge_requests cr on cr.id = co.charge_request_id
       join companies c on c.id = co.company_id
       join domains d on d.id = co.domain_id
-      left join admins master on master.role = 'MASTER' and master.status = 'ACTIVE'
       left join distributors dist on dist.id = co.distributor_id
+      left join admins dist_admin on dist_admin.id = dist.admin_id
+      left join admins owner_master on owner_master.id = dist_admin.created_by
       where
         co.status in ('APPROVED', 'COMPLETED')
         and co.created_at >= $1::date
         and co.created_at < ($2::date + interval '1 day')
+        ${scope.sql.replace("$1", "$3")}
       order by co.created_at desc
     `,
-    [startDate, endDate],
+    [startDate, endDate, user.id],
   );
   const rows = result.rows.map(toFeeRecord);
 

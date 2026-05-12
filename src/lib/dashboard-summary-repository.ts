@@ -2,6 +2,7 @@ import { getDashboardSummary } from "@/lib/mock-report-service";
 import { getAdminSettingsFromCookie } from "@/lib/settings-cookie";
 import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
 import { hasDatabaseUrl, query } from "@/lib/db";
+import { getScopedDistributorCondition } from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
 
 type DashboardSummaryRow = {
@@ -27,6 +28,8 @@ export async function getDashboardSummaryForUser(user: SessionUser) {
 
     return getDashboardSummary(user.companyName, state, settings);
   }
+  const scope = getScopedDistributorCondition(user);
+  const feeScopeSql = scope.sql.replace("dist.", "fee_dist.");
 
   const [summaryResult, feeRateResult] = await Promise.all([
     query<DashboardSummaryRow>(
@@ -40,21 +43,37 @@ export async function getDashboardSummaryForUser(user: SessionUser) {
           coalesce(sum(cr.amount) filter (where cr.status in ('APPROVED', 'COMPLETED')), 0)::text as approved_charge_total,
           coalesce((
             select sum(saved_commission)
-            from commission_records
-            where status in ('APPROVED', 'COMPLETED')
+            from commission_records co
+            left join distributors fee_dist on fee_dist.id = co.distributor_id
+            left join admins dist_admin on dist_admin.id = fee_dist.admin_id
+            where co.status in ('APPROVED', 'COMPLETED')
+              ${feeScopeSql}
           ), 0)::text as fee_total
         from charge_requests cr
         left join domains d on d.id = cr.domain_id
+        left join distributors dist on dist.id = cr.distributor_id
+        left join admins dist_admin on dist_admin.id = dist.admin_id
+        where 1 = 1
+          ${scope.sql}
       `,
+      scope.values,
     ),
     query<FeeRateRow>(
       `
-        select company_rate::text, distributor_rate::text, agency_rate::text
-        from fee_rates
-        where starts_at <= now() and (ends_at is null or ends_at > now())
-        order by starts_at desc, created_at desc
+        select fee.company_rate::text, fee.distributor_rate::text, fee.agency_rate::text
+        from fee_rates fee
+        left join distributors dist on dist.id = fee.distributor_id
+        left join admins dist_admin on dist_admin.id = dist.admin_id
+        where fee.starts_at <= now()
+          and (fee.ends_at is null or fee.ends_at > now())
+          and (
+            fee.distributor_id is null
+            or (${scope.sql.replace("and ", "")})
+          )
+        order by fee.starts_at desc, fee.created_at desc
         limit 1
       `,
+      scope.values,
     ),
   ]);
   const row = summaryResult.rows[0];

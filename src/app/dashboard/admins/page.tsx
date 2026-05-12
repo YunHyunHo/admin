@@ -21,7 +21,7 @@ export default async function AdminsPage() {
   }
 
   const [adminAccounts, managedCompanies] = await Promise.all([
-    getPublicAdminAccounts(),
+    getPublicAdminAccounts(user),
     getManagedCompanyOptions(),
   ]);
 

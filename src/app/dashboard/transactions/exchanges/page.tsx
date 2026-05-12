@@ -16,7 +16,7 @@ export default async function ExchangesPage() {
     redirect("/");
   }
 
-  const exchangeRows = await getDomainExchangeRows(fallbackDomainExchanges);
+  const exchangeRows = await getDomainExchangeRows(fallbackDomainExchanges, user);
 
   return (
     <AdminShell
