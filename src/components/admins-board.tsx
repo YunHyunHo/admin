@@ -44,7 +44,6 @@ export function AdminsBoard({
   const [nickname, setNickname] = useState("");
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
-  const [passwordConfirm, setPasswordConfirm] = useState("");
   const [message, setMessage] = useState("");
   const [processingAdminId, setProcessingAdminId] = useState<string | null>(
     null,
@@ -115,11 +114,6 @@ export function AdminsBoard({
       return;
     }
 
-    if (password !== passwordConfirm) {
-      setMessage("비밀번호 확인이 일치하지 않습니다.");
-      return;
-    }
-
     setIsCreating(true);
 
     try {
@@ -134,7 +128,6 @@ export function AdminsBoard({
       setNickname("");
       setLoginId("");
       setPassword("");
-      setPasswordConfirm("");
       setSelectedCompanies([managedCompanies[0]]);
       setIsCreateModalOpen(false);
       setMessage(
@@ -390,13 +383,6 @@ export function AdminsBoard({
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="비밀번호 [6글자 이상, 영어 + 숫자]"
-                className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
-              />
-              <input
-                type="password"
-                value={passwordConfirm}
-                onChange={(event) => setPasswordConfirm(event.target.value)}
-                placeholder="비밀번호 확인"
                 className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
               />
             </div>
