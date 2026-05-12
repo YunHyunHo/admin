@@ -40,7 +40,6 @@ export function AdminsBoard({
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([
     managedCompanies[0],
   ]);
-  const [role, setRole] = useState<AdminRole | "">("");
   const [nickname, setNickname] = useState("");
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
@@ -129,13 +128,12 @@ export function AdminsBoard({
 
     try {
       const data = await requestAdminAccount("POST", {
-        role,
+        role: "ADMIN",
         nickname,
         loginId,
         password,
         managedCompanies: selectedCompanies,
       });
-      setRole("");
       setNickname("");
       setLoginId("");
       setPassword("");
@@ -366,17 +364,9 @@ export function AdminsBoard({
             </h3>
 
             <div className="mt-9 space-y-6">
-              <select
-                value={role}
-                onChange={(event) => setRole(event.target.value as AdminRole)}
-                className="h-14 w-full rounded border border-slate-300 bg-white px-3 text-sm text-slate-500 outline-none"
-              >
-                <option value="">레벨 선택</option>
-                <option value="MASTER">MASTER</option>
-                <option value="ADMIN">ADMIN</option>
-                <option value="VIEWER">VIEWER</option>
-                <option value="DOMAIN_ADMIN">DOMAIN_ADMIN</option>
-              </select>
+              <div className="flex h-14 items-center rounded border border-slate-300 bg-slate-50 px-5 text-sm font-semibold text-slate-600">
+                총판 계정
+              </div>
               <input
                 value={nickname}
                 onChange={(event) => setNickname(event.target.value)}
