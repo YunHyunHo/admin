@@ -153,8 +153,6 @@ export function AccountsBoard({
   canCreateAccounts = true,
   canManageAccounts = true,
 }: AccountsBoardProps) {
-  const initialBranch =
-    branchOptions.length === 1 ? branchOptions[0] : undefined;
   const [accounts, setAccounts] = useState(initialAccounts);
   const [page, setPage] = useState(1);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -166,10 +164,13 @@ export function AccountsBoard({
     accountId: string;
     field: "holder" | "accountNumber";
   } | null>(null);
+  const [branchName, setBranchName] = useState("");
+  const [branchId, setBranchId] = useState("");
   const [bankName, setBankName] = useState("");
   const [holder, setHolder] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [message, setMessage] = useState("");
+  const selectableBranches = branchOptions;
   const pageCount = Math.max(1, Math.ceil(accounts.length / rowsPerPage));
   const visibleAccounts = accounts.slice(
     (page - 1) * rowsPerPage,
@@ -293,7 +294,7 @@ export function AccountsBoard({
   }
 
   async function handleCreate() {
-    if (!bankName || !holder || !accountNumber) {
+    if (!branchId || !bankName || !holder || !accountNumber) {
       return;
     }
 
@@ -301,7 +302,7 @@ export function AccountsBoard({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        distributorId: initialBranch?.id,
+        distributorId: branchId,
         bankName,
         holder,
         accountNumber,
@@ -325,7 +326,7 @@ export function AccountsBoard({
     } else {
       const nextAccount: AccountRow = {
         id: `ACC-${Date.now().toString().slice(-6)}`,
-        branchName: initialBranch?.name ?? "본사",
+        branchName,
         creator: "총관리자",
         bankName,
         holder,
@@ -339,6 +340,8 @@ export function AccountsBoard({
     }
 
     setPage(1);
+    setBranchName("");
+    setBranchId("");
     setBankName("");
     setHolder("");
     setAccountNumber("");
@@ -361,14 +364,16 @@ export function AccountsBoard({
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setIsCreateModalOpen(true)}
-          disabled={!canCreateAccounts}
-          className="rounded-2xl bg-fuchsia-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-fuchsia-400"
-        >
-          계좌생성
-        </button>
+        {canCreateAccounts ? (
+          <button
+            type="button"
+            onClick={() => setIsCreateModalOpen(true)}
+            disabled={selectableBranches.length === 0}
+            className="rounded-2xl bg-fuchsia-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-fuchsia-400 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/40"
+          >
+            계좌생성
+          </button>
+        ) : null}
       </div>
 
       <div className="p-5 sm:p-6">
@@ -391,7 +396,7 @@ export function AccountsBoard({
                   "생성일",
                   "사용여부",
                   "연결된 도메인",
-                  "삭제",
+                  ...(canManageAccounts ? ["삭제"] : []),
                 ].map((header) => (
                   <th
                     key={header}
@@ -451,18 +456,19 @@ export function AccountsBoard({
                       >
                         {account.isActive ? "사용중" : "중지됨"}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => toggleActive(account.id)}
-                        disabled={!canManageAccounts}
-                        className={`rounded-xl px-3 py-2 text-xs font-semibold text-white transition ${
-                          account.isActive
-                            ? "bg-red-600 hover:bg-red-500"
-                            : "bg-blue-600 hover:bg-blue-500"
-                        }`}
-                      >
-                        {account.isActive ? "중지하기" : "사용하기"}
-                      </button>
+                      {canManageAccounts ? (
+                        <button
+                          type="button"
+                          onClick={() => toggleActive(account.id)}
+                          className={`rounded-xl px-3 py-2 text-xs font-semibold text-white transition ${
+                            account.isActive
+                              ? "bg-red-600 hover:bg-red-500"
+                              : "bg-blue-600 hover:bg-blue-500"
+                          }`}
+                        >
+                          {account.isActive ? "중지하기" : "사용하기"}
+                        </button>
+                      ) : null}
                     </div>
                   </td>
                   <td className="px-4 py-4 text-center">
@@ -480,16 +486,17 @@ export function AccountsBoard({
                       </button>
                     </div>
                   </td>
-                  <td className="px-4 py-4 text-center">
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(account.id)}
-                      disabled={!canManageAccounts}
-                      className="rounded-xl bg-blue-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-600"
-                    >
-                      삭제
-                    </button>
-                  </td>
+                  {canManageAccounts ? (
+                    <td className="px-4 py-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(account.id)}
+                        className="rounded-xl bg-blue-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-600"
+                      >
+                        삭제
+                      </button>
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
@@ -526,6 +533,29 @@ export function AccountsBoard({
             </h3>
 
             <div className="mt-7 space-y-4">
+              <label className="block">
+                <span className="sr-only">본사명 선택</span>
+                <select
+                  value={branchId}
+                  onChange={(event) => {
+                    const selectedBranch = selectableBranches.find(
+                      (branch) => branch.id === event.target.value,
+                    );
+
+                    setBranchId(event.target.value);
+                    setBranchName(selectedBranch?.name ?? event.target.value);
+                  }}
+                  className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-slate-500"
+                >
+                  <option value="">본사명 선택</option>
+                  {selectableBranches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               <label className="block">
                 <span className="sr-only">은행 선택</span>
                 <select
@@ -567,7 +597,7 @@ export function AccountsBoard({
               <button
                 type="button"
                 onClick={handleCreate}
-                disabled={!bankName || !holder || !accountNumber}
+                disabled={!branchId || !bankName || !holder || !accountNumber}
                 className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 생성
@@ -604,8 +634,13 @@ export function AccountsBoard({
               <table className="w-full min-w-[760px] border-collapse text-sm">
                 <thead className="bg-black text-white">
                   <tr>
-                    {["ID", "도메인명", "도메인주소", "사용자수", "관리"].map(
-                      (header) => (
+                    {[
+                      "ID",
+                      "도메인명",
+                      "도메인주소",
+                      "사용자수",
+                      ...(canManageAccounts ? ["관리"] : []),
+                    ].map((header) => (
                         <th
                           key={header}
                           className="border border-white/55 px-4 py-4 text-center font-semibold"
@@ -631,17 +666,19 @@ export function AccountsBoard({
                         <td className="border border-white/55 px-4 py-4 text-center">
                           {domain.userCount}
                         </td>
-                        <td className="border border-white/55 px-4 py-4 text-center">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              unlinkDomain(selectedAccountId, domain.id)
-                            }
-                            className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-500"
-                          >
-                            연결해제
-                          </button>
-                        </td>
+                        {canManageAccounts ? (
+                          <td className="border border-white/55 px-4 py-4 text-center">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                unlinkDomain(selectedAccountId, domain.id)
+                              }
+                              className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-500"
+                            >
+                              연결해제
+                            </button>
+                          </td>
+                        ) : null}
                       </tr>
                     ))}
                 </tbody>
@@ -712,12 +749,16 @@ function EditableField({
   const isEditing =
     editingField?.accountId === accountId && editingField.field === field;
 
+  if (!canEdit) {
+    return <span className="block text-center text-white/76">{value}</span>;
+  }
+
   return (
     <div className="flex items-center gap-2">
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        disabled={!isEditing || !canEdit}
+        disabled={!isEditing}
         className={`h-10 min-w-[210px] flex-1 rounded-xl border px-3 text-sm outline-none transition ${
           isEditing
             ? "border-cyan-300 bg-white text-slate-950"
@@ -726,7 +767,6 @@ function EditableField({
       />
       <button
         type="button"
-        disabled={!canEdit}
         onClick={() => {
           if (isEditing) {
             onCommit();

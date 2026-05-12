@@ -30,10 +30,6 @@ function isWritableRole(role: string | undefined) {
   return role === "MASTER";
 }
 
-function isCreatableRole(role: string | undefined) {
-  return role === "MASTER" || role === "ADMIN";
-}
-
 function isUuid(value: string | undefined) {
   return Boolean(
     value?.match(
@@ -55,7 +51,7 @@ export async function GET() {
 export async function POST(request: Request) {
   const user = await getSessionUser();
 
-  if (!user || !isCreatableRole(user.role)) {
+  if (!user || !isWritableRole(user.role)) {
     return NextResponse.json(
       { message: "계좌를 생성할 권한이 없습니다." },
       { status: 403 },
@@ -68,6 +64,13 @@ export async function POST(request: Request) {
   const holder = payload.holder?.trim() ?? "";
   const accountNumber = payload.accountNumber?.trim() ?? "";
 
+  if (!distributorId) {
+    return NextResponse.json(
+      { message: "본사명을 선택해주세요." },
+      { status: 400 },
+    );
+  }
+
   if (!bankName || !holder || !accountNumber) {
     return NextResponse.json(
       { message: "은행명, 예금주, 계좌번호를 모두 입력해주세요." },
@@ -76,7 +79,7 @@ export async function POST(request: Request) {
   }
 
   if (hasDatabaseUrl()) {
-    if (distributorId && !isUuid(distributorId)) {
+    if (!isUuid(distributorId)) {
       return NextResponse.json(
         { message: "하부계정 정보를 확인해주세요." },
         { status: 400 },

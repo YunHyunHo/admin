@@ -128,45 +128,24 @@ export async function getBankAccountBoardData(user?: SessionUser) {
 
 export async function createBankAccount(
   input: {
-    distributorId?: string;
+    distributorId: string;
     bankName: string;
     holder: string;
     accountNumber: string;
   },
   user: SessionUser,
 ) {
-  const distributor = input.distributorId
-    ? await query<{ id: string; company_id: string | null }>(
-        `
-          select dist.id::text, dist.company_id::text
-          from distributors dist
-          left join admins dist_admin on dist_admin.id = dist.admin_id
-          where dist.id = $1::uuid
-            and dist.status = 'ACTIVE'
-            ${
-              user.role === "MASTER"
-                ? "and dist_admin.created_by = $2::uuid"
-                : "and dist.admin_id = $2::uuid"
-            }
-        `,
-        [input.distributorId, user.id],
-      )
-    : await query<{ id: string; company_id: string | null }>(
-        `
-          select dist.id::text, dist.company_id::text
-          from distributors dist
-          left join admins dist_admin on dist_admin.id = dist.admin_id
-          where dist.status = 'ACTIVE'
-            ${
-              user.role === "MASTER"
-                ? "and dist_admin.created_by = $1::uuid"
-                : "and dist.admin_id = $1::uuid"
-            }
-          order by dist.created_at desc
-          limit 2
-        `,
-        [user.id],
-      );
+  const distributor = await query<{ id: string; company_id: string | null }>(
+    `
+      select dist.id::text, dist.company_id::text
+      from distributors dist
+      left join admins dist_admin on dist_admin.id = dist.admin_id
+      where dist.id = $1::uuid
+        and dist.status = 'ACTIVE'
+        and dist_admin.created_by = $2::uuid
+    `,
+    [input.distributorId, user.id],
+  );
 
   if (distributor.rows.length !== 1) {
     throw new Error("하부계정을 찾을 수 없습니다.");
