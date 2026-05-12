@@ -58,12 +58,58 @@ export function DistributorsBoard({ adminAccounts }: DistributorsBoardProps) {
   const [visiblePasswordId, setVisiblePasswordId] = useState<string | null>(
     null,
   );
+  const [visiblePasswords, setVisiblePasswords] = useState<Record<string, string>>(
+    {},
+  );
+  const [resettingPasswordId, setResettingPasswordId] = useState<string | null>(
+    null,
+  );
+  const [message, setMessage] = useState("");
 
   const pageCount = Math.max(1, Math.ceil(distributors.length / rowsPerPage));
   const visibleDistributors = distributors.slice(
     (page - 1) * rowsPerPage,
     page * rowsPerPage,
   );
+
+  async function resetPassword(row: Distributor) {
+    setResettingPasswordId(row.id);
+    setMessage("");
+
+    try {
+      const response = await fetch("/api/admin-accounts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: row.id,
+          action: "reset-password",
+        }),
+      });
+      const data = (await response.json()) as {
+        message?: string;
+        password?: string;
+      };
+
+      if (!response.ok || !data.password) {
+        throw new Error(data.message ?? "비밀번호 재설정에 실패했습니다.");
+      }
+
+      const nextPassword = data.password;
+
+      setVisiblePasswords((current) => ({
+        ...current,
+        [row.id]: nextPassword,
+      }));
+      setVisiblePasswordId(row.id);
+      setMessage(data.message ?? `${row.loginId} 비밀번호를 재설정했습니다.`);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "비밀번호 재설정에 실패했습니다.",
+      );
+    } finally {
+      setResettingPasswordId(null);
+    }
+  }
 
   return (
     <section className="rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
@@ -92,6 +138,12 @@ export function DistributorsBoard({ adminAccounts }: DistributorsBoardProps) {
       </div>
 
       <div className="p-5 sm:p-6">
+        {message ? (
+          <p className="mb-4 rounded-2xl border border-cyan-300/16 bg-cyan-400/8 px-4 py-3 text-sm text-cyan-50/86">
+            {message}
+          </p>
+        ) : null}
+
         <div className="min-h-[620px] overflow-x-auto rounded-[26px] border border-white/8 bg-black/18">
           <table className="w-full min-w-[1120px] border-collapse text-left text-sm">
             <thead className="bg-black/52 text-white/72">
@@ -135,15 +187,18 @@ export function DistributorsBoard({ adminAccounts }: DistributorsBoardProps) {
                   <td className="px-4 py-4 text-center">
                     {visiblePasswordId === row.id ? (
                       <span className="inline-block rounded-xl border border-teal-300/25 bg-teal-300/10 px-3 py-2 text-xs font-semibold text-teal-100">
-                        {row.password}
+                        {visiblePasswords[row.id] ?? row.password}
                       </span>
                     ) : (
                       <button
                         type="button"
-                        onClick={() => setVisiblePasswordId(row.id)}
+                        onClick={() => void resetPassword(row)}
+                        disabled={resettingPasswordId === row.id}
                         className="rounded-xl bg-teal-400/80 px-3 py-2 text-xs font-semibold text-slate-950"
                       >
-                        비밀번호 확인
+                        {resettingPasswordId === row.id
+                          ? "재설정 중"
+                          : "비밀번호 확인"}
                       </button>
                     )}
                   </td>

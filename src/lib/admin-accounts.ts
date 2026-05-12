@@ -534,6 +534,44 @@ export async function updatePersistedAdminAccount(input: {
   return targetAccount;
 }
 
+export async function resetPersistedAdminPassword(input: {
+  id: string;
+  user: Pick<SessionUser, "id" | "role">;
+  nextPassword?: string;
+}) {
+  if (!hasDatabaseUrl()) {
+    return null;
+  }
+
+  const nextPassword = input.nextPassword ?? "0000";
+  const passwordHash = await hashPassword(nextPassword);
+  const result = await query<{ login_id: string }>(
+    `
+      update admins target
+      set password_hash = $2, updated_at = now()
+      from admins owner
+      where target.id = $1::uuid
+        and target.role <> 'MASTER'
+        and target.status <> 'DELETED'
+        and owner.id = target.created_by
+        and owner.id = $3::uuid
+        and $4::text = 'MASTER'
+      returning target.login_id
+    `,
+    [input.id, passwordHash, input.user.id, input.user.role],
+  );
+  const loginId = result.rows[0]?.login_id;
+
+  if (!loginId) {
+    return null;
+  }
+
+  return {
+    loginId,
+    password: nextPassword,
+  };
+}
+
 export async function recordAdminLogin(loginId: string) {
   if (!hasDatabaseUrl()) {
     return;
