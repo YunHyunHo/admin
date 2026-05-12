@@ -18,6 +18,7 @@ const sideMenuGroups = [
   },
   {
     title: "조직 관리",
+    masterOnly: true,
     items: [
       {
         title: "상위총판",
@@ -108,6 +109,7 @@ const sideMenuGroups = [
   },
   {
     title: "어드민",
+    masterOnly: true,
     items: [
       {
         title: "어드민 리스트",
@@ -143,6 +145,7 @@ export function AdminShell({
   children,
 }: AdminShellProps) {
   const visibleMenuGroups = sideMenuGroups
+    .filter((group) => user.role === "MASTER" || !group.masterOnly)
     .map((group) => ({
       ...group,
       items:
