@@ -1,20 +1,37 @@
-import { AdminPlaceholderPage } from "@/components/admin-placeholder-page";
-import {
-  defaultNextSteps,
-  exchangeColumns,
-} from "@/lib/admin-placeholder-config";
+import { redirect } from "next/navigation";
 
-export default function ExchangesPage() {
+import { AdminShell } from "@/components/admin-shell";
+import {
+  DomainExchangesBoard,
+  fallbackDomainExchanges,
+} from "@/components/domain-exchanges-board";
+import { getSessionUser } from "@/lib/auth";
+import { getDomainExchangeRows } from "@/lib/domain-exchanges-repository";
+import { canProcessRequests } from "@/lib/permissions";
+
+export default async function ExchangesPage() {
+  const user = await getSessionUser();
+
+  if (!user) {
+    redirect("/");
+  }
+
+  const exchangeRows = await getDomainExchangeRows(fallbackDomainExchanges);
+
   return (
-    <AdminPlaceholderPage
+    <AdminShell
+      user={user}
       activeItem="exchanges"
       badge="Exchange Requests"
       helperText="API로 들어온 환전신청을 승인/거절/완료 처리하는 화면입니다."
-      eyebrow="Transaction View"
-      title="환전신청"
-      description="환전 신청 내역을 상태별로 확인하고, 완료 처리 시 정산에 반영하는 탭입니다."
-      columns={exchangeColumns}
-      nextSteps={defaultNextSteps}
-    />
+    >
+      <DomainExchangesBoard
+        initialRows={exchangeRows}
+        eyebrow="Exchange Requests"
+        title="환전신청"
+        description="환전 신청 내역을 확인하고 승인/삭제 처리하는 화면입니다."
+        canProcessExchanges={canProcessRequests(user)}
+      />
+    </AdminShell>
   );
 }

@@ -3,12 +3,8 @@ import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin-shell";
 import { SettlementProfitBoard } from "@/components/settlement-profit-board";
 import { getSessionUser } from "@/lib/auth";
-import {
-  getDefaultReportDateRange,
-  getSettlementProfit,
-} from "@/lib/mock-report-service";
-import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
-import { getAdminSettingsFromCookie } from "@/lib/settings-cookie";
+import { getDefaultReportDateRange } from "@/lib/mock-report-service";
+import { getSettlementProfitForUser } from "@/lib/settlement-repository";
 
 export default async function SettlementProfitPage() {
   const user = await getSessionUser();
@@ -18,14 +14,10 @@ export default async function SettlementProfitPage() {
   }
 
   const defaultRange = getDefaultReportDateRange();
-  const state = await getMockChargeStateFromCookie();
-  const settings = await getAdminSettingsFromCookie();
-  const initialProfit = getSettlementProfit(
-    user.companyName,
+  const initialProfit = await getSettlementProfitForUser(
+    user,
     defaultRange.startDate,
     defaultRange.endDate,
-    state,
-    settings,
   );
 
   return (

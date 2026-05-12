@@ -2,22 +2,11 @@
 
 import { useMemo, useState } from "react";
 
-type WithdrawalRow = {
-  id: string;
-  topDistributor: string;
-  withdrawalBranch: string;
-  currentBalance: number;
-  requester: string;
-  bankName: string;
-  accountHolder: string;
-  accountNumber: string;
-  requestAmount: number;
-  requestedAt: string;
-  completedAt: string;
-  status: "승인" | "승인취소";
-};
+import type { DistributorWithdrawalRow } from "@/lib/distributor-withdrawals-repository";
 
-const withdrawals: WithdrawalRow[] = [
+type WithdrawalRow = DistributorWithdrawalRow;
+
+export const fallbackDistributorWithdrawals: WithdrawalRow[] = [
   {
     id: "54ae4810-43dc-11f1-becc-5db9d4a75a34",
     topDistributor: "비비",
@@ -240,12 +229,16 @@ function truncateId(value: string) {
   return value.length > 18 ? `${value.slice(0, 18)}...` : value;
 }
 
-export function DistributorWithdrawalHistoryBoard() {
+export function DistributorWithdrawalHistoryBoard({
+  initialRows = fallbackDistributorWithdrawals,
+}: {
+  initialRows?: WithdrawalRow[];
+}) {
   const [page, setPage] = useState(1);
-  const pageCount = Math.max(1, Math.ceil(withdrawals.length / rowsPerPage));
+  const pageCount = Math.max(1, Math.ceil(initialRows.length / rowsPerPage));
   const pageRows = useMemo(
-    () => withdrawals.slice((page - 1) * rowsPerPage, page * rowsPerPage),
-    [page],
+    () => initialRows.slice((page - 1) * rowsPerPage, page * rowsPerPage),
+    [initialRows, page],
   );
 
   return (

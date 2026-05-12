@@ -3,12 +3,8 @@ import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin-shell";
 import { FeeRecordsBoard } from "@/components/fee-records-board";
 import { getSessionUser } from "@/lib/auth";
-import {
-  getDefaultReportDateRange,
-  getFeeRecords,
-} from "@/lib/mock-report-service";
-import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
-import { getAdminSettingsFromCookie } from "@/lib/settings-cookie";
+import { getDefaultReportDateRange } from "@/lib/mock-report-service";
+import { getFeeRecordsForUser } from "@/lib/fee-records-repository";
 
 export default async function FeeRecordsPage() {
   const user = await getSessionUser();
@@ -18,14 +14,10 @@ export default async function FeeRecordsPage() {
   }
 
   const defaultRange = getDefaultReportDateRange();
-  const state = await getMockChargeStateFromCookie();
-  const settings = await getAdminSettingsFromCookie();
-  const initialRecords = getFeeRecords(
-    user.companyName,
+  const initialRecords = await getFeeRecordsForUser(
+    user,
     defaultRange.startDate,
     defaultRange.endDate,
-    state,
-    settings,
   );
 
   return (

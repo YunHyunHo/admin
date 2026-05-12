@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 type FeeRateRow = {
   id: string;
+  distributorId?: string;
   domainName: string;
   totalRate: number;
   topDistributor: string;
@@ -16,50 +17,9 @@ type FeeRateRow = {
 type FeeRateSettingsBoardProps = {
   companyName: string;
   initialFeeRate: number;
+  initialRows: FeeRateRow[];
+  canManageFeeRates: boolean;
 };
-
-const baseRows: FeeRateRow[] = [
-  {
-    id: "FEE-ONEPAY",
-    domainName: "원페이",
-    totalRate: 0.4,
-    topDistributor: "코인뱅크",
-    topDistributorRate: 0.15,
-    distributor: "원페이",
-    distributorRate: 0.1,
-    updatedAt: "05-02 10:00:00",
-  },
-  {
-    id: "FEE-HOHOO",
-    domainName: "호우 환전",
-    totalRate: 0.45,
-    topDistributor: "코인뱅크",
-    topDistributorRate: 0.1,
-    distributor: "비비",
-    distributorRate: 0.1,
-    updatedAt: "04-30 21:00:00",
-  },
-  {
-    id: "FEE-BRAND",
-    domainName: "비랜드 환전",
-    totalRate: 0.5,
-    topDistributor: "비비",
-    topDistributorRate: 0.2,
-    distributor: "에이원 오실장",
-    distributorRate: 0.1,
-    updatedAt: "04-28 23:31:18",
-  },
-  {
-    id: "FEE-CRUBET",
-    domainName: "크루벳",
-    totalRate: 0.5,
-    topDistributor: "비비",
-    topDistributorRate: 0.1,
-    distributor: "에이원 오실장",
-    distributorRate: 0.1,
-    updatedAt: "04-27 21:16:19",
-  },
-];
 
 const rowsPerPage = 10;
 const rateKeys = [
@@ -106,32 +66,17 @@ function hasDraftChanges(row: FeeRateRow, draft: DraftRates) {
   return rateKeys.some((key) => row[key] !== draft[key]);
 }
 
-function getInitialRows(companyName: string, initialFeeRate: number) {
-  return baseRows.map((row) =>
-    row.domainName === companyName
-      ? {
-          ...row,
-          totalRate: initialFeeRate,
-        }
-      : row,
-  );
-}
-
 export function FeeRateSettingsBoard({
-  companyName,
   initialFeeRate,
+  initialRows,
+  canManageFeeRates,
 }: FeeRateSettingsBoardProps) {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [rows, setRows] = useState(() =>
-    getInitialRows(companyName, initialFeeRate),
-  );
+  const [rows, setRows] = useState(initialRows);
   const [draftRates, setDraftRates] = useState<Record<string, DraftRates>>(() =>
     Object.fromEntries(
-      getInitialRows(companyName, initialFeeRate).map((row) => [
-        row.id,
-        getDraftRates(row),
-      ]),
+      initialRows.map((row) => [row.id, getDraftRates(row)]),
     ),
   );
   const [selectedRowId, setSelectedRowId] = useState(rows[0]?.id ?? "");
@@ -172,36 +117,53 @@ export function FeeRateSettingsBoard({
   }
 
   async function saveRate(row: FeeRateRow) {
+    if (!canManageFeeRates) {
+      setMessage("수수료 수정은 마스터 계정만 가능합니다.");
+      return;
+    }
+
     const draft = draftRates[row.id] ?? getDraftRates(row);
 
     setSavingId(row.id);
     setMessage("");
 
     try {
-      if (row.domainName === companyName) {
-        const response = await fetch("/api/settings/fee-rate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ feeRate: draft.totalRate }),
-        });
-        const data = (await response.json()) as { message?: string };
+      const response = await fetch("/api/settings/fee-rate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: row.id,
+          distributorId: row.distributorId,
+          ...draft,
+        }),
+      });
+      const data = (await response.json()) as {
+        message?: string;
+        rows?: FeeRateRow[];
+      };
 
-        if (!response.ok) {
-          throw new Error(data.message ?? "수수료 요율 저장에 실패했습니다.");
-        }
+      if (!response.ok) {
+        throw new Error(data.message ?? "수수료 요율 저장에 실패했습니다.");
       }
 
-      setRows((current) =>
-        current.map((currentRow) =>
-          currentRow.id === row.id
-            ? {
-                ...currentRow,
-                ...draft,
-                updatedAt: getNowStamp(),
-              }
-            : currentRow,
-        ),
-      );
+      if (data.rows) {
+        setRows(data.rows);
+        setDraftRates(
+          Object.fromEntries(data.rows.map((nextRow) => [nextRow.id, getDraftRates(nextRow)])),
+        );
+      } else {
+        setRows((current) =>
+          current.map((currentRow) =>
+            currentRow.id === row.id
+              ? {
+                  ...currentRow,
+                  ...draft,
+                  updatedAt: getNowStamp(),
+                }
+              : currentRow,
+          ),
+        );
+      }
       setMessage(`${row.domainName} 수수료가 수정되었습니다.`);
     } catch (error) {
       setMessage(
@@ -223,12 +185,15 @@ export function FeeRateSettingsBoard({
             수수료 관리
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-white/52">
-            본사와 대리점 단계는 제외하고, 업체별 총 수수료를 상위총판과 총판에 어떻게 배분할지 관리하는 화면입니다.
+            본사와 대리점 단계는 제외하고, 총판별 총 수수료를 상위총판과 총판에 어떻게 배분할지 관리하는 화면입니다.
           </p>
         </div>
 
         <div className="rounded-2xl border border-cyan-400/18 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-50">
-          현재 업체 기본 요율: <strong>{initialFeeRate}%</strong>
+          현재 기본 요율: <strong>{initialFeeRate}%</strong>
+          {!canManageFeeRates ? (
+            <span className="ml-2 text-cyan-100/70">읽기 전용</span>
+          ) : null}
         </div>
       </div>
 
@@ -248,7 +213,7 @@ export function FeeRateSettingsBoard({
                 setSearch(event.target.value);
                 setPage(1);
               }}
-              placeholder="업체(도메인), 상위총판, 총판 검색"
+              placeholder="총판, 상위총판 검색"
               className="h-12 w-full rounded-2xl border border-white/10 bg-white/[0.035] px-4 text-sm text-white outline-none transition placeholder:text-white/34 focus:border-cyan-300/40"
             />
           </label>
@@ -258,8 +223,8 @@ export function FeeRateSettingsBoard({
               <thead className="bg-black/52 text-white/72">
                 <tr>
                   {[
-                    "업체(도메인)",
-                    "업체 총 수수료",
+                    "총판",
+                    "총 수수료",
                     "상위총판",
                     "상위총판 요율",
                     "총판",
@@ -267,9 +232,9 @@ export function FeeRateSettingsBoard({
                     "잔여",
                     "수정일",
                     "관리",
-                  ].map((header) => (
+                  ].map((header, index) => (
                     <th
-                      key={header}
+                      key={`${header}-${index}`}
                       className="border-b border-white/8 px-4 py-4 text-center font-semibold"
                     >
                       {header}
@@ -303,6 +268,7 @@ export function FeeRateSettingsBoard({
                       <td className="px-4 py-4 text-center">
                         <RateInput
                           value={draft.totalRate}
+                          disabled={!canManageFeeRates}
                           onChange={(value) =>
                             updateDraftRate(row.id, "totalRate", value)
                           }
@@ -314,6 +280,7 @@ export function FeeRateSettingsBoard({
                       <td className="px-4 py-4 text-center">
                         <RateInput
                           value={draft.topDistributorRate}
+                          disabled={!canManageFeeRates}
                           onChange={(value) =>
                             updateDraftRate(row.id, "topDistributorRate", value)
                           }
@@ -323,6 +290,7 @@ export function FeeRateSettingsBoard({
                       <td className="px-4 py-4 text-center">
                         <RateInput
                           value={draft.distributorRate}
+                          disabled={!canManageFeeRates}
                           onChange={(value) =>
                             updateDraftRate(row.id, "distributorRate", value)
                           }
@@ -345,7 +313,7 @@ export function FeeRateSettingsBoard({
                             event.stopPropagation();
                             void saveRate(row);
                           }}
-                          disabled={!isChanged || savingId === row.id}
+                          disabled={!canManageFeeRates || !isChanged || savingId === row.id}
                           className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/34"
                         >
                           {savingId === row.id ? "저장 중" : "수정"}
@@ -387,9 +355,11 @@ export function FeeRateSettingsBoard({
 function RateInput({
   value,
   onChange,
+  disabled = false,
 }: {
   value: number;
   onChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="inline-flex items-center gap-2">
@@ -399,8 +369,9 @@ function RateInput({
         max="100"
         step="0.01"
         value={value}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
-        className="h-9 w-20 rounded-xl border border-white/10 bg-black/18 px-3 text-center text-sm font-semibold text-white outline-none focus:border-cyan-300/40"
+        className="h-9 w-20 rounded-xl border border-white/10 bg-black/18 px-3 text-center text-sm font-semibold text-white outline-none focus:border-cyan-300/40 disabled:cursor-not-allowed disabled:text-white/40"
       />
       <span className="font-semibold text-white/64">%</span>
     </div>

@@ -1,8 +1,13 @@
 import { redirect } from "next/navigation";
 
 import { AdminShell } from "@/components/admin-shell";
-import { DomainExchangesBoard } from "@/components/domain-exchanges-board";
+import {
+  DomainExchangesBoard,
+  fallbackDomainExchanges,
+} from "@/components/domain-exchanges-board";
 import { getSessionUser } from "@/lib/auth";
+import { getDomainExchangeRows } from "@/lib/domain-exchanges-repository";
+import { canProcessRequests } from "@/lib/permissions";
 
 export default async function DomainExchangesPage() {
   const user = await getSessionUser();
@@ -11,6 +16,8 @@ export default async function DomainExchangesPage() {
     redirect("/");
   }
 
+  const exchangeRows = await getDomainExchangeRows(fallbackDomainExchanges);
+
   return (
     <AdminShell
       user={user}
@@ -18,7 +25,10 @@ export default async function DomainExchangesPage() {
       badge="Domain Exchanges"
       helperText="도메인 기준 환전 요청을 확인하고 처리하는 화면입니다."
     >
-      <DomainExchangesBoard />
+      <DomainExchangesBoard
+        initialRows={exchangeRows}
+        canProcessExchanges={canProcessRequests(user)}
+      />
     </AdminShell>
   );
 }

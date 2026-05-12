@@ -3,16 +3,9 @@ import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin-shell";
 import { DomainSettlementBoard } from "@/components/domain-settlement-board";
 import { getSessionUser } from "@/lib/auth";
-import {
-  getDomainNameByCompany,
-  getFeeRateByCompanyFromSettings,
-} from "@/lib/charge-utils";
-import {
-  getDefaultReportDateRange,
-  getDomainSettlement,
-} from "@/lib/mock-report-service";
-import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
-import { getAdminSettingsFromCookie } from "@/lib/settings-cookie";
+import { getDefaultReportDateRange } from "@/lib/mock-report-service";
+import { getDomainSettlementForUser } from "@/lib/settlement-repository";
+import { getFeeRateSettingsForUser } from "@/lib/fee-rates-repository";
 
 export default async function DomainSettlementPage() {
   const user = await getSessionUser();
@@ -22,15 +15,14 @@ export default async function DomainSettlementPage() {
   }
 
   const defaultRange = getDefaultReportDateRange();
-  const state = await getMockChargeStateFromCookie();
-  const settings = await getAdminSettingsFromCookie();
-  const initialSettlement = getDomainSettlement(
-    user.companyName,
-    defaultRange.startDate,
-    defaultRange.endDate,
-    state,
-    settings,
-  );
+  const [initialSettlement, feeRateSettings] = await Promise.all([
+    getDomainSettlementForUser(
+      user,
+      defaultRange.startDate,
+      defaultRange.endDate,
+    ),
+    getFeeRateSettingsForUser(user),
+  ]);
 
   return (
     <AdminShell
@@ -40,11 +32,8 @@ export default async function DomainSettlementPage() {
       helperText="승인된 충전금액만 집계해서 날짜별 충전액과 수수료를 확인하는 화면입니다."
     >
       <DomainSettlementBoard
-        initialFeeRate={getFeeRateByCompanyFromSettings(
-          user.companyName,
-          settings,
-        )}
-        domainName={getDomainNameByCompany(user.companyName)}
+        initialFeeRate={feeRateSettings.feeRate}
+        domainName={initialSettlement.domainName}
         initialRows={initialSettlement.rows}
       />
     </AdminShell>

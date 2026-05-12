@@ -1,6 +1,8 @@
 -- Admin portal production schema draft.
 -- Target DB: PostgreSQL / Vercel Postgres / Neon.
 
+create extension if not exists pgcrypto;
+
 create type admin_role as enum (
   'MASTER',
   'ADMIN',
@@ -51,9 +53,19 @@ create table companies (
   updated_at timestamptz not null default now()
 );
 
+create table admin_company_mappings (
+  id uuid primary key default gen_random_uuid(),
+  admin_id uuid not null references admins(id) on delete cascade,
+  company_id uuid not null references companies(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (admin_id, company_id)
+);
+
 create table distributors (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references companies(id),
+  admin_id uuid references admins(id) on delete set null,
   parent_distributor_id uuid references distributors(id),
   name text not null,
   level text not null default 'DISTRIBUTOR',
@@ -260,6 +272,7 @@ create table admin_audit_logs (
 );
 
 create index admins_role_status_idx on admins (role, status);
+create unique index distributors_admin_id_idx on distributors (admin_id) where admin_id is not null;
 create index domains_company_idx on domains (company_id);
 create index domains_distributor_idx on domains (distributor_id);
 create index charge_requests_scope_idx on charge_requests (company_id, domain_id, status, requested_at);

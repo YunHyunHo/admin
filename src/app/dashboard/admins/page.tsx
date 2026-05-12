@@ -7,12 +7,17 @@ import {
   getPublicAdminAccounts,
 } from "@/lib/admin-accounts";
 import { getSessionUser } from "@/lib/auth";
+import { canManageMasterResources } from "@/lib/permissions";
 
 export default async function AdminsPage() {
   const user = await getSessionUser();
 
   if (!user) {
     redirect("/");
+  }
+
+  if (!canManageMasterResources(user)) {
+    redirect("/dashboard");
   }
 
   const [adminAccounts, managedCompanies] = await Promise.all([
@@ -25,12 +30,12 @@ export default async function AdminsPage() {
       user={user}
       activeItem="admins"
       badge="Admins"
-      helperText="도메인별 어드민 계정과 업체 연결 범위를 관리하는 화면입니다."
+      helperText="master가 하부계정을 만들고, 생성된 하부계정은 조직관리의 총판으로 표시됩니다."
     >
       <AdminsBoard
         initialAdmins={adminAccounts}
         managedCompanies={managedCompanies}
-        canManageAdmins={user.role === "MASTER"}
+        canManageAdmins={canManageMasterResources(user)}
       />
     </AdminShell>
   );

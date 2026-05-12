@@ -2,19 +2,10 @@
 
 import { useMemo, useState } from "react";
 
-type TransactionRow = {
-  id: string;
-  tradedAt: string;
-  buyerWallet: string;
-  coin: string;
-  quantity: number;
-  depositor: string;
-  amount: number;
-  status: "완료" | "대기";
-  bankInfo: string;
-};
+import { downloadCsv } from "@/lib/csv-export";
+import type { TransactionCreateRow } from "@/lib/transaction-create-types";
 
-const initialTransactions: TransactionRow[] = [
+export const fallbackTransactions: TransactionCreateRow[] = [
   {
     id: "TX-001",
     tradedAt: "02-08 23:30:12",
@@ -184,6 +175,10 @@ const initialTransactions: TransactionRow[] = [
 
 const rowsPerPage = 10;
 
+type TransactionCreateBoardProps = {
+  initialRows?: TransactionCreateRow[];
+};
+
 function formatKoreanWon(value: number) {
   return `${value.toLocaleString("ko-KR")} 원`;
 }
@@ -194,16 +189,18 @@ function dateToNumber(value: string) {
   return month * 100 + day;
 }
 
-export function TransactionCreateBoard() {
+export function TransactionCreateBoard({
+  initialRows = fallbackTransactions,
+}: TransactionCreateBoardProps) {
   const [depositor, setDepositor] = useState("");
   const [amount, setAmount] = useState("");
   const [accountHolder, setAccountHolder] = useState("");
-  const [startDate, setStartDate] = useState("05-02");
-  const [endDate, setEndDate] = useState("05-03");
+  const [startDate, setStartDate] = useState("01-01");
+  const [endDate, setEndDate] = useState("12-31");
   const [page, setPage] = useState(1);
 
   const filteredRows = useMemo(() => {
-    return initialTransactions.filter((row) => {
+    return initialRows.filter((row) => {
       const matchesDepositor = row.depositor.includes(depositor.trim());
       const matchesAmount = amount
         ? String(row.amount).includes(amount.replace(/[^\d]/g, ""))
@@ -215,7 +212,7 @@ export function TransactionCreateBoard() {
 
       return matchesDepositor && matchesAmount && matchesHolder && matchesDate;
     });
-  }, [accountHolder, amount, depositor, endDate, startDate]);
+  }, [accountHolder, amount, depositor, endDate, initialRows, startDate]);
 
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
   const pageRows = filteredRows.slice((page - 1) * rowsPerPage, page * rowsPerPage);
@@ -224,9 +221,26 @@ export function TransactionCreateBoard() {
     setDepositor("");
     setAmount("");
     setAccountHolder("");
-    setStartDate("05-02");
-    setEndDate("05-03");
+    setStartDate("01-01");
+    setEndDate("12-31");
     setPage(1);
+  }
+
+  function exportRows() {
+    downloadCsv(
+      "transaction-create.csv",
+      ["거래일자", "구매자지갑주소", "코인", "수량", "입금자명", "입금금액", "상태", "은행"],
+      filteredRows.map((row) => [
+        row.tradedAt,
+        row.buyerWallet,
+        row.coin,
+        row.quantity,
+        row.depositor,
+        row.amount,
+        row.status,
+        row.bankInfo,
+      ]),
+    );
   }
 
   return (
@@ -287,6 +301,8 @@ export function TransactionCreateBoard() {
           </button>
           <button
             type="button"
+            onClick={exportRows}
+            disabled={!filteredRows.length}
             className="h-12 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-500"
           >
             엑셀생성
@@ -319,29 +335,37 @@ export function TransactionCreateBoard() {
               </tr>
             </thead>
             <tbody>
-              {pageRows.map((row) => (
-                <tr
-                  key={row.id}
-                  className="border-b border-white/8 text-white/78 last:border-b-0"
-                >
-                  <td className="px-4 py-4 text-center">{row.tradedAt}</td>
-                  <td className="px-4 py-4 text-center font-mono text-xs">
-                    {row.buyerWallet}
+              {pageRows.length ? (
+                pageRows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className="border-b border-white/8 text-white/78 last:border-b-0"
+                  >
+                    <td className="px-4 py-4 text-center">{row.tradedAt}</td>
+                    <td className="px-4 py-4 text-center font-mono text-xs">
+                      {row.buyerWallet}
+                    </td>
+                    <td className="px-4 py-4 text-center font-semibold">
+                      {row.coin}
+                    </td>
+                    <td className="px-4 py-4 text-center">{row.quantity}</td>
+                    <td className="px-4 py-4 text-center font-semibold text-white">
+                      {row.depositor}
+                    </td>
+                    <td className="px-4 py-4 text-right font-semibold text-white">
+                      {formatKoreanWon(row.amount)}
+                    </td>
+                    <td className="px-4 py-4 text-center">{row.status}</td>
+                    <td className="px-4 py-4 text-center">{row.bankInfo}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-white/40">
+                    조건에 맞는 거래생성 내역이 없습니다.
                   </td>
-                  <td className="px-4 py-4 text-center font-semibold">
-                    {row.coin}
-                  </td>
-                  <td className="px-4 py-4 text-center">{row.quantity}</td>
-                  <td className="px-4 py-4 text-center font-semibold text-white">
-                    {row.depositor}
-                  </td>
-                  <td className="px-4 py-4 text-right font-semibold text-white">
-                    {formatKoreanWon(row.amount)}
-                  </td>
-                  <td className="px-4 py-4 text-center">{row.status}</td>
-                  <td className="px-4 py-4 text-center">{row.bankInfo}</td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
 

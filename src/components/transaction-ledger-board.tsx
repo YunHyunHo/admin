@@ -2,24 +2,10 @@
 
 import { useMemo, useState } from "react";
 
-type TransactionStatus = "승인" | "승인취소";
+import { downloadCsv } from "@/lib/csv-export";
+import type { LedgerRow } from "@/lib/transaction-ledger-types";
 
-type LedgerRow = {
-  id: string;
-  branch: string;
-  userId: string;
-  topDistributor: string;
-  distributor: string;
-  domain: string;
-  bankInfo: string;
-  depositor: string;
-  amount: number;
-  requestedAt: string;
-  completedAt: string;
-  status: TransactionStatus;
-};
-
-const ledgerRows: LedgerRow[] = [
+export const fallbackLedgerRows: LedgerRow[] = [
   {
     id: "338352730",
     branch: "본사",
@@ -234,6 +220,17 @@ const ledgerRows: LedgerRow[] = [
 
 const rowsPerPage = 10;
 
+type TransactionLedgerBoardProps = {
+  initialRows?: LedgerRow[];
+};
+
+function normalizeLedgerRows(rows: LedgerRow[]) {
+  return rows.map((row) => ({
+    ...row,
+    branch: row.distributor,
+  }));
+}
+
 function formatKoreanWon(value: number) {
   return `${value.toLocaleString("ko-KR")} 원`;
 }
@@ -244,18 +241,21 @@ function dateToNumber(value: string) {
   return month * 100 + day;
 }
 
-export function TransactionLedgerBoard() {
+export function TransactionLedgerBoard({
+  initialRows = fallbackLedgerRows,
+}: TransactionLedgerBoardProps) {
+  const rows = normalizeLedgerRows(initialRows);
   const [company, setCompany] = useState("업체 전체");
   const [transactionType, setTransactionType] = useState("충/환전 전체");
   const [status, setStatus] = useState("승인/거절 전체");
   const [depositor, setDepositor] = useState("");
   const [amount, setAmount] = useState("");
-  const [startDate, setStartDate] = useState("05-02");
-  const [endDate, setEndDate] = useState("05-03");
+  const [startDate, setStartDate] = useState("01-01");
+  const [endDate, setEndDate] = useState("12-31");
   const [page, setPage] = useState(1);
 
   const filteredRows = useMemo(() => {
-    return ledgerRows.filter((row) => {
+    return rows.filter((row) => {
       const requestedDate = dateToNumber(row.requestedAt.slice(0, 5));
       const matchesDate =
         requestedDate >= dateToNumber(startDate) &&
@@ -281,7 +281,7 @@ export function TransactionLedgerBoard() {
         matchesType
       );
     });
-  }, [amount, company, depositor, endDate, startDate, status, transactionType]);
+  }, [amount, company, depositor, endDate, rows, startDate, status, transactionType]);
 
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / rowsPerPage));
   const pageRows = filteredRows.slice((page - 1) * rowsPerPage, page * rowsPerPage);
@@ -292,9 +292,43 @@ export function TransactionLedgerBoard() {
     setStatus("승인/거절 전체");
     setDepositor("");
     setAmount("");
-    setStartDate("05-02");
-    setEndDate("05-03");
+    setStartDate("01-01");
+    setEndDate("12-31");
     setPage(1);
+  }
+
+  function exportRows() {
+    downloadCsv(
+      "transaction-ledger.csv",
+      [
+        "ID",
+        "본사",
+        "유저ID",
+        "상위총판",
+        "총판",
+        "도메인/url",
+        "은행",
+        "입금자",
+        "신청금액",
+        "신청시간",
+        "최초 완료시간",
+        "상태",
+      ],
+      filteredRows.map((row) => [
+        row.id,
+        row.branch,
+        row.userId,
+        row.topDistributor,
+        row.distributor,
+        row.domain,
+        row.bankInfo,
+        row.depositor,
+        row.amount,
+        row.requestedAt,
+        row.completedAt,
+        row.status,
+      ]),
+    );
   }
 
   return (
@@ -376,6 +410,8 @@ export function TransactionLedgerBoard() {
           </button>
           <button
             type="button"
+            onClick={exportRows}
+            disabled={!filteredRows.length}
             className="h-12 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-500"
           >
             엑셀생성
@@ -412,46 +448,41 @@ export function TransactionLedgerBoard() {
               </tr>
             </thead>
             <tbody>
-              {pageRows.map((row) => (
-                <tr
-                  key={row.id}
-                  className="border-b border-white/8 text-white/78 last:border-b-0"
-                >
-                  <td className="max-w-[92px] break-all px-3 py-3 text-center font-mono text-xs">
-                    {row.id}
-                  </td>
-                  <td className="px-4 py-3 text-center">{row.branch}</td>
-                  <td className="px-4 py-3 text-center">{row.userId}</td>
-                  <td className="px-4 py-3 text-center">{row.topDistributor}</td>
-                  <td className="px-4 py-3 text-center">{row.distributor}</td>
-                  <td className="px-4 py-3 text-center">{row.domain}</td>
-                  <td className="max-w-[280px] px-4 py-3 text-center leading-relaxed">
-                    {row.bankInfo}
-                  </td>
-                  <td className="px-4 py-3 text-center font-semibold text-white">
-                    {row.depositor}
-                  </td>
-                  <td className="px-4 py-3 text-right font-semibold text-white">
-                    {formatKoreanWon(row.amount)}
-                  </td>
-                  <td className="px-4 py-3 text-center">{row.requestedAt}</td>
-                  <td className="px-4 py-3 text-center">{row.completedAt}</td>
-                  <td className="px-4 py-3 text-center">
-                    <button
-                      type="button"
-                      className="mr-2 text-sm font-semibold text-sky-400 transition hover:text-sky-300"
-                    >
-                      승인
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-500"
-                    >
-                      승인취소
-                    </button>
+              {pageRows.length ? (
+                pageRows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className="border-b border-white/8 text-white/78 last:border-b-0"
+                  >
+                    <td className="max-w-[92px] break-all px-3 py-3 text-center font-mono text-xs">
+                      {row.id}
+                    </td>
+                    <td className="px-4 py-3 text-center">{row.branch}</td>
+                    <td className="px-4 py-3 text-center">{row.userId}</td>
+                    <td className="px-4 py-3 text-center">{row.topDistributor}</td>
+                    <td className="px-4 py-3 text-center">{row.distributor}</td>
+                    <td className="px-4 py-3 text-center">{row.domain}</td>
+                    <td className="max-w-[280px] px-4 py-3 text-center leading-relaxed">
+                      {row.bankInfo}
+                    </td>
+                    <td className="px-4 py-3 text-center font-semibold text-white">
+                      {row.depositor}
+                    </td>
+                    <td className="px-4 py-3 text-right font-semibold text-white">
+                      {formatKoreanWon(row.amount)}
+                    </td>
+                    <td className="px-4 py-3 text-center">{row.requestedAt}</td>
+                    <td className="px-4 py-3 text-center">{row.completedAt}</td>
+                    <td className="px-4 py-3 text-center">{row.status}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={12} className="px-4 py-10 text-center text-sm text-white/40">
+                    조건에 맞는 거래 내역이 없습니다.
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
 

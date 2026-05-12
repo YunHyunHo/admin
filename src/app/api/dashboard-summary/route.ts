@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 
 import { getSessionUser } from "@/lib/auth";
-import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
-import { getDashboardSummary } from "@/lib/mock-report-service";
-import { getAdminSettingsFromCookie } from "@/lib/settings-cookie";
+import { getDashboardSummaryForUser } from "@/lib/dashboard-summary-repository";
+
+export const runtime = "nodejs";
 
 export async function GET() {
   const user = await getSessionUser();
@@ -12,8 +12,5 @@ export async function GET() {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
 
-  const state = await getMockChargeStateFromCookie();
-  const settings = await getAdminSettingsFromCookie();
-
-  return NextResponse.json(getDashboardSummary(user.companyName, state, settings));
+  return NextResponse.json(await getDashboardSummaryForUser(user));
 }

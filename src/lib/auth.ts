@@ -6,9 +6,11 @@ import {
   getMasterAccount,
   type AdminAccountRecord,
 } from "@/lib/admin-accounts";
+import { verifyPassword } from "@/lib/password";
 
 const SESSION_COOKIE = "vendor_admin_session";
 const LOCAL_SESSION_SECRET = "local-dev-secret-change-me";
+const PLACEHOLDER_SESSION_SECRET = "replace-with-a-long-random-secret";
 
 export type SessionUser = Omit<AdminAccountRecord, "password"> & {
   username: string;
@@ -17,8 +19,13 @@ export type SessionUser = Omit<AdminAccountRecord, "password"> & {
 function getSessionSecret() {
   const secret = process.env.SESSION_SECRET ?? LOCAL_SESSION_SECRET;
 
-  if (process.env.NODE_ENV === "production" && secret === LOCAL_SESSION_SECRET) {
-    throw new Error("SESSION_SECRET 환경변수를 설정해주세요.");
+  if (
+    process.env.NODE_ENV === "production" &&
+    (secret === LOCAL_SESSION_SECRET ||
+      secret === PLACEHOLDER_SESSION_SECRET ||
+      secret.length < 32)
+  ) {
+    throw new Error("운영 환경에서는 32자 이상의 안전한 SESSION_SECRET을 설정해주세요.");
   }
 
   return secret;
@@ -70,13 +77,18 @@ function decodeSession(value: string | undefined): SessionUser | null {
 
 export async function findAccount(username: string, password: string) {
   const accounts = await getAllAdminAccounts();
-
-  return accounts.find(
+  const targetAccount = accounts.find(
     (account) =>
-      account.loginId === username.trim() &&
-      account.password === password &&
-      account.status === "ACTIVE",
+      account.loginId === username.trim() && account.status === "ACTIVE",
   );
+
+  if (!targetAccount) {
+    return undefined;
+  }
+
+  return (await verifyPassword(password, targetAccount.password))
+    ? targetAccount
+    : undefined;
 }
 
 export async function createSession(user: SessionUser) {

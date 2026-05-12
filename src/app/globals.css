@@ -25,3 +25,176 @@ body {
   color: var(--foreground);
   font-family: "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
 }
+
+html[data-theme="light"] .admin-app-shell {
+  background: #eef3f8 !important;
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] .admin-app-shell > div {
+  background: linear-gradient(180deg, #f8fafc 0%, #e8eef6 100%) !important;
+}
+
+html[data-theme="light"] .admin-app-shell aside,
+html[data-theme="light"] .admin-app-shell header,
+html[data-theme="light"] .admin-app-shell section,
+html[data-theme="light"] .admin-app-shell article,
+html[data-theme="light"] .admin-app-shell details,
+html[data-theme="light"] .admin-app-shell table,
+html[data-theme="light"] .admin-app-shell tbody,
+html[data-theme="light"] .admin-app-shell thead,
+html[data-theme="light"] .admin-app-shell tr,
+html[data-theme="light"] .admin-app-shell div[class*="bg-["],
+html[data-theme="light"] .admin-app-shell div[class*="bg-black"],
+html[data-theme="light"] .admin-app-shell div[class*="bg-white/"],
+html[data-theme="light"] .admin-app-shell div[class*="bg-white\\["] {
+  border-color: rgba(15, 23, 42, 0.12) !important;
+}
+
+html[data-theme="light"] .admin-app-shell aside {
+  background: linear-gradient(180deg, #ffffff 0%, #eef3f8 100%) !important;
+}
+
+html[data-theme="light"] .admin-app-shell header,
+html[data-theme="light"] .admin-app-shell [class*="bg-black/"],
+html[data-theme="light"] .admin-app-shell [class*="bg-white/"],
+html[data-theme="light"] .admin-app-shell [class*="bg-white\\["],
+html[data-theme="light"] .admin-app-shell [class*="bg-\\["] {
+  background: rgba(255, 255, 255, 0.72) !important;
+}
+
+html[data-theme="light"] .admin-app-shell section[class*="rounded"],
+html[data-theme="light"] .admin-app-shell article,
+html[data-theme="light"] .admin-app-shell details,
+html[data-theme="light"] .admin-app-shell .overflow-x-auto,
+html[data-theme="light"] .admin-app-shell table {
+  background-color: rgba(255, 255, 255, 0.82) !important;
+  box-shadow: 0 18px 60px rgba(15, 23, 42, 0.08) !important;
+}
+
+html[data-theme="light"] .admin-app-shell thead {
+  background: #dbe7f3 !important;
+}
+
+html[data-theme="light"] .admin-app-shell tr {
+  background-color: rgba(255, 255, 255, 0.58) !important;
+}
+
+html[data-theme="light"] .admin-app-shell tr:hover {
+  background-color: rgba(226, 232, 240, 0.8) !important;
+}
+
+html[data-theme="light"] .admin-app-shell [class*="text-white"],
+html[data-theme="light"] .admin-app-shell [class*="text-cyan"],
+html[data-theme="light"] .admin-app-shell [class*="text-emerald"],
+html[data-theme="light"] .admin-app-shell [class*="text-amber"] {
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] .admin-app-shell [class*="text-slate-950"],
+html[data-theme="light"] .admin-app-shell [class*="text-slate-900"] {
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] .admin-app-shell input,
+html[data-theme="light"] .admin-app-shell select,
+html[data-theme="light"] .admin-app-shell textarea {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(15, 23, 42, 0.16) !important;
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] .admin-app-shell input::placeholder,
+html[data-theme="light"] .admin-app-shell textarea::placeholder {
+  color: rgba(71, 85, 105, 0.62) !important;
+}
+
+html[data-theme="light"] .admin-app-shell button {
+  border-color: rgba(15, 23, 42, 0.14) !important;
+}
+
+html[data-theme="light"] .admin-app-shell .theme-toggle {
+  background: #0f172a !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="light"] .admin-app-shell .theme-toggle span {
+  color: #ffffff !important;
+}
+
+html[data-theme="light"] .admin-app-shell :is(section, aside, article, details)[class*="bg-["],
+html[data-theme="light"] .admin-app-shell :is(section, aside, article, details)[class*="bg-black"],
+html[data-theme="light"] .admin-app-shell :is(section, aside, article, details)[class*="bg-white/"] {
+  background: rgba(255, 255, 255, 0.94) !important;
+  background-image: none !important;
+  border-color: rgba(15, 23, 42, 0.12) !important;
+  color: #0f172a !important;
+  box-shadow: 0 18px 60px rgba(15, 23, 42, 0.08) !important;
+}
+
+html[data-theme="light"] .admin-app-shell :is(div, label)[class*="bg-["],
+html[data-theme="light"] .admin-app-shell :is(div, label)[class*="bg-black/"],
+html[data-theme="light"] .admin-app-shell :is(div, label)[class*="bg-white/"] {
+  background: rgba(255, 255, 255, 0.72) !important;
+  background-image: none !important;
+  border-color: rgba(15, 23, 42, 0.12) !important;
+}
+
+html[data-theme="light"] .admin-app-shell .overflow-x-auto {
+  background: #ffffff !important;
+  background-image: none !important;
+  border-color: rgba(15, 23, 42, 0.12) !important;
+}
+
+html[data-theme="light"] .admin-app-shell table {
+  background: #ffffff !important;
+  background-image: none !important;
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] .admin-app-shell thead {
+  background: #e7eef7 !important;
+  background-image: none !important;
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] .admin-app-shell tbody,
+html[data-theme="light"] .admin-app-shell tr {
+  background: #ffffff !important;
+  background-image: none !important;
+}
+
+html[data-theme="light"] .admin-app-shell th,
+html[data-theme="light"] .admin-app-shell td {
+  border-color: rgba(15, 23, 42, 0.1) !important;
+  color: #0f172a !important;
+}
+
+html[data-theme="light"] .admin-app-shell aside,
+html[data-theme="light"] .admin-app-shell header,
+html[data-theme="light"] .admin-app-shell section,
+html[data-theme="light"] .admin-app-shell article,
+html[data-theme="light"] .admin-app-shell details {
+  background: rgba(255, 255, 255, 0.94) !important;
+  background-image: none !important;
+  border-color: rgba(15, 23, 42, 0.12) !important;
+  color: #0f172a !important;
+  box-shadow: 0 18px 60px rgba(15, 23, 42, 0.08) !important;
+}
+
+html[data-theme="light"] .admin-app-shell div[class*="bg-["],
+html[data-theme="light"] .admin-app-shell div[class*="bg-black"],
+html[data-theme="light"] .admin-app-shell div[class*="bg-white/"],
+html[data-theme="light"] .admin-app-shell label[class*="bg-["],
+html[data-theme="light"] .admin-app-shell label[class*="bg-black"],
+html[data-theme="light"] .admin-app-shell label[class*="bg-white/"] {
+  background: rgba(255, 255, 255, 0.78) !important;
+  background-image: none !important;
+  border-color: rgba(15, 23, 42, 0.12) !important;
+}
+
+html[data-theme="light"] .admin-app-shell header,
+html[data-theme="light"] .admin-app-shell aside {
+  background: #ffffff !important;
+  background-image: none !important;
+}

@@ -37,9 +37,6 @@ export function AdminsBoard({
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [companyModalAdmin, setCompanyModalAdmin] = useState<AdminRow | null>(
-    null,
-  );
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([
     managedCompanies[0],
   ]);
@@ -72,14 +69,6 @@ export function AdminsBoard({
     (page - 1) * rowsPerPage,
     page * rowsPerPage,
   );
-
-  function toggleCompany(company: string) {
-    setSelectedCompanies((current) =>
-      current.includes(company)
-        ? current.filter((item) => item !== company)
-        : [...current, company],
-    );
-  }
 
   function applyAccountResponse(data: {
     accounts: PublicAdminAccount[];
@@ -220,33 +209,6 @@ export function AdminsBoard({
     }
   }
 
-  async function handleSaveCompanies() {
-    if (!canManageAdmins) {
-      setMessage("마스터 계정만 관리업체를 지정할 수 있습니다.");
-      return;
-    }
-
-    if (!companyModalAdmin) {
-      return;
-    }
-
-    setProcessingAdminId(companyModalAdmin.id);
-
-    try {
-      const data = await requestAdminAccount("PATCH", {
-        id: companyModalAdmin.id,
-        action: "set-companies",
-        managedCompanies: selectedCompanies,
-      });
-      setMessage(data.message ?? "관리업체를 수정했습니다.");
-      setCompanyModalAdmin(null);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "업체 지정에 실패했습니다.");
-    } finally {
-      setProcessingAdminId(null);
-    }
-  }
-
   return (
     <section className="relative rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,_rgba(18,18,18,0.95)_0%,_rgba(14,14,16,0.98)_100%)] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.34)] sm:p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -283,7 +245,7 @@ export function AdminsBoard({
 
       <div className="mt-4 overflow-hidden border border-white/24 bg-black/10">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1280px] border-collapse text-sm">
+          <table className="w-full min-w-[1080px] border-collapse text-sm">
             <thead className="bg-black/72 text-white">
               <tr>
                 {[
@@ -291,9 +253,7 @@ export function AdminsBoard({
                   "닉네임",
                   "아이디",
                   "권한",
-                  "관리업체",
                   "상태",
-                  "업체선택",
                   "최근 로그인",
                   "가입일",
                   "삭제",
@@ -326,11 +286,6 @@ export function AdminsBoard({
                     {admin.role}
                   </td>
                   <td className="border border-white/18 px-4 py-4 text-center">
-                    {admin.managedCompanies.length
-                      ? admin.managedCompanies.join(", ")
-                      : "-"}
-                  </td>
-                  <td className="border border-white/18 px-4 py-4 text-center">
                     <span className="mr-2 font-semibold text-sky-400">
                       {admin.status === "ACTIVE" ? "사용중" : "중지"}
                     </span>
@@ -349,19 +304,6 @@ export function AdminsBoard({
                         : admin.status === "ACTIVE"
                           ? "중지"
                           : "사용"}
-                    </button>
-                  </td>
-                  <td className="border border-white/18 px-4 py-4 text-center">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCompanyModalAdmin(admin);
-                        setSelectedCompanies(admin.managedCompanies);
-                      }}
-                      disabled={!canManageAdmins}
-                      className="rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/34"
-                    >
-                      업체설정
                     </button>
                   </td>
                   <td className="border border-white/18 px-4 py-4 text-center">
@@ -456,27 +398,6 @@ export function AdminsBoard({
                 placeholder="비밀번호 확인"
                 className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
               />
-              <div className="rounded border border-slate-200 p-4">
-                <p className="mb-3 text-sm font-semibold text-slate-800">
-                  관리업체 선택
-                </p>
-                <div className="grid gap-3">
-                  {managedCompanies.map((company) => (
-                    <label
-                      key={company}
-                      className="flex cursor-pointer items-center gap-3 text-sm text-slate-900"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedCompanies.includes(company)}
-                        onChange={() => toggleCompany(company)}
-                        className="h-5 w-5 accent-teal-600"
-                      />
-                      <span>{company}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
             </div>
 
             <div className="mt-12 flex justify-end gap-3">
@@ -500,52 +421,6 @@ export function AdminsBoard({
         </div>
       ) : null}
 
-      {companyModalAdmin ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/72 px-4">
-          <div className="flex max-h-[78vh] w-full max-w-[430px] flex-col rounded bg-white p-6 text-slate-950 shadow-2xl">
-            <h3 className="text-xl font-semibold tracking-[-0.04em]">
-              어드민 관리업체 지정
-            </h3>
-            <p className="mt-2 text-xs text-slate-500">
-              {companyModalAdmin.nickname} / {companyModalAdmin.loginId}
-            </p>
-
-            <div className="mt-6 flex-1 space-y-4 overflow-y-auto pr-2">
-              {managedCompanies.map((company) => (
-                <label
-                  key={company}
-                  className="flex cursor-pointer items-center gap-3 text-sm text-slate-900"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedCompanies.includes(company)}
-                    onChange={() => toggleCompany(company)}
-                    className="h-5 w-5 accent-teal-600"
-                  />
-                  <span>{company}</span>
-                </label>
-              ))}
-            </div>
-
-            <div className="mt-8 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={handleSaveCompanies}
-                className="rounded bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
-              >
-                지정
-              </button>
-              <button
-                type="button"
-                onClick={() => setCompanyModalAdmin(null)}
-                className="rounded bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
-              >
-                취소
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </section>
   );
 }

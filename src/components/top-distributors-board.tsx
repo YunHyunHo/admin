@@ -13,7 +13,6 @@ type TopDistributor = {
   distributorsCount: number;
   agenciesCount: number;
   childTopDistributorsCount: number;
-  managedCompaniesCount: number;
   balance: number;
   createdAt: string;
   password: string;
@@ -38,12 +37,11 @@ function toTopDistributorRows(accounts: AdminAccountRecord[]): TopDistributor[] 
       id: account.id,
       manager: account.nickname,
       loginId: account.loginId,
-      branch: "본사",
-      name: account.companyName,
+      branch: account.nickname,
+      name: account.nickname,
       distributorsCount: childAccounts.length,
       agenciesCount: 0,
       childTopDistributorsCount: 0,
-      managedCompaniesCount: account.managedCompanies.length,
       balance: 0,
       createdAt: account.createdAt,
       password: account.password,
@@ -79,7 +77,7 @@ export function TopDistributorsBoard({
             상위총판 리스트
           </h2>
           <p className="mt-2 text-sm leading-6 text-white/52">
-            상위총판 계정, 하위총판 수, 관련 업체, 보유액을 확인하고 관리하는 화면입니다.
+            상위총판은 별도 생성하지 않고 master 계정을 기준으로 표시합니다.
           </p>
         </div>
 
@@ -90,7 +88,7 @@ export function TopDistributorsBoard({
 
       <div className="p-5 sm:p-6">
         <div className="min-h-[620px] overflow-x-auto rounded-[26px] border border-white/8 bg-black/18">
-          <table className="w-full min-w-[1220px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[1120px] border-collapse text-left text-sm">
             <thead className="bg-black/52 text-white/72">
               <tr>
                 {[
@@ -102,7 +100,6 @@ export function TopDistributorsBoard({
                   "총판",
                   "대리점",
                   "하위총판",
-                  "관리업체",
                   "보유액",
                   "생성일",
                   "삭제",
@@ -159,9 +156,6 @@ export function TopDistributorsBoard({
                   </td>
                   <td className="px-4 py-4 text-center">
                     {row.childTopDistributorsCount}개
-                  </td>
-                  <td className="px-4 py-4 text-center">
-                    {row.managedCompaniesCount}개
                   </td>
                   <td className="px-4 py-4 text-right font-semibold text-white">
                     {formatKoreanWon(row.balance)}

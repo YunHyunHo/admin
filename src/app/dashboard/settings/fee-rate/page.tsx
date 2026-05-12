@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin-shell";
 import { FeeRateSettingsBoard } from "@/components/fee-rate-settings-board";
 import { getSessionUser } from "@/lib/auth";
-import { getFeeRateByCompanyFromSettings } from "@/lib/charge-utils";
-import { getAdminSettingsFromCookie } from "@/lib/settings-cookie";
+import { getFeeRateSettingsForUser } from "@/lib/fee-rates-repository";
+import { canManageMasterResources } from "@/lib/permissions";
 
 export default async function FeeRateSettingsPage() {
   const user = await getSessionUser();
@@ -13,7 +13,11 @@ export default async function FeeRateSettingsPage() {
     redirect("/");
   }
 
-  const settings = await getAdminSettingsFromCookie();
+  if (!canManageMasterResources(user)) {
+    redirect("/dashboard");
+  }
+
+  const feeRateSettings = await getFeeRateSettingsForUser(user);
 
   return (
     <AdminShell
@@ -23,8 +27,10 @@ export default async function FeeRateSettingsPage() {
       helperText="업체별 수수료 요율을 수정하고 정산 계산에 반영합니다."
     >
       <FeeRateSettingsBoard
-        companyName={user.companyName}
-        initialFeeRate={getFeeRateByCompanyFromSettings(user.companyName, settings)}
+        companyName={feeRateSettings.companyName}
+        initialFeeRate={feeRateSettings.feeRate}
+        initialRows={feeRateSettings.rows}
+        canManageFeeRates={canManageMasterResources(user)}
       />
     </AdminShell>
   );

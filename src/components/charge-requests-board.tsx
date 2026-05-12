@@ -10,6 +10,8 @@ type ChargeRequestsBoardProps = {
   initialPendingRequests: PendingRequest[];
   initialApprovedRequests: ProcessedRequest[];
   initialRejectedRequests: ProcessedRequest[];
+  canProcessCharges?: boolean;
+  isDatabaseBacked?: boolean;
 };
 
 type ChargeRequestsResponse = {
@@ -92,6 +94,8 @@ export function ChargeRequestsBoard({
   initialPendingRequests,
   initialApprovedRequests,
   initialRejectedRequests,
+  canProcessCharges = true,
+  isDatabaseBacked = false,
 }: ChargeRequestsBoardProps) {
   const [pendingRequests, setPendingRequests] = useState(initialPendingRequests);
   const [approvedRequests, setApprovedRequests] = useState(initialApprovedRequests);
@@ -102,7 +106,11 @@ export function ChargeRequestsBoard({
   const [rejectedPage, setRejectedPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
-  const [message, setMessage] = useState("임시 서버 API로 테스트 중입니다.");
+  const [message, setMessage] = useState(
+    isDatabaseBacked
+      ? "Neon DB와 연결된 충전신청 데이터를 표시합니다."
+      : "로컬 테스트 데이터로 충전신청을 표시합니다.",
+  );
 
   function applyServerData(data: ChargeRequestsResponse) {
     setPendingRequests(data.pending);
@@ -122,7 +130,7 @@ export function ChargeRequestsBoard({
 
     if (!response.ok) {
       const error = (await response.json()) as { message?: string };
-      throw new Error(error.message ?? "임시 API 요청에 실패했습니다.");
+      throw new Error(error.message ?? "API 요청에 실패했습니다.");
     }
 
     return (await response.json()) as ChargeRequestsResponse;
@@ -130,11 +138,11 @@ export function ChargeRequestsBoard({
 
   async function refreshRequests() {
     setIsLoading(true);
-    setMessage("임시 서버 API에서 최신 데이터를 불러오는 중입니다.");
+    setMessage("최신 충전신청 데이터를 불러오는 중입니다.");
 
     try {
       applyServerData(await requestChargeData());
-      setMessage("임시 서버 API 데이터가 갱신되었습니다.");
+      setMessage("충전신청 데이터가 갱신되었습니다.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "데이터 갱신에 실패했습니다.");
     } finally {
@@ -144,11 +152,11 @@ export function ChargeRequestsBoard({
 
   async function resetRequests() {
     setIsLoading(true);
-    setMessage("임시 데이터를 초기화하는 중입니다.");
+    setMessage("로컬 테스트 데이터를 초기화하는 중입니다.");
 
     try {
       applyServerData(await requestChargeData({ action: "reset" }));
-      setMessage("임시 서버 데이터가 초기 상태로 복구되었습니다.");
+      setMessage("로컬 테스트 데이터가 초기 상태로 복구되었습니다.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "초기화에 실패했습니다.");
     } finally {
@@ -221,8 +229,7 @@ export function ChargeRequestsBoard({
               충전신청
             </h2>
             <p className="mt-3 text-sm leading-6 text-white/58">
-              임시 서버 API에서 업체별 충전신청을 받아오고 승인/거절 처리까지
-              테스트합니다.
+              업체별 충전신청을 확인하고 승인 또는 거절 상태로 처리합니다.
             </p>
           </section>
 
@@ -272,14 +279,16 @@ export function ChargeRequestsBoard({
                 >
                   새로고침
                 </button>
-                <button
-                  type="button"
-                  onClick={resetRequests}
-                  disabled={isLoading}
-                  className="rounded-2xl border border-amber-300/20 bg-amber-400/10 px-4 py-2 text-sm font-semibold text-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  임시데이터 초기화
-                </button>
+                {!isDatabaseBacked ? (
+                  <button
+                    type="button"
+                    onClick={resetRequests}
+                    disabled={isLoading}
+                    className="rounded-2xl border border-amber-300/20 bg-amber-400/10 px-4 py-2 text-sm font-semibold text-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    테스트 데이터 초기화
+                  </button>
+                ) : null}
               </div>
             </div>
 
@@ -326,24 +335,28 @@ export function ChargeRequestsBoard({
                         <td className="px-4 py-4">{row.amount}</td>
                         <td className="px-4 py-4">{row.requestedAt}</td>
                         <td className="px-4 py-4">
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => moveRequest(row.id, "승인")}
-                              disabled={processingId === row.id}
-                              className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              승인
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => moveRequest(row.id, "승인거절")}
-                              disabled={processingId === row.id}
-                              className="rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              거절
-                            </button>
-                          </div>
+                          {canProcessCharges ? (
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => moveRequest(row.id, "승인")}
+                                disabled={processingId === row.id}
+                                className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                승인
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => moveRequest(row.id, "승인거절")}
+                                disabled={processingId === row.id}
+                                className="rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                거절
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-white/34">-</span>
+                          )}
                         </td>
                       </tr>
                     ))

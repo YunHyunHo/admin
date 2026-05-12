@@ -3,9 +3,7 @@ import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin-shell";
 import { getSessionUser } from "@/lib/auth";
 import { formatKoreanWon } from "@/lib/charge-utils";
-import { getDashboardSummary } from "@/lib/mock-report-service";
-import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
-import { getAdminSettingsFromCookie } from "@/lib/settings-cookie";
+import { getDashboardSummaryForUser } from "@/lib/dashboard-summary-repository";
 
 const quickCards = [
   {
@@ -32,9 +30,7 @@ export default async function DashboardPage() {
     redirect("/");
   }
 
-  const state = await getMockChargeStateFromCookie();
-  const settings = await getAdminSettingsFromCookie();
-  const summary = getDashboardSummary(user.companyName, state, settings);
+  const summary = await getDashboardSummaryForUser(user);
 
   const topMetrics = [
     { label: "도메인", value: summary.domainName },
@@ -166,19 +162,19 @@ export default async function DashboardPage() {
                   <div className="rounded-2xl border border-white/8 bg-black/18 p-4">
                     <p className="text-sm text-white/44">실시간 매출</p>
                     <p className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-white">
-                      0
+                      {formatKoreanWon(summary.approvedChargeTotal)}
                     </p>
                   </div>
                   <div className="rounded-2xl border border-white/8 bg-black/18 p-4">
                     <p className="text-sm text-white/44">활성 회원</p>
                     <p className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-white">
-                      0
+                      {summary.approvedCount.toLocaleString("ko-KR")}
                     </p>
                   </div>
                   <div className="rounded-2xl border border-white/8 bg-black/18 p-4">
                     <p className="text-sm text-white/44">대기 요청</p>
                     <p className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-white">
-                      0
+                      {summary.pendingCount.toLocaleString("ko-KR")}
                     </p>
                   </div>
                 </div>
@@ -203,13 +199,13 @@ export default async function DashboardPage() {
                   <p className="text-sm font-medium text-white/84">다음 작업 추천</p>
                   <div className="mt-4 space-y-3 text-sm text-white/58">
                   <div className="rounded-2xl border border-white/8 bg-black/16 px-4 py-3">
-                      1. 대시보드 / 충전신청 / 도메인 정산 수치 기준 통일
+                      1. 대시보드 / 충전신청 / 도메인 정산 수치 기준 통일 완료
                   </div>
                   <div className="rounded-2xl border border-white/8 bg-black/16 px-4 py-3">
-                      2. 승인 / 거절 상태 업데이트 API 구현
+                      2. 승인 / 거절 상태 업데이트 API 구현 완료
                   </div>
                   <div className="rounded-2xl border border-white/8 bg-black/16 px-4 py-3">
-                      3. 업체별 실제 DB/정산 집계 연결
+                      3. 총판 환전/보유금 원장 연결
                   </div>
                 </div>
               </section>

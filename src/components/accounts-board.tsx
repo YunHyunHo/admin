@@ -2,24 +2,10 @@
 
 import { useState } from "react";
 
-type AccountRow = {
-  id: string;
-  branchName: string;
-  creator: string;
-  bankName: string;
-  holder: string;
-  accountNumber: string;
-  createdAt: string;
-  isActive: boolean;
-  linkedDomains: LinkedDomain[];
-};
-
-type LinkedDomain = {
-  id: string;
-  name: string;
-  address: string;
-  userCount: number;
-};
+import type {
+  AccountBranchOption,
+  AccountRow,
+} from "@/lib/bank-accounts-types";
 
 const bankOptions = [
   "국민은행",
@@ -32,7 +18,7 @@ const bankOptions = [
   "토스뱅크",
 ];
 
-const initialAccounts: AccountRow[] = [
+const fallbackAccounts: AccountRow[] = [
   {
     id: "ACC-001",
     branchName: "본사",
@@ -143,6 +129,12 @@ const initialAccounts: AccountRow[] = [
 
 const rowsPerPage = 10;
 
+type AccountsBoardProps = {
+  initialAccounts?: AccountRow[];
+  branchOptions?: AccountBranchOption[];
+  canManageAccounts?: boolean;
+};
+
 function getNowStamp() {
   const now = new Date();
   const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -154,7 +146,11 @@ function getNowStamp() {
   return `${month}-${date} ${hours}:${minutes}:${seconds}`;
 }
 
-export function AccountsBoard() {
+export function AccountsBoard({
+  initialAccounts = fallbackAccounts,
+  branchOptions = [],
+  canManageAccounts = true,
+}: AccountsBoardProps) {
   const [accounts, setAccounts] = useState(initialAccounts);
   const [page, setPage] = useState(1);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -167,9 +163,18 @@ export function AccountsBoard() {
     field: "holder" | "accountNumber";
   } | null>(null);
   const [branchName, setBranchName] = useState("");
+  const [branchId, setBranchId] = useState("");
   const [bankName, setBankName] = useState("");
   const [holder, setHolder] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
+  const [message, setMessage] = useState("");
+  const selectableBranches =
+    branchOptions.length > 0
+      ? branchOptions
+      : [
+          { id: "본사", name: "본사" },
+          { id: "본사 개발자테스트", name: "본사 개발자테스트" },
+        ];
   const pageCount = Math.max(1, Math.ceil(accounts.length / rowsPerPage));
   const visibleAccounts = accounts.slice(
     (page - 1) * rowsPerPage,
@@ -200,7 +205,48 @@ export function AccountsBoard() {
     );
   }
 
+  function applyAccountsResponse(payload: { accounts?: AccountRow[]; message?: string }) {
+    if (payload.accounts) {
+      setAccounts(payload.accounts);
+    }
+
+    if (payload.message) {
+      setMessage(payload.message);
+    }
+  }
+
+  async function persistAccountPatch(payload: {
+    id: string;
+    action: "update" | "toggle-active" | "delete";
+    holder?: string;
+    accountNumber?: string;
+    isActive?: boolean;
+  }) {
+    const response = await fetch("/api/bank-accounts", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = (await response.json()) as {
+      accounts?: AccountRow[];
+      message?: string;
+    };
+
+    if (!response.ok) {
+      setMessage(data.message ?? "계좌 수정 중 오류가 발생했습니다.");
+      return;
+    }
+
+    applyAccountsResponse(data);
+  }
+
   function toggleActive(id: string) {
+    const nextAccount = accounts.find((account) => account.id === id);
+
+    if (!nextAccount) {
+      return;
+    }
+
     setAccounts((current) =>
       current.map((account) =>
         account.id === id
@@ -208,11 +254,17 @@ export function AccountsBoard() {
           : account,
       ),
     );
+    void persistAccountPatch({
+      id,
+      action: "toggle-active",
+      isActive: !nextAccount.isActive,
+    });
   }
 
   function handleDelete(id: string) {
     setAccounts((current) => current.filter((account) => account.id !== id));
     setPage(1);
+    void persistAccountPatch({ id, action: "delete" });
   }
 
   function unlinkDomain(accountId: string, domainId: string) {
@@ -230,29 +282,75 @@ export function AccountsBoard() {
     );
   }
 
-  function handleCreate() {
+  function saveAccount(id: string) {
+    const account = accounts.find((current) => current.id === id);
+
+    if (!account) {
+      return;
+    }
+
+    void persistAccountPatch({
+      id,
+      action: "update",
+      holder: account.holder,
+      accountNumber: account.accountNumber,
+    });
+  }
+
+  async function handleCreate() {
     if (!branchName || !bankName || !holder || !accountNumber) {
       return;
     }
 
-    const nextAccount: AccountRow = {
-      id: `ACC-${Date.now().toString().slice(-6)}`,
-      branchName,
-      creator: "총관리자",
-      bankName,
-      holder,
-      accountNumber,
-      createdAt: getNowStamp(),
-      isActive: true,
-      linkedDomains: [],
+    const response = await fetch("/api/bank-accounts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        distributorId: branchId,
+        branchName,
+        bankName,
+        holder,
+        accountNumber,
+      }),
+    });
+    const data = (await response.json()) as {
+      accounts?: AccountRow[];
+      account?: AccountRow;
+      message?: string;
     };
 
-    setAccounts((current) => [nextAccount, ...current]);
+    if (!response.ok) {
+      setMessage(data.message ?? "계좌 생성 중 오류가 발생했습니다.");
+      return;
+    }
+
+    if (data.accounts) {
+      setAccounts(data.accounts);
+    } else if (data.account) {
+      setAccounts((current) => [data.account!, ...current]);
+    } else {
+      const nextAccount: AccountRow = {
+        id: `ACC-${Date.now().toString().slice(-6)}`,
+        branchName,
+        creator: "총관리자",
+        bankName,
+        holder,
+        accountNumber,
+        createdAt: getNowStamp(),
+        isActive: true,
+        linkedDomains: [],
+      };
+
+      setAccounts((current) => [nextAccount, ...current]);
+    }
+
     setPage(1);
     setBranchName("");
+    setBranchId("");
     setBankName("");
     setHolder("");
     setAccountNumber("");
+    setMessage(data.message ?? "계좌가 생성되었습니다.");
     setIsCreateModalOpen(false);
   }
 
@@ -274,6 +372,7 @@ export function AccountsBoard() {
         <button
           type="button"
           onClick={() => setIsCreateModalOpen(true)}
+          disabled={!canManageAccounts}
           className="rounded-2xl bg-fuchsia-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-fuchsia-400"
         >
           계좌생성
@@ -281,6 +380,12 @@ export function AccountsBoard() {
       </div>
 
       <div className="p-5 sm:p-6">
+        {message ? (
+          <div className="mb-4 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-100">
+            {message}
+          </div>
+        ) : null}
+
         <div className="min-h-[680px] overflow-x-auto rounded-[26px] border border-white/8 bg-black/18">
           <table className="w-full min-w-[1200px] border-collapse text-left text-sm">
             <thead className="bg-black/52 text-white/72">
@@ -322,6 +427,8 @@ export function AccountsBoard() {
                       onChange={(value) =>
                         updateAccount(account.id, "holder", value)
                       }
+                      onCommit={() => saveAccount(account.id)}
+                      canEdit={canManageAccounts}
                       editingField={editingField}
                       setEditingField={setEditingField}
                     />
@@ -334,6 +441,8 @@ export function AccountsBoard() {
                       onChange={(value) =>
                         updateAccount(account.id, "accountNumber", value)
                       }
+                      onCommit={() => saveAccount(account.id)}
+                      canEdit={canManageAccounts}
                       editingField={editingField}
                       setEditingField={setEditingField}
                     />
@@ -353,6 +462,7 @@ export function AccountsBoard() {
                       <button
                         type="button"
                         onClick={() => toggleActive(account.id)}
+                        disabled={!canManageAccounts}
                         className={`rounded-xl px-3 py-2 text-xs font-semibold text-white transition ${
                           account.isActive
                             ? "bg-red-600 hover:bg-red-500"
@@ -382,6 +492,7 @@ export function AccountsBoard() {
                     <button
                       type="button"
                       onClick={() => handleDelete(account.id)}
+                      disabled={!canManageAccounts}
                       className="rounded-xl bg-blue-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-600"
                     >
                       삭제
@@ -426,13 +537,23 @@ export function AccountsBoard() {
               <label className="block">
                 <span className="sr-only">본사 선택</span>
                 <select
-                  value={branchName}
-                  onChange={(event) => setBranchName(event.target.value)}
+                  value={branchId}
+                  onChange={(event) => {
+                    const selectedBranch = selectableBranches.find(
+                      (branch) => branch.id === event.target.value,
+                    );
+
+                    setBranchId(event.target.value);
+                    setBranchName(selectedBranch?.name ?? event.target.value);
+                  }}
                   className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-slate-500"
                 >
                   <option value="">본사 선택</option>
-                  <option value="본사">본사</option>
-                  <option value="본사 개발자테스트">본사 개발자테스트</option>
+                  {selectableBranches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.name}
+                    </option>
+                  ))}
                 </select>
               </label>
 
@@ -597,6 +718,8 @@ function EditableField({
   field,
   value,
   onChange,
+  onCommit,
+  canEdit,
   editingField,
   setEditingField,
 }: {
@@ -604,6 +727,8 @@ function EditableField({
   field: "holder" | "accountNumber";
   value: string;
   onChange: (value: string) => void;
+  onCommit: () => void;
+  canEdit: boolean;
   editingField: {
     accountId: string;
     field: "holder" | "accountNumber";
@@ -623,7 +748,7 @@ function EditableField({
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        disabled={!isEditing}
+        disabled={!isEditing || !canEdit}
         className={`h-10 min-w-[210px] flex-1 rounded-xl border px-3 text-sm outline-none transition ${
           isEditing
             ? "border-cyan-300 bg-white text-slate-950"
@@ -632,9 +757,14 @@ function EditableField({
       />
       <button
         type="button"
-        onClick={() =>
-          setEditingField(isEditing ? null : { accountId, field })
-        }
+        disabled={!canEdit}
+        onClick={() => {
+          if (isEditing) {
+            onCommit();
+          }
+
+          setEditingField(isEditing ? null : { accountId, field });
+        }}
         className="rounded-xl bg-blue-700 px-3 py-2 text-xs font-semibold text-white"
       >
         {isEditing ? "완료" : "수정"}

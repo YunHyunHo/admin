@@ -2,35 +2,12 @@
 
 import { useState } from "react";
 
-type DomainRow = {
-  id: string;
-  headquarters: string;
-  topDistributor: string;
-  distributor: string;
-  loginId: string;
-  companyName: string;
-  url: string;
-  bankName: string;
-  accountNumber: string;
-  accountHolder: string;
-  depositEnabled: boolean;
-  createdAt: string;
-  users: DomainUserRow[];
-};
+import type {
+  DomainDistributorOption,
+  DomainRow,
+} from "@/lib/domain-management-types";
 
-type DomainUserRow = {
-  id: string;
-  branch: string;
-  topDistributor: string;
-  distributor: string;
-  wallet: string;
-  totalDeposit: string;
-  domain: string;
-  username: string;
-  createdAt: string;
-};
-
-const domainRows: DomainRow[] = [
+export const fallbackDomainRows: DomainRow[] = [
   {
     id: "DOM-ONE-001",
     headquarters: "본사",
@@ -73,13 +50,45 @@ const domainRows: DomainRow[] = [
 
 const rowsPerPage = 10;
 
-export function DomainManagementBoard() {
+type DomainManagementBoardProps = {
+  initialRows?: DomainRow[];
+  distributorOptions?: DomainDistributorOption[];
+  canManageDomains?: boolean;
+};
+
+function normalizeDomainRows(rows: DomainRow[]) {
+  return rows.map((row) => ({
+    ...row,
+    headquarters: row.distributor,
+    users: row.users.map((user) => ({
+      ...user,
+      branch: user.distributor,
+    })),
+  }));
+}
+
+export function DomainManagementBoard({
+  initialRows = fallbackDomainRows,
+  distributorOptions = [],
+  canManageDomains = true,
+}: DomainManagementBoardProps) {
+  const [domainRows, setDomainRows] = useState(initialRows);
+  const rows = normalizeDomainRows(domainRows);
   const [selectedDomain, setSelectedDomain] = useState<DomainRow | null>(null);
   const [domainPage, setDomainPage] = useState(1);
   const [userPage, setUserPage] = useState(1);
+  const [message, setMessage] = useState("");
+  const [isDomainModalOpen, setIsDomainModalOpen] = useState(false);
+  const [editingDomain, setEditingDomain] = useState<DomainRow | null>(null);
+  const [domainName, setDomainName] = useState("");
+  const [distributorId, setDistributorId] = useState("");
+  const [distributorName, setDistributorName] = useState("");
 
-  const domainPageCount = Math.max(1, Math.ceil(domainRows.length / rowsPerPage));
-  const visibleDomainRows = domainRows.slice(
+  const domainPageCount = Math.max(
+    1,
+    Math.ceil(rows.length / rowsPerPage),
+  );
+  const visibleDomainRows = rows.slice(
     (domainPage - 1) * rowsPerPage,
     domainPage * rowsPerPage,
   );
@@ -89,6 +98,151 @@ export function DomainManagementBoard() {
     (userPage - 1) * rowsPerPage,
     userPage * rowsPerPage,
   );
+
+  function openCreateModal() {
+    setEditingDomain(null);
+    setDomainName("");
+    setDistributorId("");
+    setDistributorName("");
+    setIsDomainModalOpen(true);
+  }
+
+  function openEditModal(row: DomainRow) {
+    setEditingDomain(row);
+    setDomainName(row.url);
+    setDistributorId(row.distributorId ?? "");
+    setDistributorName(row.distributor);
+    setIsDomainModalOpen(true);
+  }
+
+  function closeDomainModal() {
+    setIsDomainModalOpen(false);
+    setEditingDomain(null);
+    setDomainName("");
+    setDistributorId("");
+    setDistributorName("");
+  }
+
+  function applyDomainResponse(payload: {
+    rows?: DomainRow[];
+    row?: DomainRow;
+    message?: string;
+  }) {
+    if (payload.rows) {
+      setDomainRows(payload.rows);
+    } else if (payload.row) {
+      setDomainRows((current) => [payload.row!, ...current]);
+    }
+
+    if (payload.message) {
+      setMessage(payload.message);
+    }
+  }
+
+  async function saveDomain() {
+    if (!domainName.trim() || (!distributorId && !distributorName)) {
+      setMessage("도메인명과 하부계정을 입력해주세요.");
+      return;
+    }
+
+    const selectedDistributor = distributorOptions.find(
+      (option) => option.id === distributorId,
+    );
+    const response = await fetch("/api/domains", {
+      method: editingDomain ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        editingDomain
+          ? {
+              id: editingDomain.id,
+              action: "update",
+              domainName,
+              distributorId,
+            }
+          : {
+              domainName,
+              distributorId,
+              distributorName: selectedDistributor?.name ?? distributorName,
+            },
+      ),
+    });
+    const data = (await response.json()) as {
+      rows?: DomainRow[];
+      row?: DomainRow;
+      message?: string;
+    };
+
+    if (!response.ok) {
+      setMessage(data.message ?? "도메인 저장 중 오류가 발생했습니다.");
+      return;
+    }
+
+    if (!data.rows && editingDomain) {
+      setDomainRows((current) =>
+        current.map((row) =>
+          row.id === editingDomain.id
+            ? {
+                ...row,
+                url: domainName,
+                companyName: domainName,
+                distributor: selectedDistributor?.name ?? distributorName,
+                headquarters: selectedDistributor?.name ?? distributorName,
+                distributorId: distributorId || row.distributorId,
+              }
+            : row,
+        ),
+      );
+    }
+
+    applyDomainResponse(data);
+    closeDomainModal();
+  }
+
+  async function toggleDomainStatus(row: DomainRow) {
+    const nextEnabled = !row.depositEnabled;
+
+    setDomainRows((current) =>
+      current.map((domain) =>
+        domain.id === row.id ? { ...domain, depositEnabled: nextEnabled } : domain,
+      ),
+    );
+
+    const response = await fetch("/api/domains", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: row.id,
+        action: "toggle-status",
+        depositEnabled: nextEnabled,
+      }),
+    });
+    const data = (await response.json()) as { rows?: DomainRow[]; message?: string };
+
+    if (!response.ok) {
+      setMessage(data.message ?? "도메인 상태 변경 중 오류가 발생했습니다.");
+      return;
+    }
+
+    applyDomainResponse(data);
+  }
+
+  async function deleteDomainRow(row: DomainRow) {
+    setDomainRows((current) => current.filter((domain) => domain.id !== row.id));
+
+    const response = await fetch("/api/domains", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: row.id, action: "delete" }),
+    });
+    const data = (await response.json()) as { rows?: DomainRow[]; message?: string };
+
+    if (!response.ok) {
+      setMessage(data.message ?? "도메인 삭제 중 오류가 발생했습니다.");
+      return;
+    }
+
+    applyDomainResponse(data);
+  }
 
   return (
     <section className="rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
@@ -106,6 +260,8 @@ export function DomainManagementBoard() {
         </div>
         <button
           type="button"
+          onClick={openCreateModal}
+          disabled={!canManageDomains}
           className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
         >
           도메인 추가
@@ -113,6 +269,12 @@ export function DomainManagementBoard() {
       </div>
 
       <div className="p-5 sm:p-6">
+        {message ? (
+          <div className="mb-4 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-100">
+            {message}
+          </div>
+        ) : null}
+
         <div className="overflow-x-auto rounded-[26px] border border-white/8 bg-black/18">
           <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
             <thead className="bg-black/48 text-white/72">
@@ -192,18 +354,33 @@ export function DomainManagementBoard() {
                   </td>
                   <td className="px-4 py-5">
                     <div className="flex justify-center gap-2">
-                      <button
-                        type="button"
-                        className="rounded-xl bg-cyan-500/18 px-3 py-2 text-xs font-semibold text-cyan-100"
-                      >
-                        수정
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded-xl bg-red-500/18 px-3 py-2 text-xs font-semibold text-red-100"
-                      >
-                        삭제
-                      </button>
+                      {canManageDomains ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => toggleDomainStatus(row)}
+                            className="rounded-xl bg-white/8 px-3 py-2 text-xs font-semibold text-white/70"
+                          >
+                            {row.depositEnabled ? "중지" : "허용"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(row)}
+                            className="rounded-xl bg-cyan-500/18 px-3 py-2 text-xs font-semibold text-cyan-100"
+                          >
+                            수정
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteDomainRow(row)}
+                            className="rounded-xl bg-red-500/18 px-3 py-2 text-xs font-semibold text-red-100"
+                          >
+                            삭제
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-white/34">-</span>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -211,7 +388,7 @@ export function DomainManagementBoard() {
             </tbody>
           </table>
 
-          {domainRows.length > rowsPerPage ? (
+          {rows.length > rowsPerPage ? (
             <div className="flex items-center justify-center gap-2 border-t border-white/8 px-4 py-5">
               {Array.from({ length: domainPageCount }, (_, index) => index + 1).map(
                 (pageNumber) => (
@@ -233,10 +410,84 @@ export function DomainManagementBoard() {
           ) : null}
         </div>
 
-        <div className="mt-5 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-4 text-sm leading-6 text-white/52">
-          DB 연결 후에는 이 도메인 리스트에서 `도메인`, `도메인유저`, `계좌관리`, `알림관리`를 이어서 처리하는 구조로 확장하면 됩니다.
-        </div>
+        {!rows.length ? (
+          <div className="mt-5 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-4 text-sm leading-6 text-white/52">
+            등록된 도메인이 없습니다.
+          </div>
+        ) : null}
       </div>
+
+      {isDomainModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-[460px] rounded-[28px] border border-white/10 bg-white p-6 text-slate-950 shadow-[0_28px_120px_rgba(0,0,0,0.58)]">
+            <h3 className="text-xl font-semibold tracking-[-0.03em]">
+              {editingDomain ? "도메인 수정" : "도메인 추가"}
+            </h3>
+
+            <div className="mt-7 space-y-4">
+              <label className="block">
+                <span className="sr-only">하부계정 선택</span>
+                {distributorOptions.length ? (
+                  <select
+                    value={distributorId}
+                    onChange={(event) => {
+                      const selected = distributorOptions.find(
+                        (option) => option.id === event.target.value,
+                      );
+
+                      setDistributorId(event.target.value);
+                      setDistributorName(selected?.name ?? "");
+                    }}
+                    className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-slate-500"
+                  >
+                    <option value="">하부계정 선택</option>
+                    {distributorOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    value={distributorName}
+                    onChange={(event) => setDistributorName(event.target.value)}
+                    placeholder="하부계정 닉네임"
+                    className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
+                  />
+                )}
+              </label>
+
+              <label className="block">
+                <span className="sr-only">도메인명</span>
+                <input
+                  value={domainName}
+                  onChange={(event) => setDomainName(event.target.value)}
+                  placeholder="도메인명 또는 URL"
+                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
+                />
+              </label>
+            </div>
+
+            <div className="mt-10 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={saveDomain}
+                disabled={!domainName || (!distributorId && !distributorName)}
+                className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                저장
+              </button>
+              <button
+                type="button"
+                onClick={closeDomainModal}
+                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {selectedDomain ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">

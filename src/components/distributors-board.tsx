@@ -13,7 +13,6 @@ type Distributor = {
   name: string;
   agenciesCount: number;
   childDistributorsCount: number;
-  managedCompaniesCount: number;
   balance: number;
   createdAt: string;
   password: string;
@@ -31,7 +30,7 @@ type DistributorsBoardProps = {
 
 function toDistributorRows(accounts: AdminAccountRecord[]): Distributor[] {
   const masterAccount = accounts.find((account) => account.role === "MASTER");
-  const topDistributor = masterAccount?.companyName ?? "전체관리";
+  const masterName = masterAccount?.nickname ?? "마스터 관리자";
 
   return accounts
     .filter((account) => account.role !== "MASTER")
@@ -39,12 +38,11 @@ function toDistributorRows(accounts: AdminAccountRecord[]): Distributor[] {
       id: account.id,
       manager: account.nickname,
       loginId: account.loginId,
-      branch: "본사",
-      topDistributor,
+      branch: account.nickname,
+      topDistributor: masterName,
       name: account.nickname,
       agenciesCount: 0,
       childDistributorsCount: 0,
-      managedCompaniesCount: account.managedCompanies.length,
       balance: 0,
       createdAt: account.createdAt,
       password: account.password,
@@ -78,7 +76,7 @@ export function DistributorsBoard({ adminAccounts }: DistributorsBoardProps) {
             총판 리스트
           </h2>
           <p className="mt-2 text-sm leading-6 text-white/52">
-            총판 계정, 연결 상위총판, 하위총판, 관련 업체, 보유액을 확인하고 관리하는 화면입니다.
+            어드민 리스트에서 생성한 하부계정을 총판 계정으로 표시합니다.
           </p>
         </div>
 
@@ -95,7 +93,7 @@ export function DistributorsBoard({ adminAccounts }: DistributorsBoardProps) {
 
       <div className="p-5 sm:p-6">
         <div className="min-h-[620px] overflow-x-auto rounded-[26px] border border-white/8 bg-black/18">
-          <table className="w-full min-w-[1220px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[1120px] border-collapse text-left text-sm">
             <thead className="bg-black/52 text-white/72">
               <tr>
                 {[
@@ -107,7 +105,6 @@ export function DistributorsBoard({ adminAccounts }: DistributorsBoardProps) {
                   "총판",
                   "대리점",
                   "하위총판",
-                  "관리업체",
                   "보유액",
                   "생성일",
                   "삭제",
@@ -162,9 +159,6 @@ export function DistributorsBoard({ adminAccounts }: DistributorsBoardProps) {
                   </td>
                   <td className="px-4 py-4 text-center">
                     {row.childDistributorsCount}개
-                  </td>
-                  <td className="px-4 py-4 text-center">
-                    {row.managedCompaniesCount}개
                   </td>
                   <td className="px-4 py-4 text-right font-semibold text-white">
                     {formatKoreanWon(row.balance)}

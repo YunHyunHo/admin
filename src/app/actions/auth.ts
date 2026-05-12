@@ -8,6 +8,7 @@ import {
   findAccount,
   type SessionUser,
 } from "@/lib/auth";
+import { recordAdminLogin } from "@/lib/admin-accounts";
 
 export type LoginFormState = {
   error?: string;
@@ -51,6 +52,7 @@ export async function loginAction(
     updatedAt: account.updatedAt,
   };
 
+  await recordAdminLogin(account.loginId);
   await createSession(sessionUser);
   redirect("/dashboard");
 }

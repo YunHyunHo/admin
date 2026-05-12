@@ -1,0 +1,478 @@
+import { NextResponse } from "next/server";
+
+import {
+  formatKoreanWon,
+  type PendingRequest,
+  type ProcessedRequest,
+} from "@/lib/charge-utils";
+import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
+import {
+  getDefaultChargeRequestState,
+  getChargeRequestsByCompany,
+  processChargeRequest,
+  type ChargeRequestState,
+} from "@/lib/mock-api-store";
+import {
+  getMockChargeStateFromCookie,
+  setMockChargeStateCookie,
+} from "@/lib/mock-state-cookie";
+import type { SessionUser } from "@/lib/auth";
+
+type ChargeRequestRow = {
+  id: string;
+  user_uid: string;
+  bank_name: string | null;
+  account_number: string | null;
+  depositor: string | null;
+  amount: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "COMPLETED" | "CANCELED";
+  requested_at: Date | string;
+  processed_at: Date | string | null;
+  company_name: string;
+  domain_name: string;
+  master_name: string | null;
+  distributor_name: string | null;
+};
+
+type CreateChargeRequestInput = {
+  externalId?: string;
+  userId: string;
+  amount: number;
+  depositor?: string;
+  bankName?: string;
+  accountNumber?: string;
+  domainName?: string;
+  rawPayload?: unknown;
+};
+
+export type ChargeRequestsResponse = {
+  pending: PendingRequest[];
+  approved: ProcessedRequest[];
+  rejected: ProcessedRequest[];
+};
+
+function formatStamp(value: Date | string | null) {
+  if (!value) {
+    return "-";
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const seconds = String(date.getSeconds()).padStart(2, "0");
+
+  return `${month}-${day} ${hours}:${minutes}:${seconds}`;
+}
+
+function toPendingRequest(row: ChargeRequestRow): PendingRequest {
+  return {
+    id: row.id,
+    branch: row.distributor_name ?? "-",
+    userId: row.user_uid,
+    topAgent: row.master_name ?? "마스터 관리자",
+    subAgent: row.distributor_name ?? "-",
+    domain: row.domain_name,
+    bankName: row.bank_name ?? "-",
+    accountNumber: row.account_number ?? "-",
+    depositor: row.depositor ?? "-",
+    amount: formatKoreanWon(Number(row.amount)),
+    requestedAt: formatStamp(row.requested_at),
+  };
+}
+
+function toProcessedRequest(row: ChargeRequestRow): ProcessedRequest {
+  return {
+    ...toPendingRequest(row),
+    completedAt: formatStamp(row.processed_at),
+    status: row.status === "APPROVED" ? "승인" : "승인거절",
+  };
+}
+
+function splitRows(rows: ChargeRequestRow[]): ChargeRequestsResponse {
+  return {
+    pending: rows.filter((row) => row.status === "PENDING").map(toPendingRequest),
+    approved: rows
+      .filter((row) => row.status === "APPROVED" || row.status === "COMPLETED")
+      .map(toProcessedRequest),
+    rejected: rows
+      .filter((row) => row.status === "REJECTED" || row.status === "CANCELED")
+      .map(toProcessedRequest),
+  };
+}
+
+async function getDbChargeRequests() {
+  const result = await query<ChargeRequestRow>(
+    `
+      select
+        cr.id::text,
+        cr.user_uid,
+        cr.bank_name,
+        cr.account_number,
+        cr.depositor,
+        cr.amount::text,
+        cr.status::text as status,
+        cr.requested_at,
+        cr.processed_at,
+        c.company_name,
+        d.domain_name,
+        master.name as master_name,
+        dist.name as distributor_name
+      from charge_requests cr
+      join companies c on c.id = cr.company_id
+      join domains d on d.id = cr.domain_id
+      left join admins master on master.role = 'MASTER' and master.status = 'ACTIVE'
+      left join distributors dist on dist.id = cr.distributor_id
+      order by cr.requested_at desc, cr.created_at desc
+    `,
+  );
+
+  return splitRows(result.rows);
+}
+
+export async function getChargeRequestsForUser(user: SessionUser) {
+  if (hasDatabaseUrl()) {
+    return getDbChargeRequests();
+  }
+
+  const state = await getMockChargeStateFromCookie();
+  const companyRequests = getChargeRequestsByCompany(user.companyName, state);
+
+  if (
+    user.role === "MASTER" &&
+    !companyRequests.pending.length &&
+    !companyRequests.approved.length &&
+    !companyRequests.rejected.length
+  ) {
+    return state;
+  }
+
+  return companyRequests;
+}
+
+async function ensureDbScope(domainName = "전체") {
+  const companyResult = await query<{ id: string }>(
+    `
+      insert into companies (company_name, status)
+      values ('전체', 'ACTIVE')
+      on conflict (company_name) do update
+      set status = 'ACTIVE', updated_at = now()
+      returning id::text
+    `,
+  );
+  const companyId = companyResult.rows[0]?.id;
+
+  if (!companyId) {
+    throw new Error("기본 범위를 찾을 수 없습니다.");
+  }
+
+  const domainResult = await query<{ id: string; distributor_id: string | null }>(
+    `
+      insert into domains (domain_name, company_id, status)
+      values ($1, $2::uuid, 'ACTIVE')
+      on conflict (domain_name) do update
+      set company_id = excluded.company_id, status = 'ACTIVE', updated_at = now()
+      returning id::text, distributor_id::text
+    `,
+    [domainName, companyId],
+  );
+  const domainId = domainResult.rows[0]?.id;
+  const distributorId = domainResult.rows[0]?.distributor_id ?? null;
+
+  if (!domainId) {
+    throw new Error("기본 도메인을 찾을 수 없습니다.");
+  }
+
+  return { companyId, domainId, distributorId };
+}
+
+export async function createDbChargeRequest(input: CreateChargeRequestInput) {
+  const { companyId, domainId, distributorId } = await ensureDbScope(
+    input.domainName,
+  );
+  const result = await query<{ id: string }>(
+    `
+      insert into charge_requests (
+        external_id,
+        company_id,
+        domain_id,
+        distributor_id,
+        user_uid,
+        bank_name,
+        account_number,
+        depositor,
+        amount,
+        status,
+        requested_at,
+        raw_payload
+      )
+      values (
+        $1,
+        $2::uuid,
+        $3::uuid,
+        $4::uuid,
+        $5,
+        $6,
+        $7,
+        $8,
+        $9,
+        'PENDING',
+        now(),
+        $10::jsonb
+      )
+      returning id::text
+    `,
+    [
+      input.externalId ?? null,
+      companyId,
+      domainId,
+      distributorId,
+      input.userId,
+      input.bankName ?? null,
+      input.accountNumber ?? null,
+      input.depositor ?? null,
+      input.amount,
+      JSON.stringify(input.rawPayload ?? input),
+    ],
+  );
+
+  return result.rows[0]?.id;
+}
+
+export async function processDbChargeRequest(input: {
+  id: string;
+  status: ProcessedRequest["status"];
+  processedBy: string;
+}) {
+  const nextStatus = input.status === "승인" ? "APPROVED" : "REJECTED";
+  const result = await withTransaction(async (client) => {
+    const updateResult = await client.query<
+      ChargeRequestRow & {
+        company_id: string;
+        domain_id: string;
+        distributor_id: string | null;
+      }
+    >(
+      `
+        update charge_requests
+        set
+          status = $2::request_status,
+          processed_at = now(),
+          processed_by = $3::uuid,
+          updated_at = now()
+        where id = $1::uuid and status = 'PENDING'
+        returning
+          id::text,
+          company_id::text,
+          domain_id::text,
+          distributor_id::text,
+          user_uid,
+          bank_name,
+          account_number,
+          depositor,
+          amount::text,
+          status::text as status,
+          requested_at,
+          processed_at,
+          (select company_name from companies where id = charge_requests.company_id) as company_name,
+          (select domain_name from domains where id = charge_requests.domain_id) as domain_name,
+          (select name from admins where role = 'MASTER' and status = 'ACTIVE' limit 1) as master_name,
+          (select name from distributors where id = charge_requests.distributor_id) as distributor_name
+      `,
+      [input.id, nextStatus, input.processedBy],
+    );
+    const updated = updateResult.rows[0];
+
+    if (!updated || nextStatus !== "APPROVED") {
+      return updateResult;
+    }
+
+    const feeRateResult = await client.query<{
+      company_rate: string;
+      distributor_rate: string;
+      agency_rate: string;
+    }>(
+      `
+        select company_rate::text, distributor_rate::text, agency_rate::text
+        from fee_rates
+        where
+          starts_at <= now()
+          and (ends_at is null or ends_at > now())
+          and (
+            domain_id = $1::uuid
+            or distributor_id = $2::uuid
+            or company_id = $3::uuid
+            or (domain_id is null and distributor_id is null and company_id is null)
+          )
+        order by
+          case
+            when domain_id = $1::uuid then 0
+            when distributor_id = $2::uuid then 1
+            when company_id = $3::uuid then 2
+            else 3
+          end,
+          starts_at desc
+        limit 1
+      `,
+      [updated.domain_id, updated.distributor_id, updated.company_id],
+    );
+    const feeRates = feeRateResult.rows[0] ?? {
+      company_rate: "0.4",
+      distributor_rate: "0",
+      agency_rate: "0",
+    };
+    let distributorId = updated.distributor_id;
+
+    if (!distributorId) {
+      const fallbackDistributor = await client.query<{ id: string }>(
+        `
+          select id::text
+          from distributors
+          where status = 'ACTIVE'
+          order by created_at asc
+          limit 1
+        `,
+      );
+
+      distributorId = fallbackDistributor.rows[0]?.id ?? null;
+    }
+
+    const amount = Number(updated.amount);
+    const companyRate = Number(feeRates.company_rate);
+    const distributorRate = Number(feeRates.distributor_rate);
+    const agencyRate = Number(feeRates.agency_rate);
+    const totalRate = companyRate + distributorRate + agencyRate;
+    const companyFee = Math.floor(amount * (companyRate / 100));
+    const distributorFee = Math.floor(amount * (distributorRate / 100));
+    const savedCommission = Math.floor(amount * (totalRate / 100));
+
+    await client.query(
+      `
+        insert into commission_records (
+          charge_request_id,
+          company_id,
+          domain_id,
+          distributor_id,
+          charge_amount,
+          commission_rate,
+          company_fee,
+          distributor_fee,
+          saved_commission,
+          status
+        )
+        values (
+          $1::uuid,
+          $2::uuid,
+          $3::uuid,
+          $4::uuid,
+          $5,
+          $6,
+          $7,
+          $8,
+          $9,
+          'APPROVED'
+        )
+        on conflict (charge_request_id) do nothing
+      `,
+      [
+        updated.id,
+        updated.company_id,
+        updated.domain_id,
+        distributorId,
+        amount,
+        totalRate,
+        companyFee,
+        distributorFee,
+        savedCommission,
+      ],
+    );
+
+    if (distributorId && distributorFee > 0) {
+      const balanceResult = await client.query<{
+        current_balance: string;
+      }>(
+        `
+          select current_balance::text
+          from distributors
+          where id = $1::uuid
+          for update
+        `,
+        [distributorId],
+      );
+      const beforeBalance = Number(balanceResult.rows[0]?.current_balance ?? 0);
+      const afterBalance = beforeBalance + distributorFee;
+
+      await client.query(
+        `
+          update distributors
+          set current_balance = $2, updated_at = now()
+          where id = $1::uuid
+        `,
+        [distributorId, afterBalance],
+      );
+      await client.query(
+        `
+          insert into distributor_balance_transactions (
+            distributor_id,
+            amount,
+            balance_before,
+            balance_after,
+            source_type,
+            source_id,
+            memo,
+            created_by
+          )
+          values ($1::uuid, $2, $3, $4, 'COMMISSION', $5::uuid, '충전 승인 수수료 적립', $6::uuid)
+          on conflict (source_type, source_id) do nothing
+        `,
+        [
+          distributorId,
+          distributorFee,
+          beforeBalance,
+          afterBalance,
+          updated.id,
+          input.processedBy,
+        ],
+      );
+    }
+
+    return updateResult;
+  });
+
+  const row = result.rows[0];
+
+  return row ? toProcessedRequest(row) : null;
+}
+
+export async function resetChargeRequestsForUser(user: SessionUser) {
+  if (hasDatabaseUrl()) {
+    return getDbChargeRequests();
+  }
+
+  const state = getDefaultChargeRequestState();
+  const response = NextResponse.json(getChargeRequestsByCompany(user.companyName, state));
+
+  setMockChargeStateCookie(response, state);
+
+  return response;
+}
+
+export async function processMockChargeRequest(input: {
+  user: SessionUser;
+  id: string;
+  status: ProcessedRequest["status"];
+  state: ChargeRequestState;
+}) {
+  return processChargeRequest(
+    input.user.companyName,
+    input.id,
+    input.status,
+    input.state,
+  );
+}

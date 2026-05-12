@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 
 import { getSessionUser } from "@/lib/auth";
-import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
-import { getSettlementProfit } from "@/lib/mock-report-service";
-import { getAdminSettingsFromCookie } from "@/lib/settings-cookie";
+import { getSettlementProfitForUser } from "@/lib/settlement-repository";
+
+export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   const user = await getSessionUser();
@@ -23,10 +23,7 @@ export async function GET(request: Request) {
     );
   }
 
-  const state = await getMockChargeStateFromCookie();
-  const settings = await getAdminSettingsFromCookie();
-
   return NextResponse.json(
-    getSettlementProfit(user.companyName, startDate, endDate, state, settings),
+    await getSettlementProfitForUser(user, startDate, endDate),
   );
 }

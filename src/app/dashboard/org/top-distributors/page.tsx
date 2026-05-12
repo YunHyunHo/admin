@@ -4,12 +4,17 @@ import { AdminShell } from "@/components/admin-shell";
 import { TopDistributorsBoard } from "@/components/top-distributors-board";
 import { getAllAdminAccounts } from "@/lib/admin-accounts";
 import { getSessionUser } from "@/lib/auth";
+import { canManageMasterResources } from "@/lib/permissions";
 
 export default async function TopDistributorsPage() {
   const user = await getSessionUser();
 
   if (!user) {
     redirect("/");
+  }
+
+  if (!canManageMasterResources(user)) {
+    redirect("/dashboard");
   }
 
   const adminAccounts = await getAllAdminAccounts();

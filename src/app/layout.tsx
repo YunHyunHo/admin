@@ -11,9 +11,21 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const themeScript = `
+    try {
+      var theme = window.localStorage.getItem("vendor-admin-theme") || "dark";
+      document.documentElement.dataset.theme = theme === "light" ? "light" : "dark";
+    } catch (_) {
+      document.documentElement.dataset.theme = "dark";
+    }
+  `;
+
   return (
-    <html lang="ko" className="h-full antialiased">
-      <body className="min-h-full flex flex-col">{children}</body>
+    <html lang="ko" className="h-full antialiased" suppressHydrationWarning>
+      <body className="min-h-full flex flex-col">
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        {children}
+      </body>
     </html>
   );
 }

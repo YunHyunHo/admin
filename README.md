@@ -3,6 +3,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 ## 운영 설계 문서
 
 - [Admin 운영 구조 설계](./docs/operational-architecture.md)
+- [Admin Backend/API 설계](./docs/backend-api-design.md)
 - [PostgreSQL 스키마 초안](./docs/database-schema.sql)
 
 ## Getting Started
@@ -20,6 +21,36 @@ bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+## DB 초기화
+
+PostgreSQL 또는 Neon 연결 후 운영 스키마와 기본 `master` 계정을 만들려면:
+
+```bash
+cp .env.example .env.local
+npm run db:init
+```
+
+`.env.local`의 `DATABASE_URL`, `SESSION_SECRET`, `MASTER_PASSWORD`를 먼저 채워주세요.
+`MASTER_PASSWORD`를 생략하면 초기 비밀번호는 `0000`입니다.
+
+검증 중 만든 `smoke-...` 테스트 데이터는 아래 명령으로 정리합니다.
+
+```bash
+npm run db:clean-smoke
+```
+
+## 운영 점검
+
+배포 전에는 환경변수 기본값과 약한 비밀번호가 남아 있지 않은지 확인합니다.
+
+```bash
+npm run ops:check
+npm run lint
+npm run build
+```
+
+운영 전에 직접 바꿔야 하는 값은 `DATABASE_URL`, `SESSION_SECRET`, `MASTER_PASSWORD`, `NEXT_PUBLIC_APP_URL`입니다.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

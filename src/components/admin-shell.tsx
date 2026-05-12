@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { logoutAction } from "@/app/actions/auth";
 import type { SessionUser } from "@/lib/auth";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const sideMenuGroups = [
   {
@@ -117,6 +118,15 @@ const sideMenuGroups = [
   },
 ];
 
+const masterOnlyMenuKeys = new Set([
+  "org-top-distributors",
+  "org-distributors",
+  "fee-rate-settings",
+  "accounts",
+  "domains",
+  "admins",
+]);
+
 type AdminShellProps = {
   user: SessionUser;
   activeItem: string;
@@ -132,8 +142,18 @@ export function AdminShell({
   helperText = "원하는 데이터와 형태를 정하면 이 화면에 바로 붙일 수 있어요.",
   children,
 }: AdminShellProps) {
+  const visibleMenuGroups = sideMenuGroups
+    .map((group) => ({
+      ...group,
+      items:
+        user.role === "MASTER"
+          ? group.items
+          : group.items.filter((item) => !masterOnlyMenuKeys.has(item.key)),
+    }))
+    .filter((group) => group.items.length > 0);
+
   return (
-    <main className="min-h-screen bg-[#09090b] text-white">
+    <main className="admin-app-shell min-h-screen bg-[#09090b] text-white">
       <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(6,182,212,0.12),_transparent_22%),radial-gradient(circle_at_top_right,_rgba(59,130,246,0.12),_transparent_24%),linear-gradient(180deg,_#09090b_0%,_#0f1117_100%)]">
         <div className="flex min-h-screen">
           <aside className="hidden w-[308px] shrink-0 border-r border-white/8 bg-[linear-gradient(180deg,_rgba(19,23,31,0.96)_0%,_rgba(12,14,19,0.98)_100%)] xl:flex xl:flex-col">
@@ -171,7 +191,7 @@ export function AdminShell({
 
             <nav className="flex-1 px-4 py-5">
               <div className="space-y-4">
-                {sideMenuGroups.map((group) => {
+                {visibleMenuGroups.map((group) => {
                   const isGroupActive = group.items.some(
                     (menu) => menu.key === activeItem,
                   );
@@ -243,6 +263,7 @@ export function AdminShell({
                 <div className="hidden rounded-full border border-white/8 bg-white/[0.03] px-4 py-2 text-sm text-white/46 md:block">
                   Vendor Admin Workspace
                 </div>
+                <ThemeToggle />
               </div>
             </header>
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import {
   createIssuedAdminAccount,
+  createPersistedAdminAccount,
   getAllAdminAccounts,
   getIssuedAdminAccountsFromCookie,
   getManagedCompanyOptions,
@@ -9,10 +10,14 @@ import {
   getPublicAdminAccounts,
   normalizeManagedCompanies,
   setIssuedAdminAccountsCookie,
+  updatePersistedAdminAccount,
   type AdminAccountRecord,
   type AdminRole,
 } from "@/lib/admin-accounts";
 import { getSessionUser } from "@/lib/auth";
+import { hasDatabaseUrl } from "@/lib/db";
+
+export const runtime = "nodejs";
 
 type CreateAdminPayload = {
   loginId?: string;
@@ -59,7 +64,7 @@ export async function GET() {
 
   return NextResponse.json({
     accounts: await getPublicAdminAccounts(),
-    managedCompanies: getManagedCompanyOptions(),
+    managedCompanies: await getManagedCompanyOptions(),
   });
 }
 
@@ -78,9 +83,10 @@ export async function POST(request: Request) {
   const password = payload.password ?? "";
   const nickname = payload.nickname?.trim() ?? "";
   const role = payload.role;
+  const managedCompanyOptions = await getManagedCompanyOptions();
   const managedCompanies =
     payload.managedCompanies?.filter((company) =>
-      getManagedCompanyOptions().includes(company),
+      managedCompanyOptions.includes(company),
     ) ?? [];
 
   if (!isAdminRole(role) || role === "MASTER") {
@@ -121,6 +127,23 @@ export async function POST(request: Request) {
     );
   }
 
+  if (hasDatabaseUrl()) {
+    await createPersistedAdminAccount({
+      loginId,
+      password,
+      nickname,
+      role,
+      managedCompanies,
+      createdBy: user.loginId,
+    });
+
+    return NextResponse.json({
+      accounts: await getPublicAdminAccounts(),
+      managedCompanies: managedCompanyOptions,
+      message: `${loginId} 계정이 생성되었습니다.`,
+    });
+  }
+
   const nextAccounts = [
     createIssuedAdminAccount({
       loginId,
@@ -134,7 +157,7 @@ export async function POST(request: Request) {
   ];
   const response = NextResponse.json({
     accounts: toPublicList([allAccounts[0], ...nextAccounts]),
-    managedCompanies: getManagedCompanyOptions(),
+    managedCompanies: managedCompanyOptions,
     message: `${loginId} 계정이 생성되었습니다.`,
   });
 
@@ -177,6 +200,27 @@ export async function PATCH(request: Request) {
       { message: "마스터 계정은 수정할 수 없습니다." },
       { status: 400 },
     );
+  }
+
+  if (hasDatabaseUrl()) {
+    await updatePersistedAdminAccount({
+      id: payload.id,
+      action: payload.action,
+      managedCompanies: payload.managedCompanies,
+    });
+
+    return NextResponse.json({
+      accounts: await getPublicAdminAccounts(),
+      managedCompanies: await getManagedCompanyOptions(),
+      message:
+        payload.action === "delete"
+          ? `${targetAccount.loginId} 계정이 삭제되었습니다.`
+          : payload.action === "toggle-status"
+            ? targetAccount.status === "ACTIVE"
+              ? `${targetAccount.loginId} 계정을 사용중지했습니다.`
+              : `${targetAccount.loginId} 계정을 다시 사용 상태로 변경했습니다.`
+            : `${targetAccount.loginId} 계정의 관리업체를 수정했습니다.`,
+    });
   }
 
   let nextAccounts = issuedAccounts;
@@ -234,7 +278,7 @@ export async function PATCH(request: Request) {
 
   const response = NextResponse.json({
     accounts: toPublicList([...(await getAllAdminAccounts()).slice(0, 1), ...nextAccounts]),
-    managedCompanies: getManagedCompanyOptions(),
+    managedCompanies: await getManagedCompanyOptions(),
     message,
   });
 
