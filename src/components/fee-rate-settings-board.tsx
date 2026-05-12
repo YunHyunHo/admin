@@ -22,11 +22,7 @@ type FeeRateSettingsBoardProps = {
 };
 
 const rowsPerPage = 10;
-const rateKeys = [
-  "totalRate",
-  "topDistributorRate",
-  "distributorRate",
-] as const;
+const rateKeys = ["totalRate"] as const;
 
 type RateKey = (typeof rateKeys)[number];
 type DraftRates = Pick<FeeRateRow, RateKey>;
@@ -57,8 +53,6 @@ function clampRate(value: number) {
 function getDraftRates(row: FeeRateRow): DraftRates {
   return {
     totalRate: row.totalRate,
-    topDistributorRate: row.topDistributorRate,
-    distributorRate: row.distributorRate,
   };
 }
 
@@ -135,6 +129,8 @@ export function FeeRateSettingsBoard({
           id: row.id,
           distributorId: row.distributorId,
           ...draft,
+          topDistributorRate: draft.totalRate,
+          distributorRate: 0,
         }),
       });
       const data = (await response.json()) as {
@@ -185,7 +181,7 @@ export function FeeRateSettingsBoard({
             수수료 관리
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-white/52">
-            본사와 대리점 단계는 제외하고, 총판별 총 수수료를 상위총판과 총판에 어떻게 배분할지 관리하는 화면입니다.
+            하부계정별 총 수수료 요율을 관리하는 화면입니다.
           </p>
         </div>
 
@@ -213,23 +209,18 @@ export function FeeRateSettingsBoard({
                 setSearch(event.target.value);
                 setPage(1);
               }}
-              placeholder="총판, 상위총판 검색"
+              placeholder="총판 검색"
               className="h-12 w-full rounded-2xl border border-white/10 bg-white/[0.035] px-4 text-sm text-white outline-none transition placeholder:text-white/34 focus:border-cyan-300/40"
             />
           </label>
 
           <div className="overflow-x-auto rounded-[26px] border border-white/8 bg-black/18">
-            <table className="w-full min-w-[980px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[720px] border-collapse text-left text-sm">
               <thead className="bg-black/52 text-white/72">
                 <tr>
                   {[
                     "총판",
                     "총 수수료",
-                    "상위총판",
-                    "상위총판 요율",
-                    "총판",
-                    "총판 요율",
-                    "잔여",
                     "수정일",
                     "관리",
                   ].map((header, index) => (
@@ -245,11 +236,6 @@ export function FeeRateSettingsBoard({
               <tbody>
                 {visibleRows.map((row) => {
                   const draft = draftRates[row.id] ?? getDraftRates(row);
-                  const remainder = clampRate(
-                    draft.totalRate -
-                      draft.topDistributorRate -
-                      draft.distributorRate,
-                  );
                   const isChanged = hasDraftChanges(row, draft);
 
                   return (
@@ -273,35 +259,6 @@ export function FeeRateSettingsBoard({
                             updateDraftRate(row.id, "totalRate", value)
                           }
                         />
-                      </td>
-                      <td className="px-4 py-4 text-center">
-                        {row.topDistributor}
-                      </td>
-                      <td className="px-4 py-4 text-center">
-                        <RateInput
-                          value={draft.topDistributorRate}
-                          disabled={!canManageFeeRates}
-                          onChange={(value) =>
-                            updateDraftRate(row.id, "topDistributorRate", value)
-                          }
-                        />
-                      </td>
-                      <td className="px-4 py-4 text-center">{row.distributor}</td>
-                      <td className="px-4 py-4 text-center">
-                        <RateInput
-                          value={draft.distributorRate}
-                          disabled={!canManageFeeRates}
-                          onChange={(value) =>
-                            updateDraftRate(row.id, "distributorRate", value)
-                          }
-                        />
-                      </td>
-                      <td
-                        className={`px-4 py-4 text-center font-semibold ${
-                          remainder < 0 ? "text-red-200" : "text-white"
-                        }`}
-                      >
-                        {remainder}%
                       </td>
                       <td className="px-4 py-4 text-center text-white/52">
                         {row.updatedAt}
