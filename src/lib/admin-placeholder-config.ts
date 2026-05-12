@@ -15,7 +15,7 @@ export const accountColumns = [
   { label: "예금주", value: "예금주 입력" },
   { label: "계좌번호", value: "계좌번호 입력" },
   { label: "사용여부", value: "사용중 / 중지" },
-  { label: "연결된 도메인", value: "0개" },
+  { label: "API 연동 사이트", value: "0개" },
 ];
 
 export const domainColumns = [
