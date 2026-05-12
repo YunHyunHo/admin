@@ -12,6 +12,10 @@ export default async function DashboardPage() {
     redirect("/");
   }
 
+  if (user.role === "MASTER") {
+    redirect("/dashboard/org/distributors");
+  }
+
   const summary = await getDashboardSummaryForUser(user);
 
   const topMetrics = [
