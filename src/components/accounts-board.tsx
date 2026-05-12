@@ -132,6 +132,7 @@ const rowsPerPage = 10;
 type AccountsBoardProps = {
   initialAccounts?: AccountRow[];
   branchOptions?: AccountBranchOption[];
+  canCreateAccounts?: boolean;
   canManageAccounts?: boolean;
 };
 
@@ -149,8 +150,11 @@ function getNowStamp() {
 export function AccountsBoard({
   initialAccounts = fallbackAccounts,
   branchOptions = [],
+  canCreateAccounts = true,
   canManageAccounts = true,
 }: AccountsBoardProps) {
+  const initialBranch =
+    branchOptions.length === 1 ? branchOptions[0] : undefined;
   const [accounts, setAccounts] = useState(initialAccounts);
   const [page, setPage] = useState(1);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -162,19 +166,10 @@ export function AccountsBoard({
     accountId: string;
     field: "holder" | "accountNumber";
   } | null>(null);
-  const [branchName, setBranchName] = useState("");
-  const [branchId, setBranchId] = useState("");
   const [bankName, setBankName] = useState("");
   const [holder, setHolder] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [message, setMessage] = useState("");
-  const selectableBranches =
-    branchOptions.length > 0
-      ? branchOptions
-      : [
-          { id: "본사", name: "본사" },
-          { id: "본사 개발자테스트", name: "본사 개발자테스트" },
-        ];
   const pageCount = Math.max(1, Math.ceil(accounts.length / rowsPerPage));
   const visibleAccounts = accounts.slice(
     (page - 1) * rowsPerPage,
@@ -298,7 +293,7 @@ export function AccountsBoard({
   }
 
   async function handleCreate() {
-    if (!branchName || !bankName || !holder || !accountNumber) {
+    if (!bankName || !holder || !accountNumber) {
       return;
     }
 
@@ -306,8 +301,7 @@ export function AccountsBoard({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        distributorId: branchId,
-        branchName,
+        distributorId: initialBranch?.id,
         bankName,
         holder,
         accountNumber,
@@ -331,7 +325,7 @@ export function AccountsBoard({
     } else {
       const nextAccount: AccountRow = {
         id: `ACC-${Date.now().toString().slice(-6)}`,
-        branchName,
+        branchName: initialBranch?.name ?? "본사",
         creator: "총관리자",
         bankName,
         holder,
@@ -345,8 +339,6 @@ export function AccountsBoard({
     }
 
     setPage(1);
-    setBranchName("");
-    setBranchId("");
     setBankName("");
     setHolder("");
     setAccountNumber("");
@@ -372,7 +364,7 @@ export function AccountsBoard({
         <button
           type="button"
           onClick={() => setIsCreateModalOpen(true)}
-          disabled={!canManageAccounts}
+          disabled={!canCreateAccounts}
           className="rounded-2xl bg-fuchsia-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-fuchsia-400"
         >
           계좌생성
@@ -535,29 +527,6 @@ export function AccountsBoard({
 
             <div className="mt-7 space-y-4">
               <label className="block">
-                <span className="sr-only">본사 선택</span>
-                <select
-                  value={branchId}
-                  onChange={(event) => {
-                    const selectedBranch = selectableBranches.find(
-                      (branch) => branch.id === event.target.value,
-                    );
-
-                    setBranchId(event.target.value);
-                    setBranchName(selectedBranch?.name ?? event.target.value);
-                  }}
-                  className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-slate-500"
-                >
-                  <option value="">본사 선택</option>
-                  {selectableBranches.map((branch) => (
-                    <option key={branch.id} value={branch.id}>
-                      {branch.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="block">
                 <span className="sr-only">은행 선택</span>
                 <select
                   value={bankName}
@@ -598,7 +567,7 @@ export function AccountsBoard({
               <button
                 type="button"
                 onClick={handleCreate}
-                disabled={!branchName || !bankName || !holder || !accountNumber}
+                disabled={!bankName || !holder || !accountNumber}
                 className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 생성

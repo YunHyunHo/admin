@@ -16,6 +16,7 @@ export default async function AccountsPage() {
 
   const accountData = await getBankAccountBoardData(user);
   const isDatabaseBacked = hasDatabaseUrl();
+  const isMaster = canManageMasterResources(user);
 
   return (
     <AdminShell
@@ -27,7 +28,8 @@ export default async function AccountsPage() {
       <AccountsBoard
         initialAccounts={isDatabaseBacked ? accountData.accounts : undefined}
         branchOptions={accountData.branchOptions}
-        canManageAccounts={canManageMasterResources(user)}
+        canCreateAccounts={!isMaster || accountData.branchOptions.length === 1}
+        canManageAccounts={isMaster}
       />
     </AdminShell>
   );
