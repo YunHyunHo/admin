@@ -150,7 +150,7 @@ function toAdminAccountRecord(
   return {
     id: row.id,
     loginId: row.login_id,
-    password: row.password_hash,
+    password: "저장된 비밀번호는 보안상 확인할 수 없습니다.",
     nickname: row.name,
     role: row.role,
     status: row.status,

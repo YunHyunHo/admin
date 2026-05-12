@@ -134,7 +134,7 @@ export function DistributorsBoard({ adminAccounts }: DistributorsBoardProps) {
                   </td>
                   <td className="px-4 py-4 text-center">
                     {visiblePasswordId === row.id ? (
-                      <span className="rounded-xl border border-teal-300/25 bg-teal-300/10 px-3 py-2 font-mono text-xs font-semibold text-teal-100">
+                      <span className="inline-block rounded-xl border border-teal-300/25 bg-teal-300/10 px-3 py-2 text-xs font-semibold text-teal-100">
                         {row.password}
                       </span>
                     ) : (
