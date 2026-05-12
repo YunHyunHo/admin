@@ -14,6 +14,7 @@ export type AdminAccountRecord = {
   id: string;
   loginId: string;
   password: string;
+  visiblePassword: string;
   nickname: string;
   role: AdminRole;
   status: AdminStatus;
@@ -27,7 +28,7 @@ export type AdminAccountRecord = {
   updatedAt: string;
 };
 
-export type PublicAdminAccount = Omit<AdminAccountRecord, "password">;
+export type PublicAdminAccount = Omit<AdminAccountRecord, "password" | "visiblePassword">;
 
 const managedCompanyOptions = ["전체"];
 
@@ -142,6 +143,7 @@ export function getMasterAccount(): AdminAccountRecord {
     id: "MASTER-ROOT",
     loginId: "master",
     password: process.env.MASTER_PASSWORD ?? "0000",
+    visiblePassword: "-",
     nickname: "마스터 관리자",
     role: "MASTER",
     status: "ACTIVE",
@@ -201,7 +203,8 @@ function toAdminAccountRecord(
   return {
     id: row.id,
     loginId: row.login_id,
-    password: decryptVisiblePassword(row.password_ciphertext),
+    password: row.password_hash,
+    visiblePassword: decryptVisiblePassword(row.password_ciphertext),
     nickname: row.name,
     role: row.role,
     status: row.status,
@@ -328,8 +331,9 @@ export async function getPublicAdminAccounts(
   const accounts = await getAllAdminAccounts(user);
 
   return accounts.map((account) => {
-    const { password, ...publicAccount } = account;
+    const { password, visiblePassword, ...publicAccount } = account;
     void password;
+    void visiblePassword;
 
     return publicAccount;
   });
@@ -380,6 +384,7 @@ export function createIssuedAdminAccount(input: {
     id: `ADM-${Date.now().toString(36).toUpperCase()}`,
     loginId: input.loginId,
     password: input.password,
+    visiblePassword: input.password,
     nickname: input.nickname,
     role: input.role,
     status: "ACTIVE",

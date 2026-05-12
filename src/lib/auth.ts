@@ -12,7 +12,7 @@ const SESSION_COOKIE = "vendor_admin_session";
 const LOCAL_SESSION_SECRET = "local-dev-secret-change-me";
 const PLACEHOLDER_SESSION_SECRET = "replace-with-a-long-random-secret";
 
-export type SessionUser = Omit<AdminAccountRecord, "password"> & {
+export type SessionUser = Omit<AdminAccountRecord, "password" | "visiblePassword"> & {
   username: string;
 };
 

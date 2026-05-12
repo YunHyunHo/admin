@@ -45,7 +45,7 @@ function toDistributorRows(accounts: AdminAccountRecord[]): Distributor[] {
       childDistributorsCount: 0,
       balance: 0,
       createdAt: account.createdAt,
-      password: account.password,
+      password: account.visiblePassword,
     }));
 }
 

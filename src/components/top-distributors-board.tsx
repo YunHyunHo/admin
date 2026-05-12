@@ -44,7 +44,7 @@ function toTopDistributorRows(accounts: AdminAccountRecord[]): TopDistributor[] 
       childTopDistributorsCount: 0,
       balance: 0,
       createdAt: account.createdAt,
-      password: account.password,
+      password: account.visiblePassword,
     }));
 }
 

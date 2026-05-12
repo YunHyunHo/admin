@@ -39,8 +39,9 @@ function isWritableRole(role: string | undefined) {
 
 function toPublicList(accounts: AdminAccountRecord[]) {
   return accounts.map((account) => {
-    const { password, ...publicAccount } = account;
+    const { password, visiblePassword, ...publicAccount } = account;
     void password;
+    void visiblePassword;
 
     return publicAccount;
   });
