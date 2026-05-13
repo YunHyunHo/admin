@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   PendingRequest,
   ProcessedRequest,
@@ -36,6 +36,7 @@ type ChargeRequestPayload = {
 };
 
 const rowsPerPage = 10;
+const chargeNoticeSoundPath = "/sounds/notice.mp3";
 
 function getCurrentTimeLabel() {
   return new Intl.DateTimeFormat("ko-KR", {
@@ -143,13 +144,38 @@ export function ChargeRequestsBoard({
       : "로컬 테스트 데이터로 충전신청을 표시합니다.",
   );
   const [lastSyncedAt, setLastSyncedAt] = useState("");
+  const [isSoundReady, setIsSoundReady] = useState(false);
+  const [soundMessage, setSoundMessage] = useState("");
+  const noticeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const knownPendingIdsRef = useRef(
+    new Set(initialPendingRequests.map((request) => request.id)),
+  );
+
+  const playNoticeSound = useCallback(async () => {
+    if (!noticeAudioRef.current) {
+      noticeAudioRef.current = new Audio(chargeNoticeSoundPath);
+      noticeAudioRef.current.preload = "auto";
+    }
+
+    noticeAudioRef.current.currentTime = 0;
+    await noticeAudioRef.current.play();
+    setIsSoundReady(true);
+    setSoundMessage("");
+  }, []);
 
   const applyServerData = useCallback(
     (
       data: ChargeRequestsResponse,
-      options: { resetPages?: boolean } = {},
+      options: { notifyNewPending?: boolean; resetPages?: boolean } = {},
     ) => {
       const shouldResetPages = options.resetPages ?? true;
+      const newPendingCount = data.pending.filter(
+        (request) => !knownPendingIdsRef.current.has(request.id),
+      ).length;
+
+      knownPendingIdsRef.current = new Set(
+        data.pending.map((request) => request.id),
+      );
 
       setPendingRequests(data.pending);
       setApprovedRequests(data.approved);
@@ -160,8 +186,16 @@ export function ChargeRequestsBoard({
         setApprovedPage(1);
         setRejectedPage(1);
       }
+
+      if (options.notifyNewPending && newPendingCount > 0) {
+        setMessage(`${newPendingCount}건의 신규 충전신청이 도착했습니다.`);
+        void playNoticeSound().catch(() => {
+          setIsSoundReady(false);
+          setSoundMessage("알림음을 켜려면 소리 활성화를 눌러주세요.");
+        });
+      }
     },
-    [],
+    [playNoticeSound],
   );
 
   const requestChargeData = useCallback(async (body?: ChargeRequestPayload) => {
@@ -194,7 +228,7 @@ export function ChargeRequestsBoard({
           return;
         }
 
-        applyServerData(data, { resetPages: false });
+        applyServerData(data, { notifyNewPending: true, resetPages: false });
         setLastSyncedAt(getCurrentTimeLabel());
       } catch {
         if (!isCancelled) {
@@ -214,6 +248,16 @@ export function ChargeRequestsBoard({
       window.clearInterval(intervalId);
     };
   }, [applyServerData, isDatabaseBacked, requestChargeData]);
+
+  async function activateNoticeSound() {
+    try {
+      await playNoticeSound();
+      setSoundMessage("충전신청 알림음이 활성화되었습니다.");
+    } catch {
+      setIsSoundReady(false);
+      setSoundMessage("브라우저에서 소리 재생이 차단되었습니다. 다시 눌러주세요.");
+    }
+  }
 
   async function refreshRequests() {
     setIsLoading(true);
@@ -379,6 +423,11 @@ export function ChargeRequestsBoard({
                     자동 갱신 중{lastSyncedAt ? ` · ${lastSyncedAt}` : ""}
                   </span>
                 ) : null}
+                {soundMessage ? (
+                  <span className="ml-2 inline-flex rounded-full border border-amber-300/15 bg-amber-400/8 px-2.5 py-1 text-xs font-medium text-amber-100/78">
+                    {soundMessage}
+                  </span>
+                ) : null}
               </div>
               <div className="flex flex-wrap gap-3">
                 <input
@@ -414,6 +463,19 @@ export function ChargeRequestsBoard({
                 >
                   새로고침
                 </button>
+                {isDatabaseBacked ? (
+                  <button
+                    type="button"
+                    onClick={activateNoticeSound}
+                    className={`rounded-2xl border px-4 py-2 text-sm font-semibold ${
+                      isSoundReady
+                        ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-100"
+                        : "border-amber-300/20 bg-amber-400/10 text-amber-100"
+                    }`}
+                  >
+                    {isSoundReady ? "알림음 켜짐" : "소리 활성화"}
+                  </button>
+                ) : null}
                 {!isDatabaseBacked ? (
                   <button
                     type="button"
