@@ -72,11 +72,6 @@ const sideMenuGroups = [
         key: "charges",
       },
       {
-        title: "거래생성",
-        href: "/dashboard/transactions/create",
-        key: "transaction-create",
-      },
-      {
         title: "Transaction",
         href: "/dashboard/transactions/transaction",
         key: "transaction",
