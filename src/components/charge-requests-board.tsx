@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   PendingRequest,
   ProcessedRequest,
@@ -36,6 +36,15 @@ type ChargeRequestPayload = {
 };
 
 const rowsPerPage = 10;
+
+function getCurrentTimeLabel() {
+  return new Intl.DateTimeFormat("ko-KR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(new Date());
+}
 
 function SectionCard({
   title,
@@ -133,17 +142,29 @@ export function ChargeRequestsBoard({
       ? "Neon DB와 연결된 충전신청 데이터를 표시합니다."
       : "로컬 테스트 데이터로 충전신청을 표시합니다.",
   );
+  const [lastSyncedAt, setLastSyncedAt] = useState("");
 
-  function applyServerData(data: ChargeRequestsResponse) {
-    setPendingRequests(data.pending);
-    setApprovedRequests(data.approved);
-    setRejectedRequests(data.rejected);
-    setPendingPage(1);
-    setApprovedPage(1);
-    setRejectedPage(1);
-  }
+  const applyServerData = useCallback(
+    (
+      data: ChargeRequestsResponse,
+      options: { resetPages?: boolean } = {},
+    ) => {
+      const shouldResetPages = options.resetPages ?? true;
 
-  async function requestChargeData(body?: ChargeRequestPayload) {
+      setPendingRequests(data.pending);
+      setApprovedRequests(data.approved);
+      setRejectedRequests(data.rejected);
+
+      if (shouldResetPages) {
+        setPendingPage(1);
+        setApprovedPage(1);
+        setRejectedPage(1);
+      }
+    },
+    [],
+  );
+
+  const requestChargeData = useCallback(async (body?: ChargeRequestPayload) => {
     const response = await fetch("/api/charge-requests", {
       method: body ? "POST" : "GET",
       headers: body ? { "Content-Type": "application/json" } : undefined,
@@ -156,7 +177,43 @@ export function ChargeRequestsBoard({
     }
 
     return (await response.json()) as ChargeRequestsResponse;
-  }
+  }, []);
+
+  useEffect(() => {
+    if (!isDatabaseBacked) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    async function syncRequests() {
+      try {
+        const data = await requestChargeData();
+
+        if (isCancelled) {
+          return;
+        }
+
+        applyServerData(data, { resetPages: false });
+        setLastSyncedAt(getCurrentTimeLabel());
+      } catch {
+        if (!isCancelled) {
+          setLastSyncedAt("자동 갱신 실패");
+        }
+      }
+    }
+
+    void syncRequests();
+
+    const intervalId = window.setInterval(() => {
+      void syncRequests();
+    }, 5000);
+
+    return () => {
+      isCancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [applyServerData, isDatabaseBacked, requestChargeData]);
 
   async function refreshRequests() {
     setIsLoading(true);
@@ -317,6 +374,11 @@ export function ChargeRequestsBoard({
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="text-sm text-white/52">
                 {message}
+                {isDatabaseBacked ? (
+                  <span className="ml-2 inline-flex rounded-full border border-cyan-300/15 bg-cyan-400/8 px-2.5 py-1 text-xs font-medium text-cyan-100/72">
+                    자동 갱신 중{lastSyncedAt ? ` · ${lastSyncedAt}` : ""}
+                  </span>
+                ) : null}
               </div>
               <div className="flex flex-wrap gap-3">
                 <input
