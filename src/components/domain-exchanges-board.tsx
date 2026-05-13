@@ -380,7 +380,7 @@ export function DomainExchangesBoard({
         ) : null}
 
         <div className="overflow-x-auto rounded-[26px] border border-white/8 bg-black/18">
-          <table className="w-full min-w-[1320px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[1440px] border-collapse text-left text-sm">
             <thead className="bg-black/52 text-white/72">
               <tr>
                 {[
@@ -392,6 +392,7 @@ export function DomainExchangesBoard({
                   "출금은행",
                   "예금주",
                   "계좌번호",
+                  "요청금액",
                   "요청일",
                   "상태",
                   "완료일",
@@ -422,6 +423,9 @@ export function DomainExchangesBoard({
                     <td className="px-4 py-4 text-center">{row.bankName}</td>
                     <td className="px-4 py-4 text-center">{row.accountHolder}</td>
                     <td className="px-4 py-4 text-center">{row.accountNumber}</td>
+                    <td className="px-4 py-4 text-right font-semibold text-white">
+                      {row.amount.toLocaleString("ko-KR")} 원
+                    </td>
                     <td className="px-4 py-4 text-center">{row.requestedAt}</td>
                     <td className="px-4 py-4 text-center">
                       {canProcessExchanges && row.status === "승인중" ? (
@@ -450,7 +454,7 @@ export function DomainExchangesBoard({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={11} className="px-4 py-10 text-center text-sm text-white/40">
+                  <td colSpan={12} className="px-4 py-10 text-center text-sm text-white/40">
                     조건에 맞는 환전 요청이 없습니다.
                   </td>
                 </tr>
