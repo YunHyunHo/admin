@@ -17,6 +17,7 @@ type TransactionLedgerDbRow = {
   account_holder: string | null;
   depositor: string | null;
   amount: string;
+  fee: string;
   requested_at: Date | string;
   processed_at: Date | string | null;
   status: "PENDING" | "APPROVED" | "REJECTED" | "COMPLETED" | "CANCELED";
@@ -39,11 +40,15 @@ function formatStamp(value: Date | string | null) {
   const minutes = String(date.getMinutes()).padStart(2, "0");
   const seconds = String(date.getSeconds()).padStart(2, "0");
 
-  return `${month}-${day} ${hours}:${minutes}:${seconds}`;
+  return `${date.getFullYear()}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
 function toStatus(status: TransactionLedgerDbRow["status"]): TransactionStatus {
-  return status === "REJECTED" || status === "CANCELED" ? "승인취소" : "승인";
+  if (status === "PENDING") {
+    return "승인중";
+  }
+
+  return status === "REJECTED" || status === "CANCELED" ? "승인취소" : "완료";
 }
 
 function toBankInfo(row: TransactionLedgerDbRow) {
@@ -54,17 +59,26 @@ function toBankInfo(row: TransactionLedgerDbRow) {
 
 function toLedgerRow(row: TransactionLedgerDbRow): LedgerRow {
   const distributorName = row.distributor_name ?? "하부계정 없음";
+  const bankName = row.bank_name ?? "-";
+  const accountNumber = row.account_number ?? "-";
+  const accountHolder = row.account_holder ?? "-";
 
   return {
     id: `${row.request_type}-${row.id}`,
+    transactionType: row.request_type === "CHARGE" ? "충전" : "환전",
     branch: distributorName,
     userId: row.request_type === "EXCHANGE" ? "업체 환전" : row.user_uid,
     topDistributor: row.master_name ?? "마스터 관리자",
     distributor: distributorName,
     domain: row.domain_name ?? "-",
+    companyName: row.domain_name ?? distributorName,
     bankInfo: toBankInfo(row),
+    bankName,
+    accountNumber,
+    accountHolder,
     depositor: row.depositor ?? row.account_holder ?? "-",
     amount: Number(row.amount),
+    fee: Number(row.fee),
     requestedAt: formatStamp(row.requested_at),
     completedAt: formatStamp(row.processed_at),
     status: toStatus(row.status),
@@ -96,15 +110,34 @@ export async function getTransactionLedgerRows(
           dom.domain_name,
           cr.bank_name,
           cr.account_number,
-          null::text as account_holder,
+          coalesce(
+            (
+              select ba.account_holder
+              from bank_accounts ba
+              where ba.distributor_id = dist.id
+                and ba.bank_name = cr.bank_name
+                and ba.account_number = cr.account_number
+              order by ba.is_active desc, ba.created_at desc
+              limit 1
+            ),
+            (
+              select ba.account_holder
+              from bank_accounts ba
+              where ba.distributor_id = dist.id
+              order by ba.is_active desc, ba.created_at desc
+              limit 1
+            )
+          )::text as account_holder,
           cr.depositor,
           cr.amount::text,
+          coalesce(co.saved_commission, 0)::text as fee,
           cr.requested_at,
           cr.processed_at,
           cr.status::text as status
         from charge_requests cr
         left join domains dom on dom.id = cr.domain_id
         left join distributors dist on dist.id = cr.distributor_id
+        left join commission_records co on co.charge_request_id = cr.id
         left join admins dist_admin on dist_admin.id = dist.admin_id
         left join admins owner_master on owner_master.id = dist_admin.created_by
         where 1 = 1
@@ -124,6 +157,7 @@ export async function getTransactionLedgerRows(
           er.account_holder,
           er.account_holder as depositor,
           er.amount::text,
+          0::text as fee,
           er.requested_at,
           er.processed_at,
           er.status::text as status

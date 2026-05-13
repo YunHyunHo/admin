@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-import { downloadCsv } from "@/lib/csv-export";
+import { downloadExcelTable } from "@/lib/csv-export";
 import type { LedgerRow } from "@/lib/transaction-ledger-types";
 
 export const fallbackLedgerRows: LedgerRow[] = [
@@ -18,7 +18,7 @@ export const fallbackLedgerRows: LedgerRow[] = [
     amount: 50_000,
     requestedAt: "05-03 17:42:21",
     completedAt: "05-03 17:42:42",
-    status: "승인",
+    status: "완료",
   },
   {
     id: "236564096",
@@ -32,7 +32,7 @@ export const fallbackLedgerRows: LedgerRow[] = [
     amount: 10_000,
     requestedAt: "05-03 17:39:37",
     completedAt: "05-03 17:40:09",
-    status: "승인",
+    status: "완료",
   },
   {
     id: "1a20b5a4-af94",
@@ -46,7 +46,7 @@ export const fallbackLedgerRows: LedgerRow[] = [
     amount: 7_100_000,
     requestedAt: "05-03 17:32:29",
     completedAt: "05-03 17:34:11",
-    status: "승인",
+    status: "완료",
   },
   {
     id: "537557798",
@@ -60,7 +60,7 @@ export const fallbackLedgerRows: LedgerRow[] = [
     amount: 3_000_000,
     requestedAt: "05-03 17:31:59",
     completedAt: "05-03 17:32:04",
-    status: "승인",
+    status: "완료",
   },
   {
     id: "648097421",
@@ -74,7 +74,7 @@ export const fallbackLedgerRows: LedgerRow[] = [
     amount: 600_000,
     requestedAt: "05-03 17:30:56",
     completedAt: "05-03 17:31:19",
-    status: "승인",
+    status: "완료",
   },
   {
     id: "937066067",
@@ -88,7 +88,7 @@ export const fallbackLedgerRows: LedgerRow[] = [
     amount: 1_000_000,
     requestedAt: "05-03 17:29:51",
     completedAt: "05-03 17:30:09",
-    status: "승인",
+    status: "완료",
   },
   {
     id: "903803275",
@@ -102,7 +102,7 @@ export const fallbackLedgerRows: LedgerRow[] = [
     amount: 10_000,
     requestedAt: "05-03 17:19:38",
     completedAt: "05-03 17:19:54",
-    status: "승인",
+    status: "완료",
   },
   {
     id: "888719028",
@@ -116,7 +116,7 @@ export const fallbackLedgerRows: LedgerRow[] = [
     amount: 10_000,
     requestedAt: "05-03 17:16:37",
     completedAt: "05-03 17:16:41",
-    status: "승인",
+    status: "완료",
   },
   {
     id: "549492544",
@@ -130,7 +130,7 @@ export const fallbackLedgerRows: LedgerRow[] = [
     amount: 10_000,
     requestedAt: "05-03 17:14:40",
     completedAt: "05-03 17:14:44",
-    status: "승인",
+    status: "완료",
   },
   {
     id: "491818749",
@@ -144,7 +144,7 @@ export const fallbackLedgerRows: LedgerRow[] = [
     amount: 10_000,
     requestedAt: "05-03 17:14:38",
     completedAt: "05-03 17:14:43",
-    status: "승인",
+    status: "완료",
   },
   {
     id: "129954054",
@@ -158,7 +158,7 @@ export const fallbackLedgerRows: LedgerRow[] = [
     amount: 1_000_000,
     requestedAt: "05-03 17:12:51",
     completedAt: "05-03 17:12:57",
-    status: "승인",
+    status: "완료",
   },
   {
     id: "506553381",
@@ -172,7 +172,7 @@ export const fallbackLedgerRows: LedgerRow[] = [
     amount: 100_000,
     requestedAt: "05-03 17:12:32",
     completedAt: "05-03 17:12:38",
-    status: "승인",
+    status: "완료",
   },
   {
     id: "429524801",
@@ -186,7 +186,7 @@ export const fallbackLedgerRows: LedgerRow[] = [
     amount: 10_000,
     requestedAt: "05-03 17:11:03",
     completedAt: "05-03 17:11:16",
-    status: "승인",
+    status: "완료",
   },
   {
     id: "975678778",
@@ -200,7 +200,7 @@ export const fallbackLedgerRows: LedgerRow[] = [
     amount: 60_000,
     requestedAt: "05-03 17:03:15",
     completedAt: "05-03 17:03:28",
-    status: "승인",
+    status: "완료",
   },
   {
     id: "836924537",
@@ -214,7 +214,7 @@ export const fallbackLedgerRows: LedgerRow[] = [
     amount: 100_000,
     requestedAt: "05-03 16:57:13",
     completedAt: "05-03 16:57:22",
-    status: "승인",
+    status: "완료",
   },
 ];
 
@@ -228,6 +228,13 @@ function normalizeLedgerRows(rows: LedgerRow[]) {
   return rows.map((row) => ({
     ...row,
     branch: row.distributor,
+    transactionType:
+      row.transactionType ?? (row.userId === "업체 환전" ? "환전" : "충전"),
+    companyName: row.companyName ?? (row.domain === "-" ? row.distributor : row.domain),
+    bankName: row.bankName ?? row.bankInfo.split(" / ")[0] ?? "-",
+    accountNumber: row.accountNumber ?? row.bankInfo.split(" / ")[1] ?? "-",
+    accountHolder: row.accountHolder ?? row.bankInfo.split(" / ")[2] ?? "-",
+    fee: row.fee ?? 0,
   }));
 }
 
@@ -236,7 +243,10 @@ function formatKoreanWon(value: number) {
 }
 
 function dateToNumber(value: string) {
-  const [month, day] = value.split("-").map(Number);
+  const datePart = value.trim().split(" ")[0] ?? "";
+  const parts = datePart.split("-");
+  const [month, day] =
+    parts.length === 3 ? parts.slice(1).map(Number) : parts.map(Number);
 
   return month * 100 + day;
 }
@@ -247,7 +257,7 @@ export function TransactionLedgerBoard({
   const rows = normalizeLedgerRows(initialRows);
   const [company, setCompany] = useState("업체 전체");
   const [transactionType, setTransactionType] = useState("충/환전 전체");
-  const [status, setStatus] = useState("승인/거절 전체");
+  const [status, setStatus] = useState("상태 전체");
   const [depositor, setDepositor] = useState("");
   const [amount, setAmount] = useState("");
   const [startDate, setStartDate] = useState("01-01");
@@ -260,17 +270,15 @@ export function TransactionLedgerBoard({
       const matchesDate =
         requestedDate >= dateToNumber(startDate) &&
         requestedDate <= dateToNumber(endDate);
-      const matchesCompany = company === "업체 전체" || row.domain === company;
+      const matchesCompany = company === "업체 전체" || row.companyName === company;
       const matchesStatus =
-        status === "승인/거절 전체" || row.status === status;
+        status === "상태 전체" || row.status === status;
       const matchesDepositor = row.depositor.includes(depositor.trim());
       const matchesAmount = amount
         ? String(row.amount).includes(amount.replace(/[^\d]/g, ""))
         : true;
       const matchesType =
-        transactionType === "충/환전 전체" ||
-        (transactionType === "충전" && row.userId !== "업체 환전") ||
-        (transactionType === "환전" && row.userId === "업체 환전");
+        transactionType === "충/환전 전체" || row.transactionType === transactionType;
 
       return (
         matchesDate &&
@@ -289,7 +297,7 @@ export function TransactionLedgerBoard({
   function resetSearch() {
     setCompany("업체 전체");
     setTransactionType("충/환전 전체");
-    setStatus("승인/거절 전체");
+    setStatus("상태 전체");
     setDepositor("");
     setAmount("");
     setStartDate("01-01");
@@ -298,38 +306,38 @@ export function TransactionLedgerBoard({
   }
 
   function exportRows() {
-    downloadCsv(
-      "transaction-ledger.csv",
+    downloadExcelTable(
+      "transaction-ledger.xls",
       [
-        "ID",
-        "본사",
-        "유저ID",
-        "상위총판",
-        "총판",
-        "도메인/url",
-        "은행",
-        "입금자",
-        "신청금액",
-        "신청시간",
-        "최초 완료시간",
+        "거래일자",
+        "충/환전",
+        "업체명",
+        "금액",
+        "수수료",
+        "입금자명",
         "상태",
+        "은행",
+        "계좌번호",
+        "통장명의",
       ],
       filteredRows.map((row) => [
-        row.id,
-        row.branch,
-        row.userId,
-        row.topDistributor,
-        row.distributor,
-        row.domain,
-        row.bankInfo,
-        row.depositor,
-        row.amount,
         row.requestedAt,
-        row.completedAt,
+        row.transactionType,
+        row.companyName,
+        row.amount,
+        row.fee,
+        row.depositor,
         row.status,
+        row.bankName,
+        row.accountNumber,
+        row.accountHolder,
       ]),
     );
   }
+
+  const companyOptions = Array.from(
+    new Set(rows.map((row) => row.companyName).filter(Boolean)),
+  ).sort();
 
   return (
     <section className="rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
@@ -345,8 +353,9 @@ export function TransactionLedgerBoard({
             className="h-12 rounded-xl border border-white/14 bg-white/[0.82] px-3 text-sm font-semibold text-slate-900 outline-none"
           >
             <option>업체 전체</option>
-            <option>아이락스</option>
-            <option>원페이</option>
+            {companyOptions.map((option) => (
+              <option key={option}>{option}</option>
+            ))}
           </select>
           <select
             value={transactionType}
@@ -362,8 +371,9 @@ export function TransactionLedgerBoard({
             onChange={(event) => setStatus(event.target.value)}
             className="h-12 rounded-xl border border-white/14 bg-white/[0.82] px-3 text-sm font-semibold text-slate-900 outline-none"
           >
-            <option>승인/거절 전체</option>
-            <option>승인</option>
+            <option>상태 전체</option>
+            <option>승인중</option>
+            <option>완료</option>
             <option>승인취소</option>
           </select>
           <input
@@ -414,29 +424,27 @@ export function TransactionLedgerBoard({
             disabled={!filteredRows.length}
             className="h-12 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-500"
           >
-            엑셀생성
+            엑셀 다운로드
           </button>
         </div>
       </div>
 
       <div className="p-5 sm:p-6">
         <div className="overflow-x-auto rounded-[26px] border border-white/8 bg-black/18">
-          <table className="w-full min-w-[1580px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[1320px] border-collapse text-left text-sm">
             <thead className="bg-black/52 text-white/72">
               <tr>
                 {[
-                  "ID",
-                  "본사",
-                  "유저ID",
-                  "상위총판",
-                  "총판",
-                  "도메인/url",
-                  "은행",
-                  "입금자",
-                  "신청금액",
-                  "신청시간",
-                  "최초 완료시간",
+                  "거래일자",
+                  "충/환전",
+                  "업체명",
+                  "금액",
+                  "수수료",
+                  "입금자명",
                   "상태",
+                  "은행",
+                  "계좌번호",
+                  "통장명의",
                 ].map((header) => (
                   <th
                     key={header}
@@ -454,31 +462,31 @@ export function TransactionLedgerBoard({
                     key={row.id}
                     className="border-b border-white/8 text-white/78 last:border-b-0"
                   >
-                    <td className="max-w-[92px] overflow-hidden text-ellipsis whitespace-nowrap px-3 py-3 text-center font-mono text-xs">
-                      {row.id}
+                    <td className="px-4 py-3 text-center">{row.requestedAt}</td>
+                    <td className="px-4 py-3 text-center">{row.transactionType}</td>
+                    <td className="px-4 py-3 text-center">{row.companyName}</td>
+                    <td className="px-4 py-3 text-right font-semibold text-white">
+                      {formatKoreanWon(row.amount)}
                     </td>
-                    <td className="px-4 py-3 text-center">{row.branch}</td>
-                    <td className="px-4 py-3 text-center">{row.userId}</td>
-                    <td className="px-4 py-3 text-center">{row.topDistributor}</td>
-                    <td className="px-4 py-3 text-center">{row.distributor}</td>
-                    <td className="px-4 py-3 text-center">{row.domain}</td>
-                    <td className="max-w-[280px] px-4 py-3 text-center leading-relaxed">
-                      {row.bankInfo}
+                    <td className="px-4 py-3 text-right font-semibold text-cyan-100">
+                      {formatKoreanWon(row.fee)}
                     </td>
                     <td className="px-4 py-3 text-center font-semibold text-white">
                       {row.depositor}
                     </td>
-                    <td className="px-4 py-3 text-right font-semibold text-white">
-                      {formatKoreanWon(row.amount)}
-                    </td>
-                    <td className="px-4 py-3 text-center">{row.requestedAt}</td>
-                    <td className="px-4 py-3 text-center">{row.completedAt}</td>
                     <td className="px-4 py-3 text-center">{row.status}</td>
+                    <td className="px-4 py-3 text-center">{row.bankName}</td>
+                    <td className="px-4 py-3 text-center font-mono text-xs">
+                      {row.accountNumber}
+                    </td>
+                    <td className="max-w-[260px] px-4 py-3 text-center leading-relaxed">
+                      {row.accountHolder}
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={12} className="px-4 py-10 text-center text-sm text-white/40">
+                  <td colSpan={10} className="px-4 py-10 text-center text-sm text-white/40">
                     조건에 맞는 거래 내역이 없습니다.
                   </td>
                 </tr>
