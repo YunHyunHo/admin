@@ -144,7 +144,7 @@ export function ChargeRequestsBoard({
       : "로컬 테스트 데이터로 충전신청을 표시합니다.",
   );
   const [lastSyncedAt, setLastSyncedAt] = useState("");
-  const [isSoundReady, setIsSoundReady] = useState(false);
+  const [isSoundReady, setIsSoundReady] = useState(true);
   const [soundMessage, setSoundMessage] = useState("");
   const noticeAudioRef = useRef<HTMLAudioElement | null>(null);
   const knownPendingIdsRef = useRef(
@@ -191,7 +191,7 @@ export function ChargeRequestsBoard({
         setMessage(`${newPendingCount}건의 신규 충전신청이 도착했습니다.`);
         void playNoticeSound().catch(() => {
           setIsSoundReady(false);
-          setSoundMessage("알림음을 켜려면 소리 활성화를 눌러주세요.");
+          setSoundMessage("브라우저가 알림음을 차단했습니다. 알림음 켜짐 버튼을 눌러주세요.");
         });
       }
     },
@@ -216,6 +216,11 @@ export function ChargeRequestsBoard({
   useEffect(() => {
     if (!isDatabaseBacked) {
       return;
+    }
+
+    if (!noticeAudioRef.current) {
+      noticeAudioRef.current = new Audio(chargeNoticeSoundPath);
+      noticeAudioRef.current.preload = "auto";
     }
 
     let isCancelled = false;
@@ -473,7 +478,7 @@ export function ChargeRequestsBoard({
                         : "border-amber-300/20 bg-amber-400/10 text-amber-100"
                     }`}
                   >
-                    {isSoundReady ? "알림음 켜짐" : "소리 활성화"}
+                    {isSoundReady ? "알림음 켜짐" : "알림음 다시 켜기"}
                   </button>
                 ) : null}
                 {!isDatabaseBacked ? (
