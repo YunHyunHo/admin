@@ -44,9 +44,21 @@ type CreateChargeRequestInput = {
   depositor?: string;
   bankName?: string;
   accountNumber?: string;
-  domainId?: string;
+  domainId?: string | null;
   domainName?: string;
+  distributorId?: string | null;
   rawPayload?: unknown;
+};
+
+export type IntegrationChargeDomainOption = {
+  id: string;
+  name: string;
+  distributorName: string;
+};
+
+export type IntegrationChargeDistributorOption = {
+  id: string;
+  name: string;
 };
 
 export type ChargeRequestsResponse = {
@@ -166,7 +178,7 @@ export async function getChargeRequestsForUser(user: SessionUser) {
   return companyRequests;
 }
 
-async function ensureDbScope(input: { domainId?: string; domainName?: string; user: SessionUser }) {
+async function ensureDbScope(input: { domainId?: string | null; domainName?: string; user: SessionUser }) {
   const scope = getScopedDistributorCondition(input.user);
   const domainValue = input.domainId ?? input.domainName;
   const domainPredicate = input.domainId
@@ -237,12 +249,87 @@ async function ensureDbScope(input: { domainId?: string; domainName?: string; us
   };
 }
 
-export async function createDbChargeRequest(input: CreateChargeRequestInput & { user: SessionUser }) {
-  const { companyId, domainId, distributorId } = await ensureDbScope({
-    domainId: input.domainId,
-    domainName: input.domainName,
-    user: input.user,
-  });
+async function ensureIntegrationDbScope(input: {
+  domainId?: string | null;
+  domainName?: string;
+  distributorId?: string | null;
+}) {
+  const domainValue = input.domainId ?? input.domainName;
+  const domainPredicate = input.domainId
+    ? "dom.id = $1::uuid"
+    : "dom.domain_name = $1";
+
+  if (!domainValue && input.distributorId) {
+    const distributorResult = await query<{
+      company_id: string;
+      distributor_id: string;
+    }>(
+      `
+        select
+          dist.company_id::text,
+          dist.id::text as distributor_id
+        from distributors dist
+        where dist.id = $1::uuid
+          and dist.status = 'ACTIVE'
+        limit 1
+      `,
+      [input.distributorId],
+    );
+    const distributor = distributorResult.rows[0];
+
+    if (!distributor) {
+      throw new Error("연동 가능한 하부계정을 찾을 수 없습니다.");
+    }
+
+    return {
+      companyId: distributor.company_id,
+      domainId: null,
+      distributorId: distributor.distributor_id,
+    };
+  }
+
+  if (!domainValue) {
+    throw new Error("연동 도메인 또는 하부계정을 선택해주세요.");
+  }
+
+  const existingDomain = await query<{
+    company_id: string;
+    domain_id: string | null;
+    distributor_id: string | null;
+  }>(
+    `
+      select
+        dom.company_id::text,
+        dom.id::text as domain_id,
+        dom.distributor_id::text
+      from domains dom
+      join distributors dist on dist.id = dom.distributor_id
+      where ${domainPredicate}
+        and dom.status = 'ACTIVE'
+        and dist.status = 'ACTIVE'
+      order by dom.created_at desc
+      limit 1
+    `,
+    [domainValue],
+  );
+  const domain = existingDomain.rows[0];
+
+  if (!domain) {
+    throw new Error("연동 가능한 도메인을 찾을 수 없습니다.");
+  }
+
+  return {
+    companyId: domain.company_id,
+    domainId: domain.domain_id,
+    distributorId: domain.distributor_id,
+  };
+}
+
+async function insertChargeRequest(input: CreateChargeRequestInput & {
+  companyId: string;
+  domainId: string | null;
+  distributorId: string | null;
+}) {
   const result = await query<{ id: string }>(
     `
       insert into charge_requests (
@@ -277,9 +364,9 @@ export async function createDbChargeRequest(input: CreateChargeRequestInput & { 
     `,
     [
       input.externalId ?? null,
-      companyId,
-      domainId,
-      distributorId,
+      input.companyId,
+      input.domainId,
+      input.distributorId,
       input.userId,
       input.bankName ?? null,
       input.accountNumber ?? null,
@@ -290,6 +377,77 @@ export async function createDbChargeRequest(input: CreateChargeRequestInput & { 
   );
 
   return result.rows[0]?.id;
+}
+
+export async function createDbChargeRequest(input: CreateChargeRequestInput & { user: SessionUser }) {
+  const { companyId, domainId, distributorId } = await ensureDbScope({
+    domainId: input.domainId,
+    domainName: input.domainName,
+    user: input.user,
+  });
+
+  return insertChargeRequest({
+    ...input,
+    companyId,
+    domainId,
+    distributorId,
+  });
+}
+
+export async function createIntegrationChargeRequest(input: CreateChargeRequestInput) {
+  const { companyId, domainId, distributorId } = await ensureIntegrationDbScope({
+    domainId: input.domainId,
+    domainName: input.domainName,
+    distributorId: input.distributorId,
+  });
+
+  return insertChargeRequest({
+    ...input,
+    companyId,
+    domainId,
+    distributorId,
+  });
+}
+
+export async function getIntegrationChargeDomainOptions() {
+  if (!hasDatabaseUrl()) {
+    return [] satisfies IntegrationChargeDomainOption[];
+  }
+
+  const result = await query<IntegrationChargeDomainOption>(
+    `
+      select
+        dom.id::text as id,
+        dom.domain_name as name,
+        dist.name as "distributorName"
+      from domains dom
+      join distributors dist on dist.id = dom.distributor_id
+      where dom.status = 'ACTIVE'
+        and dist.status = 'ACTIVE'
+      order by dom.created_at desc
+      limit ${DEFAULT_ROW_LIMIT}
+    `,
+  );
+
+  return result.rows;
+}
+
+export async function getIntegrationChargeDistributorOptions() {
+  if (!hasDatabaseUrl()) {
+    return [] satisfies IntegrationChargeDistributorOption[];
+  }
+
+  const result = await query<IntegrationChargeDistributorOption>(
+    `
+      select dist.id::text as id, dist.name
+      from distributors dist
+      where dist.status = 'ACTIVE'
+      order by dist.created_at desc
+      limit ${DEFAULT_ROW_LIMIT}
+    `,
+  );
+
+  return result.rows;
 }
 
 export async function processDbChargeRequest(input: {

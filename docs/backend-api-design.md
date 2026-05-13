@@ -333,6 +333,42 @@ Mancoin 요청 매핑:
 - `status = PENDING`
 - `raw_payload`
 
+### POST `/api/integration/charge-requests`
+
+외부 사이트 연동 테스트 및 실제 도메인 연동 충전신청 접수용 공개 API입니다. 관리자 세션 없이 호출하며, `domainId` 또는 `domainName`으로 연결 도메인과 하부계정을 찾은 뒤 `charge_requests`에 `PENDING`으로 저장합니다.
+도메인이 아직 연결되지 않은 테스트 단계에서는 `distributorId`로 하부계정을 직접 지정할 수 있습니다.
+
+요청:
+
+```json
+{
+  "externalId": "ORDER-TEST-001",
+  "domainId": "00000000-0000-0000-0000-000000000000",
+  "distributorId": null,
+  "depositorName": "홍길동",
+  "amount": 100000,
+  "bankName": "국민은행",
+  "accountNumber": "123-456"
+}
+```
+
+응답:
+
+```json
+{
+  "ok": true,
+  "requestId": "charge-request-id",
+  "status": "PENDING",
+  "message": "충전신청이 관리자에 전송되었습니다."
+}
+```
+
+테스트 페이지:
+
+```text
+/client/api-test
+```
+
 주의:
 
 - 이 API는 신청 내역 접수용입니다.
