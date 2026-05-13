@@ -235,7 +235,6 @@ export function DomainExchangesBoard({
   const [message, setMessage] = useState("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [domainId, setDomainId] = useState("");
-  const [userId, setUserId] = useState("");
   const [amount, setAmount] = useState("");
   const [bankName, setBankName] = useState("");
   const [accountHolder, setAccountHolder] = useState("");
@@ -249,8 +248,8 @@ export function DomainExchangesBoard({
   async function createExchange() {
     const numericAmount = Number(amount.replaceAll(",", ""));
 
-    if (!userId || !Number.isFinite(numericAmount) || numericAmount <= 0) {
-      setMessage("유저ID와 환전금액을 확인해주세요.");
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      setMessage("환전금액을 확인해주세요.");
       return;
     }
 
@@ -259,7 +258,6 @@ export function DomainExchangesBoard({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         domainId: domainId || undefined,
-        userId,
         amount: numericAmount,
         bankName,
         accountHolder,
@@ -282,7 +280,6 @@ export function DomainExchangesBoard({
 
     setPage(1);
     setDomainId("");
-    setUserId("");
     setAmount("");
     setBankName("");
     setAccountHolder("");
@@ -546,16 +543,6 @@ export function DomainExchangesBoard({
               </label>
 
               <label className="block">
-                <span className="sr-only">유저ID</span>
-                <input
-                  value={userId}
-                  onChange={(event) => setUserId(event.target.value)}
-                  placeholder="유저ID"
-                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
-                />
-              </label>
-
-              <label className="block">
                 <span className="sr-only">환전금액</span>
                 <input
                   value={amount}
@@ -601,7 +588,7 @@ export function DomainExchangesBoard({
               <button
                 type="button"
                 onClick={createExchange}
-                disabled={!userId || !amount}
+                disabled={!amount}
                 className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 신청

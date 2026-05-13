@@ -20,7 +20,6 @@ type PatchDomainExchangePayload = {
 type CreateDomainExchangePayload = {
   action?: "create";
   externalId?: string;
-  userId?: string;
   amount?: number;
   bankName?: string;
   accountHolder?: string;
@@ -69,7 +68,6 @@ export async function POST(request: Request) {
 
   const payload = (await request.json()) as CreateDomainExchangePayload;
   const domainId = payload.domainId?.trim();
-  const userId = payload.userId?.trim() ?? "";
   const amount = Number(payload.amount);
 
   if (domainId && !isUuid(domainId)) {
@@ -79,9 +77,9 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!userId || !Number.isFinite(amount) || amount <= 0) {
+  if (!Number.isFinite(amount) || amount <= 0) {
     return NextResponse.json(
-      { message: "유저ID와 환전금액을 확인해주세요." },
+      { message: "환전금액을 확인해주세요." },
       { status: 400 },
     );
   }
@@ -89,7 +87,7 @@ export async function POST(request: Request) {
   try {
     await createDomainExchange({
       externalId: payload.externalId,
-      userId,
+      userId: user.loginId,
       amount,
       bankName: payload.bankName,
       accountHolder: payload.accountHolder,
