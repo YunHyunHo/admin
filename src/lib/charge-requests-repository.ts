@@ -408,7 +408,7 @@ export async function processDbChargeRequest(input: {
       ],
     );
 
-    if (distributorId && distributorFee > 0) {
+    if (distributorId && savedCommission > 0) {
       const balanceResult = await client.query<{
         current_balance: string;
       }>(
@@ -421,7 +421,7 @@ export async function processDbChargeRequest(input: {
         [distributorId],
       );
       const beforeBalance = Number(balanceResult.rows[0]?.current_balance ?? 0);
-      const afterBalance = beforeBalance + distributorFee;
+      const afterBalance = beforeBalance + savedCommission;
 
       await client.query(
         `
@@ -448,7 +448,7 @@ export async function processDbChargeRequest(input: {
         `,
         [
           distributorId,
-          distributorFee,
+          savedCommission,
           beforeBalance,
           afterBalance,
           updated.id,
