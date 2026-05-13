@@ -412,7 +412,7 @@ export function DomainExchangesBoard({
                     key={row.id}
                     className="border-b border-white/8 text-white/76 last:border-b-0"
                   >
-                    <td className="max-w-[150px] px-4 py-4 font-mono text-xs text-white/56">
+                    <td className="max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap px-4 py-4 font-mono text-xs text-white/56">
                       {row.id}
                     </td>
                     <td className="px-4 py-4 text-center">{row.topDistributor}</td>

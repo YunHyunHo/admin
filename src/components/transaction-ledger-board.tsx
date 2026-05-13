@@ -454,7 +454,7 @@ export function TransactionLedgerBoard({
                     key={row.id}
                     className="border-b border-white/8 text-white/78 last:border-b-0"
                   >
-                    <td className="max-w-[92px] break-all px-3 py-3 text-center font-mono text-xs">
+                    <td className="max-w-[92px] overflow-hidden text-ellipsis whitespace-nowrap px-3 py-3 text-center font-mono text-xs">
                       {row.id}
                     </td>
                     <td className="px-4 py-3 text-center">{row.branch}</td>

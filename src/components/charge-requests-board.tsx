@@ -323,7 +323,9 @@ export function ChargeRequestsBoard({
                   {filteredPendingRequests.length ? (
                     visiblePendingRequests.map((row) => (
                       <tr key={row.id} className="border-t border-white/8 text-white/82">
-                        <td className="px-4 py-4">{row.id}</td>
+                        <td className="max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap px-4 py-4 font-mono text-xs">
+                          {row.id}
+                        </td>
                         <td className="px-4 py-4">{row.branch}</td>
                         <td className="px-4 py-4">{row.userId}</td>
                         <td className="px-4 py-4">{row.topAgent}</td>
@@ -411,7 +413,9 @@ export function ChargeRequestsBoard({
                   <tbody>
                     {visibleApprovedRequests.map((row) => (
                       <tr key={row.id} className="border-t border-white/8 text-white/82">
-                        <td className="px-4 py-4">{row.id}</td>
+                        <td className="max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap px-4 py-4 font-mono text-xs">
+                          {row.id}
+                        </td>
                         <td className="px-4 py-4">{row.userId}</td>
                         <td className="px-4 py-4">{row.bankName}</td>
                         <td className="px-4 py-4">{row.accountNumber}</td>
@@ -466,7 +470,9 @@ export function ChargeRequestsBoard({
                   <tbody>
                     {visibleRejectedRequests.map((row) => (
                       <tr key={row.id} className="border-t border-white/8 text-white/82">
-                        <td className="px-4 py-4">{row.id}</td>
+                        <td className="max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap px-4 py-4 font-mono text-xs">
+                          {row.id}
+                        </td>
                         <td className="px-4 py-4">{row.userId}</td>
                         <td className="px-4 py-4">{row.bankName}</td>
                         <td className="px-4 py-4">{row.accountNumber}</td>

@@ -655,7 +655,7 @@ export function AccountsBoard({
                 <tbody>
                   {visibleLinkedDomains.map((domain) => (
                       <tr key={domain.id} className="text-white/86">
-                        <td className="border border-white/55 px-4 py-4 font-mono text-xs">
+                        <td className="max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap border border-white/55 px-4 py-4 font-mono text-xs">
                           {domain.id}
                         </td>
                         <td className="border border-white/55 px-4 py-4 text-center font-semibold">
