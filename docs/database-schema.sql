@@ -150,7 +150,7 @@ create table exchange_requests (
   id uuid primary key default gen_random_uuid(),
   external_id text unique,
   company_id uuid not null references companies(id),
-  domain_id uuid not null references domains(id),
+  domain_id uuid references domains(id),
   distributor_id uuid references distributors(id),
   user_uid text not null,
   bank_name text,

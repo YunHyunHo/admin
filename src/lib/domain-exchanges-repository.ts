@@ -13,7 +13,7 @@ type ExchangeRequestDbRow = {
   distributor_name: string | null;
   distributor_login_id: string | null;
   master_name: string | null;
-  domain_name: string;
+  domain_name: string | null;
   bank_name: string | null;
   account_holder: string | null;
   account_number: string | null;
@@ -31,7 +31,7 @@ type CreateDomainExchangeInput = {
   accountHolder?: string;
   accountNumber?: string;
   rawPayload?: unknown;
-  domainId: string;
+  domainId?: string;
 };
 
 function formatStamp(value: Date | string | null) {
@@ -71,7 +71,7 @@ function toExchangeRow(row: ExchangeRequestDbRow): DomainExchangeRow {
     topDistributor: row.master_name ?? "마스터 관리자",
     distributor: distributorName,
     loginId: row.distributor_login_id ?? "-",
-    domain: row.domain_name,
+    domain: row.domain_name ?? "-",
     bankName: row.bank_name ?? "-",
     accountHolder: row.account_holder ?? "-",
     accountNumber: row.account_number ?? "-",
@@ -109,7 +109,7 @@ export async function getDomainExchangeRows(
         er.processed_at,
         er.status::text as status
       from exchange_requests er
-      join domains dom on dom.id = er.domain_id
+      left join domains dom on dom.id = er.domain_id
       left join distributors dist on dist.id = er.distributor_id
       left join admins dist_admin on dist_admin.id = dist.admin_id
       left join admins owner_master on owner_master.id = dist_admin.created_by
@@ -146,11 +146,41 @@ export async function getDomainExchangeOptions(user: SessionUser) {
   return result.rows;
 }
 
-async function findExchangeScope(domainId: string, user: SessionUser) {
+async function findExchangeScope(domainId: string | undefined, user: SessionUser) {
   const scope = getScopedDistributorCondition(user);
+
+  if (!domainId) {
+    const result = await query<{
+      company_id: string;
+      distributor_id: string;
+    }>(
+      `
+        select dist.company_id::text, dist.id::text as distributor_id
+        from distributors dist
+        left join admins dist_admin on dist_admin.id = dist.admin_id
+        where dist.status = 'ACTIVE'
+          ${scope.sql}
+        order by dist.created_at desc
+        limit 1
+      `,
+      scope.values,
+    );
+    const distributorScope = result.rows[0];
+
+    if (!distributorScope) {
+      throw new Error("환전신청을 연결할 하부계정을 찾을 수 없습니다.");
+    }
+
+    return {
+      company_id: distributorScope.company_id,
+      domain_id: null,
+      distributor_id: distributorScope.distributor_id,
+    };
+  }
+
   const result = await query<{
     company_id: string;
-    domain_id: string;
+    domain_id: string | null;
     distributor_id: string | null;
   }>(
     `

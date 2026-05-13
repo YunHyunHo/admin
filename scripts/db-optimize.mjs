@@ -46,6 +46,7 @@ function getDatabaseUrl() {
 
 const indexStatements = [
   "alter table admins add column if not exists password_ciphertext text",
+  "alter table exchange_requests alter column domain_id drop not null",
   "create index if not exists idx_admins_created_by_status on admins (created_by, status)",
   "create index if not exists idx_distributors_admin_status_created on distributors (admin_id, status, created_at desc)",
   "create index if not exists idx_domains_distributor_status_created on domains (distributor_id, status, created_at desc)",

@@ -249,8 +249,8 @@ export function DomainExchangesBoard({
   async function createExchange() {
     const numericAmount = Number(amount.replaceAll(",", ""));
 
-    if (!domainId || !userId || !Number.isFinite(numericAmount) || numericAmount <= 0) {
-      setMessage("도메인, 유저ID, 환전금액을 확인해주세요.");
+    if (!userId || !Number.isFinite(numericAmount) || numericAmount <= 0) {
+      setMessage("유저ID와 환전금액을 확인해주세요.");
       return;
     }
 
@@ -258,7 +258,7 @@ export function DomainExchangesBoard({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        domainId,
+        domainId: domainId || undefined,
         userId,
         amount: numericAmount,
         bankName,
@@ -532,7 +532,7 @@ export function DomainExchangesBoard({
                   onChange={(event) => setDomainId(event.target.value)}
                   className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-slate-500"
                 >
-                  <option value="">도메인 선택</option>
+                  <option value="">도메인 없음</option>
                   {domainOptions.map((domain) => (
                     <option key={domain.id} value={domain.id}>
                       {domain.name}
@@ -597,7 +597,7 @@ export function DomainExchangesBoard({
               <button
                 type="button"
                 onClick={createExchange}
-                disabled={!domainId || !userId || !amount}
+                disabled={!userId || !amount}
                 className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 신청
