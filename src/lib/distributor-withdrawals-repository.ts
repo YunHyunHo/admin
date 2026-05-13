@@ -1,4 +1,4 @@
-import { hasDatabaseUrl, query } from "@/lib/db";
+import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
 import { getScopedDistributorCondition } from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
 
@@ -16,7 +16,7 @@ export type DistributorWithdrawalRow = {
   requestAmount: number;
   requestedAt: string;
   completedAt: string;
-  status: "승인" | "승인취소";
+  status: "승인중" | "승인" | "승인거절";
 };
 
 type WithdrawalDbRow = {
@@ -40,6 +40,28 @@ type BalanceDbRow = {
   current_balance: string;
 };
 
+type CreateDistributorWithdrawalInput = {
+  amount: number;
+  bankName: string;
+  accountHolder: string;
+  accountNumber: string;
+  user: SessionUser;
+};
+
+type DistributorScopeRow = {
+  company_id: string;
+  distributor_id: string;
+  current_balance: string;
+};
+
+type ProcessingWithdrawalRow = {
+  id: string;
+  distributor_id: string;
+  request_amount: string;
+  current_balance: string;
+  status: WithdrawalDbRow["status"];
+};
+
 function formatStamp(value: Date | string | null) {
   if (!value) {
     return "-";
@@ -61,7 +83,11 @@ function formatStamp(value: Date | string | null) {
 }
 
 function toStatus(status: WithdrawalDbRow["status"]): DistributorWithdrawalRow["status"] {
-  return status === "REJECTED" || status === "CANCELED" ? "승인취소" : "승인";
+  if (status === "PENDING") {
+    return "승인중";
+  }
+
+  return status === "REJECTED" || status === "CANCELED" ? "승인거절" : "승인";
 }
 
 function toWithdrawalRow(row: WithdrawalDbRow): DistributorWithdrawalRow {
@@ -154,4 +180,189 @@ export async function getDistributorWithdrawalRows(
     completedAt: "-",
     status: "승인" as const,
   }));
+}
+
+export async function createDistributorWithdrawal(input: CreateDistributorWithdrawalInput) {
+  const scope = getScopedDistributorCondition(input.user, "dist", "dist_admin");
+  const distributor = await query<DistributorScopeRow>(
+    `
+      select
+        dist.company_id::text,
+        dist.id::text as distributor_id,
+        dist.current_balance::text
+      from distributors dist
+      left join admins dist_admin on dist_admin.id = dist.admin_id
+      where dist.status = 'ACTIVE'
+        ${scope.sql}
+      order by dist.created_at desc
+      limit 1
+    `,
+    scope.values,
+  );
+  const distributorScope = distributor.rows[0];
+
+  if (!distributorScope) {
+    throw new Error("환전신청을 연결할 하부계정을 찾을 수 없습니다.");
+  }
+
+  const beforeBalance = Number(distributorScope.current_balance);
+  const afterBalance = beforeBalance - input.amount;
+
+  if (afterBalance < 0) {
+    throw new Error("보유액보다 큰 금액은 신청할 수 없습니다.");
+  }
+
+  const result = await query<{ id: string }>(
+    `
+      insert into distributor_withdrawals (
+        distributor_id,
+        request_amount,
+        before_balance,
+        after_balance,
+        bank_name,
+        account_number,
+        account_holder,
+        status,
+        requested_at
+      )
+      values (
+        $1::uuid,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        'PENDING',
+        now()
+      )
+      returning id::text
+    `,
+    [
+      distributorScope.distributor_id,
+      input.amount,
+      beforeBalance,
+      afterBalance,
+      input.bankName,
+      input.accountNumber,
+      input.accountHolder,
+    ],
+  );
+
+  return result.rows[0]?.id;
+}
+
+export async function approveDistributorWithdrawal(id: string, processedBy: string) {
+  await withTransaction(async (client) => {
+    const withdrawal = await client.query<ProcessingWithdrawalRow>(
+      `
+        select
+          dw.id::text,
+          dw.distributor_id::text,
+          dw.request_amount::text,
+          d.current_balance::text,
+          dw.status::text as status
+        from distributor_withdrawals dw
+        join distributors d on d.id = dw.distributor_id
+        left join admins dist_admin on dist_admin.id = d.admin_id
+        where dw.id = $1::uuid
+          and dist_admin.created_by = $2::uuid
+        for update of dw, d
+      `,
+      [id, processedBy],
+    );
+    const row = withdrawal.rows[0];
+
+    if (!row) {
+      throw new Error("처리할 총판 환전 요청을 찾을 수 없습니다.");
+    }
+
+    if (row.status !== "PENDING") {
+      return;
+    }
+
+    const requestAmount = Number(row.request_amount);
+    const beforeBalance = Number(row.current_balance);
+    const afterBalance = beforeBalance - requestAmount;
+
+    if (afterBalance < 0) {
+      throw new Error("보유액보다 큰 환전 요청은 승인할 수 없습니다.");
+    }
+
+    await client.query(
+      `
+        update distributors
+        set current_balance = $2,
+            updated_at = now()
+        where id = $1::uuid
+      `,
+      [row.distributor_id, afterBalance],
+    );
+
+    await client.query(
+      `
+        update distributor_withdrawals
+        set status = 'APPROVED',
+            before_balance = $2,
+            after_balance = $3,
+            processed_at = coalesce(processed_at, now()),
+            processed_by = $4::uuid,
+            balance_deducted_at = coalesce(balance_deducted_at, now()),
+            updated_at = now()
+        where id = $1::uuid
+      `,
+      [id, beforeBalance, afterBalance, processedBy],
+    );
+
+    await client.query(
+      `
+        insert into distributor_balance_transactions (
+          distributor_id,
+          amount,
+          balance_before,
+          balance_after,
+          source_type,
+          source_id,
+          memo,
+          created_by
+        )
+        values (
+          $1::uuid,
+          $2,
+          $3,
+          $4,
+          'DISTRIBUTOR_WITHDRAWAL',
+          $5::uuid,
+          '총판 환전 승인',
+          $6::uuid
+        )
+        on conflict (source_type, source_id) do nothing
+      `,
+      [row.distributor_id, -requestAmount, beforeBalance, afterBalance, id, processedBy],
+    );
+  });
+}
+
+export async function rejectDistributorWithdrawal(id: string, processedBy: string) {
+  const result = await query<{ id: string }>(
+    `
+      update distributor_withdrawals dw
+      set status = 'REJECTED',
+          processed_at = coalesce(dw.processed_at, now()),
+          processed_by = $2::uuid,
+          updated_at = now()
+      from distributors d
+      left join admins dist_admin on dist_admin.id = d.admin_id
+      where dw.id = $1::uuid
+        and dw.distributor_id = d.id
+        and dist_admin.created_by = $2::uuid
+        and dw.status = 'PENDING'
+      returning dw.id::text
+    `,
+    [id, processedBy],
+  );
+
+  if (!result.rows[0]) {
+    throw new Error("처리할 총판 환전 요청을 찾을 수 없습니다.");
+  }
 }

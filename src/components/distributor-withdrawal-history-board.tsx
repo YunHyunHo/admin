@@ -231,21 +231,123 @@ function truncateId(value: string) {
 
 export function DistributorWithdrawalHistoryBoard({
   initialRows = fallbackDistributorWithdrawals,
+  canCreateWithdrawals = false,
+  canProcessWithdrawals = false,
 }: {
   initialRows?: WithdrawalRow[];
+  canCreateWithdrawals?: boolean;
+  canProcessWithdrawals?: boolean;
 }) {
+  const [rows, setRows] = useState(initialRows);
   const [page, setPage] = useState(1);
-  const pageCount = Math.max(1, Math.ceil(initialRows.length / rowsPerPage));
+  const [message, setMessage] = useState("");
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [accountHolder, setAccountHolder] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const pageCount = Math.max(1, Math.ceil(rows.length / rowsPerPage));
   const pageRows = useMemo(
-    () => initialRows.slice((page - 1) * rowsPerPage, page * rowsPerPage),
-    [initialRows, page],
+    () => rows.slice((page - 1) * rowsPerPage, page * rowsPerPage),
+    [rows, page],
   );
+
+  async function createWithdrawal() {
+    const numericAmount = Number(amount.replaceAll(",", ""));
+
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      setMessage("환전금액을 확인해주세요.");
+      return;
+    }
+
+    if (!bankName.trim() || !accountHolder.trim() || !accountNumber.trim()) {
+      setMessage("출금은행, 예금주, 계좌번호를 모두 입력해주세요.");
+      return;
+    }
+
+    const response = await fetch("/api/distributor-withdrawals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        amount: numericAmount,
+        bankName,
+        accountHolder,
+        accountNumber,
+      }),
+    });
+    const data = (await response.json()) as {
+      rows?: WithdrawalRow[];
+      message?: string;
+    };
+
+    if (!response.ok) {
+      setMessage(data.message ?? "총판 환전 신청 중 오류가 발생했습니다.");
+      return;
+    }
+
+    if (data.rows) {
+      setRows(data.rows);
+    }
+
+    setPage(1);
+    setAmount("");
+    setBankName("");
+    setAccountHolder("");
+    setAccountNumber("");
+    setMessage(data.message ?? "총판 환전 신청이 생성되었습니다.");
+    setIsCreateModalOpen(false);
+  }
+
+  async function processWithdrawal(id: string, action: "approve" | "reject") {
+    const response = await fetch("/api/distributor-withdrawals", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, action }),
+    });
+    const data = (await response.json()) as {
+      rows?: WithdrawalRow[];
+      message?: string;
+    };
+
+    if (!response.ok) {
+      setMessage(data.message ?? "총판 환전 요청 처리 중 오류가 발생했습니다.");
+      return;
+    }
+
+    if (data.rows) {
+      setRows(data.rows);
+    }
+
+    setMessage(
+      data.message ??
+        (action === "approve"
+          ? "총판 환전 요청이 승인되었습니다."
+          : "총판 환전 요청이 거절되었습니다."),
+    );
+  }
 
   return (
     <section className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,_rgba(18,18,18,0.95)_0%,_rgba(14,14,16,0.98)_100%)] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.34)] sm:p-6">
-      <h2 className="text-2xl font-semibold tracking-[-0.04em] text-white">
-        총판 환전내역
-      </h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-2xl font-semibold tracking-[-0.04em] text-white">
+          총판 환전내역
+        </h2>
+        {canCreateWithdrawals ? (
+          <button
+            type="button"
+            onClick={() => setIsCreateModalOpen(true)}
+            className="rounded-2xl bg-fuchsia-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-fuchsia-400"
+          >
+            환전신청
+          </button>
+        ) : null}
+      </div>
+
+      {message ? (
+        <div className="mt-4 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-100">
+          {message}
+        </div>
+      ) : null}
 
       <div className="mt-5 overflow-hidden border border-white/24 bg-black/10">
         <div className="overflow-x-auto">
@@ -281,7 +383,7 @@ export function DistributorWithdrawalHistoryBoard({
                   key={row.id}
                   className="border-b border-white/16 bg-white/[0.035] text-white/86 last:border-b-0"
                 >
-                  <td className="border border-white/18 px-3 py-4 text-center font-mono text-xs">
+                  <td className="max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap border border-white/18 px-3 py-4 text-center font-mono text-xs">
                     {truncateId(row.id)}
                   </td>
                   <td className="border border-white/18 px-4 py-4 text-center">
@@ -312,18 +414,26 @@ export function DistributorWithdrawalHistoryBoard({
                     {row.requestedAt}
                   </td>
                   <td className="border border-white/18 px-4 py-4 text-center">
-                    <button
-                      type="button"
-                      className="block w-full text-sm font-semibold text-sky-400 transition hover:text-sky-300"
-                    >
-                      승인
-                    </button>
-                    <button
-                      type="button"
-                      className="mt-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-500"
-                    >
-                      승인취소
-                    </button>
+                    {canProcessWithdrawals && row.status === "승인중" ? (
+                      <div className="flex flex-col items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => void processWithdrawal(row.id, "approve")}
+                          className="block w-full text-sm font-semibold text-sky-400 transition hover:text-sky-300"
+                        >
+                          승인
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void processWithdrawal(row.id, "reject")}
+                          className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-500"
+                        >
+                          거절
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-white/70">{row.status}</span>
+                    )}
                   </td>
                   <td className="border border-white/18 px-4 py-4 text-center">
                     {row.completedAt}
@@ -389,6 +499,77 @@ export function DistributorWithdrawalHistoryBoard({
           </button>
         </div>
       </div>
+
+      {isCreateModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-[520px] rounded-[28px] border border-white/10 bg-white p-6 text-slate-950 shadow-[0_28px_120px_rgba(0,0,0,0.58)]">
+            <h3 className="text-xl font-semibold tracking-[-0.03em]">
+              총판 환전신청
+            </h3>
+
+            <div className="mt-7 space-y-4">
+              <label className="block">
+                <span className="sr-only">환전금액</span>
+                <input
+                  value={amount}
+                  onChange={(event) => setAmount(event.target.value)}
+                  placeholder="환전금액"
+                  inputMode="numeric"
+                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
+                />
+              </label>
+
+              <label className="block">
+                <span className="sr-only">출금은행</span>
+                <input
+                  value={bankName}
+                  onChange={(event) => setBankName(event.target.value)}
+                  placeholder="출금은행"
+                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
+                />
+              </label>
+
+              <label className="block">
+                <span className="sr-only">예금주</span>
+                <input
+                  value={accountHolder}
+                  onChange={(event) => setAccountHolder(event.target.value)}
+                  placeholder="예금주"
+                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
+                />
+              </label>
+
+              <label className="block">
+                <span className="sr-only">계좌번호</span>
+                <input
+                  value={accountNumber}
+                  onChange={(event) => setAccountNumber(event.target.value)}
+                  placeholder="계좌번호"
+                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
+                />
+              </label>
+            </div>
+
+            <div className="mt-10 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => void createWithdrawal()}
+                disabled={!amount || !bankName || !accountHolder || !accountNumber}
+                className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                신청
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsCreateModalOpen(false)}
+                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

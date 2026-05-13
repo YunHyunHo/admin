@@ -33,7 +33,7 @@ export default async function DomainExchangesPage() {
       <DomainExchangesBoard
         initialRows={exchangeRows}
         domainOptions={domainOptions}
-        canCreateExchanges={!isMaster}
+        canCreateExchanges={!isMaster && domainOptions.length > 0}
         canProcessExchanges={isMaster}
       />
     </AdminShell>

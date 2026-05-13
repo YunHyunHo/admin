@@ -31,7 +31,7 @@ type CreateDomainExchangeInput = {
   accountHolder?: string;
   accountNumber?: string;
   rawPayload?: unknown;
-  domainId?: string;
+  domainId: string;
 };
 
 function formatStamp(value: Date | string | null) {
@@ -146,37 +146,8 @@ export async function getDomainExchangeOptions(user: SessionUser) {
   return result.rows;
 }
 
-async function findExchangeScope(domainId: string | undefined, user: SessionUser) {
+async function findExchangeScope(domainId: string, user: SessionUser) {
   const scope = getScopedDistributorCondition(user);
-
-  if (!domainId) {
-    const result = await query<{
-      company_id: string;
-      distributor_id: string;
-    }>(
-      `
-        select dist.company_id::text, dist.id::text as distributor_id
-        from distributors dist
-        left join admins dist_admin on dist_admin.id = dist.admin_id
-        where dist.status = 'ACTIVE'
-          ${scope.sql}
-        order by dist.created_at desc
-        limit 1
-      `,
-      scope.values,
-    );
-    const distributorScope = result.rows[0];
-
-    if (!distributorScope) {
-      throw new Error("환전신청을 연결할 하부계정을 찾을 수 없습니다.");
-    }
-
-    return {
-      company_id: distributorScope.company_id,
-      domain_id: null,
-      distributor_id: distributorScope.distributor_id,
-    };
-  }
 
   const result = await query<{
     company_id: string;

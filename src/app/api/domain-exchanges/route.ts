@@ -70,9 +70,9 @@ export async function POST(request: Request) {
   const domainId = payload.domainId?.trim();
   const amount = Number(payload.amount);
 
-  if (domainId && !isUuid(domainId)) {
+  if (!domainId || !isUuid(domainId)) {
     return NextResponse.json(
-      { message: "도메인 정보를 확인해주세요." },
+      { message: "도메인을 선택해주세요." },
       { status: 400 },
     );
   }

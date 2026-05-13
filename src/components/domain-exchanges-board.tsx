@@ -253,11 +253,16 @@ export function DomainExchangesBoard({
       return;
     }
 
+    if (!domainId) {
+      setMessage("도메인을 선택해주세요.");
+      return;
+    }
+
     const response = await fetch("/api/domain-exchanges", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        domainId: domainId || undefined,
+        domainId,
         amount: numericAmount,
         bankName,
         accountHolder,
@@ -533,7 +538,7 @@ export function DomainExchangesBoard({
                   onChange={(event) => setDomainId(event.target.value)}
                   className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-slate-500"
                 >
-                  <option value="">도메인 없음</option>
+                  <option value="">도메인 선택</option>
                   {domainOptions.map((domain) => (
                     <option key={domain.id} value={domain.id}>
                       {domain.name}
@@ -588,7 +593,7 @@ export function DomainExchangesBoard({
               <button
                 type="button"
                 onClick={createExchange}
-                disabled={!amount}
+                disabled={!domainId || !amount}
                 className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 신청
