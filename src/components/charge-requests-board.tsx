@@ -5,6 +5,7 @@ import type {
   PendingRequest,
   ProcessedRequest,
 } from "@/lib/charge-utils";
+import type { DomainExchangeOption } from "@/lib/domain-exchanges-types";
 
 type ChargeRequestsBoardProps = {
   initialPendingRequests: PendingRequest[];
@@ -12,12 +13,25 @@ type ChargeRequestsBoardProps = {
   initialRejectedRequests: ProcessedRequest[];
   canProcessCharges?: boolean;
   isDatabaseBacked?: boolean;
+  domainOptions?: DomainExchangeOption[];
 };
 
 type ChargeRequestsResponse = {
   pending: PendingRequest[];
   approved: ProcessedRequest[];
   rejected: ProcessedRequest[];
+};
+
+type ChargeRequestPayload = {
+  action?: "create" | "reset";
+  id?: string;
+  status?: "승인" | "승인거절";
+  userId?: string;
+  amount?: number;
+  depositor?: string;
+  bankName?: string;
+  accountNumber?: string;
+  domainName?: string;
 };
 
 const rowsPerPage = 10;
@@ -96,6 +110,7 @@ export function ChargeRequestsBoard({
   initialRejectedRequests,
   canProcessCharges = true,
   isDatabaseBacked = false,
+  domainOptions = [],
 }: ChargeRequestsBoardProps) {
   const [pendingRequests, setPendingRequests] = useState(initialPendingRequests);
   const [approvedRequests, setApprovedRequests] = useState(initialApprovedRequests);
@@ -106,6 +121,13 @@ export function ChargeRequestsBoard({
   const [rejectedPage, setRejectedPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createDomainName, setCreateDomainName] = useState(domainOptions[0]?.name ?? "");
+  const [createUserId, setCreateUserId] = useState("");
+  const [createAmount, setCreateAmount] = useState("");
+  const [createDepositor, setCreateDepositor] = useState("");
+  const [createBankName, setCreateBankName] = useState("");
+  const [createAccountNumber, setCreateAccountNumber] = useState("");
   const [message, setMessage] = useState(
     isDatabaseBacked
       ? "Neon DB와 연결된 충전신청 데이터를 표시합니다."
@@ -121,7 +143,7 @@ export function ChargeRequestsBoard({
     setRejectedPage(1);
   }
 
-  async function requestChargeData(body?: Record<string, string>) {
+  async function requestChargeData(body?: ChargeRequestPayload) {
     const response = await fetch("/api/charge-requests", {
       method: body ? "POST" : "GET",
       headers: body ? { "Content-Type": "application/json" } : undefined,
@@ -159,6 +181,50 @@ export function ChargeRequestsBoard({
       setMessage("로컬 테스트 데이터가 초기 상태로 복구되었습니다.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "초기화에 실패했습니다.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function createChargeRequest() {
+    const amount = Number(createAmount.replaceAll(",", ""));
+    const userId = createUserId.trim();
+    const domainName = createDomainName.trim();
+
+    if (!domainName) {
+      setMessage("충전신청을 연결할 도메인을 선택해주세요.");
+      return;
+    }
+
+    if (!userId || !Number.isFinite(amount) || amount <= 0) {
+      setMessage("유저ID와 신청금액을 확인해주세요.");
+      return;
+    }
+
+    setIsLoading(true);
+    setMessage("테스트 충전신청을 생성하는 중입니다.");
+
+    try {
+      applyServerData(
+        await requestChargeData({
+          action: "create",
+          userId,
+          amount,
+          depositor: createDepositor,
+          bankName: createBankName,
+          accountNumber: createAccountNumber,
+          domainName,
+        }),
+      );
+      setCreateUserId("");
+      setCreateAmount("");
+      setCreateDepositor("");
+      setCreateBankName("");
+      setCreateAccountNumber("");
+      setIsCreateModalOpen(false);
+      setMessage("테스트 충전신청이 생성되었습니다.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "충전신청 생성에 실패했습니다.");
     } finally {
       setIsLoading(false);
     }
@@ -271,6 +337,16 @@ export function ChargeRequestsBoard({
                 >
                   검색
                 </button>
+                {isDatabaseBacked && canProcessCharges ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateModalOpen(true)}
+                    disabled={isLoading || !domainOptions.length}
+                    className="rounded-2xl bg-fuchsia-500 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    충전신청 생성
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={refreshRequests}
@@ -501,6 +577,103 @@ export function ChargeRequestsBoard({
           </div>
         </div>
       </div>
+
+      {isCreateModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-[560px] rounded-[28px] border border-white/10 bg-white p-6 text-slate-950 shadow-[0_28px_120px_rgba(0,0,0,0.58)]">
+            <h3 className="text-xl font-semibold tracking-[-0.03em]">
+              테스트 충전신청 생성
+            </h3>
+
+            <div className="mt-7 space-y-4">
+              <label className="block">
+                <span className="sr-only">도메인 선택</span>
+                <select
+                  value={createDomainName}
+                  onChange={(event) => setCreateDomainName(event.target.value)}
+                  className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-slate-500"
+                >
+                  <option value="">도메인 선택</option>
+                  {domainOptions.map((domain) => (
+                    <option key={domain.id} value={domain.name}>
+                      {domain.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="sr-only">유저ID</span>
+                <input
+                  value={createUserId}
+                  onChange={(event) => setCreateUserId(event.target.value)}
+                  placeholder="유저ID"
+                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
+                />
+              </label>
+
+              <label className="block">
+                <span className="sr-only">신청금액</span>
+                <input
+                  value={createAmount}
+                  onChange={(event) => setCreateAmount(event.target.value)}
+                  placeholder="신청금액"
+                  inputMode="numeric"
+                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
+                />
+              </label>
+
+              <label className="block">
+                <span className="sr-only">입금자</span>
+                <input
+                  value={createDepositor}
+                  onChange={(event) => setCreateDepositor(event.target.value)}
+                  placeholder="입금자"
+                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
+                />
+              </label>
+
+              <label className="block">
+                <span className="sr-only">은행명</span>
+                <input
+                  value={createBankName}
+                  onChange={(event) => setCreateBankName(event.target.value)}
+                  placeholder="은행명"
+                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
+                />
+              </label>
+
+              <label className="block">
+                <span className="sr-only">계좌번호</span>
+                <input
+                  value={createAccountNumber}
+                  onChange={(event) => setCreateAccountNumber(event.target.value)}
+                  placeholder="계좌번호"
+                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
+                />
+              </label>
+            </div>
+
+            <div className="mt-10 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => void createChargeRequest()}
+                disabled={isLoading || !createDomainName || !createUserId || !createAmount}
+                className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                생성
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsCreateModalOpen(false)}
+                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

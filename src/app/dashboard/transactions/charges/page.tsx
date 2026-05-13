@@ -5,6 +5,7 @@ import { AdminShell } from "@/components/admin-shell";
 import { getSessionUser } from "@/lib/auth";
 import { getChargeRequestsForUser } from "@/lib/charge-requests-repository";
 import { hasDatabaseUrl } from "@/lib/db";
+import { getDomainExchangeOptions } from "@/lib/domain-exchanges-repository";
 import { canProcessRequests } from "@/lib/permissions";
 
 export default async function ChargesPage() {
@@ -15,6 +16,7 @@ export default async function ChargesPage() {
   }
 
   const companyRequests = await getChargeRequestsForUser(user);
+  const domainOptions = await getDomainExchangeOptions(user);
 
   return (
     <AdminShell
@@ -29,6 +31,7 @@ export default async function ChargesPage() {
         initialRejectedRequests={companyRequests.rejected}
         canProcessCharges={canProcessRequests(user)}
         isDatabaseBacked={hasDatabaseUrl()}
+        domainOptions={domainOptions}
       />
     </AdminShell>
   );
