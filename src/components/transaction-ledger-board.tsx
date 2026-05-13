@@ -253,13 +253,17 @@ function dateToNumber(value: string) {
   return month * 100 + day;
 }
 
+function toExcelDate(value: string) {
+  return value.trim().split(" ")[0] ?? value;
+}
+
 export function TransactionLedgerBoard({
   initialRows = fallbackLedgerRows,
 }: TransactionLedgerBoardProps) {
   const rows = normalizeLedgerRows(initialRows);
   const [company, setCompany] = useState("업체 전체");
   const [transactionType, setTransactionType] = useState("충/환전 전체");
-  const [status, setStatus] = useState("상태 전체");
+  const [status, setStatus] = useState("승인/거절 전체");
   const [depositor, setDepositor] = useState("");
   const [amount, setAmount] = useState("");
   const [startDate, setStartDate] = useState(minQueryDate);
@@ -274,7 +278,7 @@ export function TransactionLedgerBoard({
         requestedDate <= dateToNumber(endDate);
       const matchesCompany = company === "업체 전체" || row.companyName === company;
       const matchesStatus =
-        status === "상태 전체" || row.status === status;
+        status === "승인/거절 전체" || row.status === status;
       const matchesDepositor = row.depositor.includes(depositor.trim());
       const matchesAmount = amount
         ? String(row.amount).includes(amount.replace(/[^\d]/g, ""))
@@ -299,7 +303,7 @@ export function TransactionLedgerBoard({
   function resetSearch() {
     setCompany("업체 전체");
     setTransactionType("충/환전 전체");
-    setStatus("상태 전체");
+    setStatus("승인/거절 전체");
     setDepositor("");
     setAmount("");
     setStartDate(minQueryDate);
@@ -323,7 +327,7 @@ export function TransactionLedgerBoard({
         "통장명의",
       ],
       filteredRows.map((row) => [
-        row.requestedAt,
+        toExcelDate(row.requestedAt),
         row.transactionType,
         row.companyName,
         row.amount,
@@ -345,11 +349,8 @@ export function TransactionLedgerBoard({
     <section className="rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
       <div className="space-y-5 border-b border-white/8 px-5 py-5">
         <div>
-          <p className="text-xs uppercase tracking-[0.24em] text-cyan-300/55">
+          <h2 className="text-2xl font-semibold tracking-[-0.04em] text-white">
             Transaction
-          </p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">
-            충/환전 거래내역
           </h2>
         </div>
 
@@ -378,7 +379,7 @@ export function TransactionLedgerBoard({
             onChange={(event) => setStatus(event.target.value)}
             className="h-11 min-w-0 rounded-2xl border border-white/14 bg-white/[0.82] px-3 text-sm font-semibold text-slate-900 outline-none"
           >
-            <option>상태 전체</option>
+            <option>승인/거절 전체</option>
             <option>승인중</option>
             <option>완료</option>
             <option>승인취소</option>
@@ -441,27 +442,29 @@ export function TransactionLedgerBoard({
             disabled={!filteredRows.length}
             className="h-11 rounded-2xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-45"
           >
-            엑셀 다운로드
+            엑셀생성
           </button>
         </div>
       </div>
 
       <div className="p-5 sm:p-6">
         <div className="overflow-x-auto rounded-[26px] border border-white/8 bg-black/18">
-          <table className="w-full min-w-[1320px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[1680px] border-collapse text-left text-sm">
             <thead className="bg-black/52 text-white/72">
               <tr>
                 {[
-                  "거래일자",
-                  "충/환전",
-                  "업체명",
-                  "금액",
-                  "수수료",
-                  "입금자명",
-                  "상태",
+                  "ID",
+                  "본사",
+                  "유저ID",
+                  "상위총판",
+                  "총판",
+                  "도메인/url",
                   "은행",
-                  "계좌번호",
-                  "통장명의",
+                  "입금자",
+                  "신청금액",
+                  "신청시간",
+                  "최초 완료시간",
+                  "상태",
                 ].map((header) => (
                   <th
                     key={header}
@@ -479,31 +482,31 @@ export function TransactionLedgerBoard({
                     key={row.id}
                     className="border-b border-white/8 text-white/78 last:border-b-0"
                   >
-                    <td className="px-4 py-3 text-center">{row.requestedAt}</td>
-                    <td className="px-4 py-3 text-center">{row.transactionType}</td>
-                    <td className="px-4 py-3 text-center">{row.companyName}</td>
-                    <td className="px-4 py-3 text-right font-semibold text-white">
-                      {formatKoreanWon(row.amount)}
+                    <td className="max-w-[92px] overflow-hidden text-ellipsis whitespace-nowrap px-3 py-3 text-center font-mono text-xs">
+                      {row.id}
                     </td>
-                    <td className="px-4 py-3 text-right font-semibold text-cyan-100">
-                      {formatKoreanWon(row.fee)}
+                    <td className="px-4 py-3 text-center">{row.branch}</td>
+                    <td className="px-4 py-3 text-center">{row.userId}</td>
+                    <td className="px-4 py-3 text-center">{row.topDistributor}</td>
+                    <td className="px-4 py-3 text-center">{row.distributor}</td>
+                    <td className="px-4 py-3 text-center">{row.domain}</td>
+                    <td className="max-w-[300px] px-4 py-3 text-center leading-relaxed">
+                      {row.bankInfo}
                     </td>
                     <td className="px-4 py-3 text-center font-semibold text-white">
                       {row.depositor}
                     </td>
+                    <td className="px-4 py-3 text-right font-semibold text-white">
+                      {formatKoreanWon(row.amount)}
+                    </td>
+                    <td className="px-4 py-3 text-center">{row.requestedAt}</td>
+                    <td className="px-4 py-3 text-center">{row.completedAt}</td>
                     <td className="px-4 py-3 text-center">{row.status}</td>
-                    <td className="px-4 py-3 text-center">{row.bankName}</td>
-                    <td className="px-4 py-3 text-center font-mono text-xs">
-                      {row.accountNumber}
-                    </td>
-                    <td className="max-w-[260px] px-4 py-3 text-center leading-relaxed">
-                      {row.accountHolder}
-                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={10} className="px-4 py-10 text-center text-sm text-white/40">
+                  <td colSpan={12} className="px-4 py-10 text-center text-sm text-white/40">
                     조건에 맞는 거래 내역이 없습니다.
                   </td>
                 </tr>
