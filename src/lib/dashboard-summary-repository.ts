@@ -29,7 +29,11 @@ export async function getDashboardSummaryForUser(user: SessionUser) {
     return getDashboardSummary(user.companyName, state, settings);
   }
   const scope = getScopedDistributorCondition(user);
-  const feeScopeSql = scope.sql.replace("dist.", "fee_dist.");
+  const balanceScopeSql = getScopedDistributorCondition(
+    user,
+    "balance_dist",
+    "balance_dist_admin",
+  ).sql;
 
   const [summaryResult, feeRateResult] = await Promise.all([
     query<DashboardSummaryRow>(
@@ -42,12 +46,11 @@ export async function getDashboardSummaryForUser(user: SessionUser) {
           coalesce(sum(cr.amount) filter (where cr.status = 'PENDING'), 0)::text as pending_charge_total,
           coalesce(sum(cr.amount) filter (where cr.status in ('APPROVED', 'COMPLETED')), 0)::text as approved_charge_total,
           coalesce((
-            select sum(saved_commission)
-            from commission_records co
-            left join distributors fee_dist on fee_dist.id = co.distributor_id
-            left join admins dist_admin on dist_admin.id = fee_dist.admin_id
-            where co.status in ('APPROVED', 'COMPLETED')
-              ${feeScopeSql}
+            select sum(balance_dist.current_balance)
+            from distributors balance_dist
+            left join admins balance_dist_admin on balance_dist_admin.id = balance_dist.admin_id
+            where balance_dist.status = 'ACTIVE'
+              ${balanceScopeSql}
           ), 0)::text as fee_total
         from charge_requests cr
         left join domains d on d.id = cr.domain_id

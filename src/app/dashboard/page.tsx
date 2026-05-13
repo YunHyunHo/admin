@@ -25,7 +25,7 @@ export default async function DashboardPage() {
     { label: "거절 건수", value: `${summary.rejectedCount}건` },
     { label: "대기 금액", value: formatKoreanWon(summary.pendingChargeTotal) },
     { label: "승인 충전", value: formatKoreanWon(summary.approvedChargeTotal) },
-    { label: "수수료", value: formatKoreanWon(summary.feeTotal) },
+    { label: "보유 수수료", value: formatKoreanWon(summary.feeTotal) },
     { label: "요율", value: `${summary.feeRate}%` },
   ];
 
