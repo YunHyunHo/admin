@@ -219,6 +219,8 @@ export const fallbackLedgerRows: LedgerRow[] = [
 ];
 
 const rowsPerPage = 10;
+const minQueryDate = "2026-01-01";
+const maxQueryDate = "2026-12-31";
 
 type TransactionLedgerBoardProps = {
   initialRows?: LedgerRow[];
@@ -260,13 +262,13 @@ export function TransactionLedgerBoard({
   const [status, setStatus] = useState("상태 전체");
   const [depositor, setDepositor] = useState("");
   const [amount, setAmount] = useState("");
-  const [startDate, setStartDate] = useState("01-01");
-  const [endDate, setEndDate] = useState("12-31");
+  const [startDate, setStartDate] = useState(minQueryDate);
+  const [endDate, setEndDate] = useState(maxQueryDate);
   const [page, setPage] = useState(1);
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
-      const requestedDate = dateToNumber(row.requestedAt.slice(0, 5));
+      const requestedDate = dateToNumber(row.requestedAt);
       const matchesDate =
         requestedDate >= dateToNumber(startDate) &&
         requestedDate <= dateToNumber(endDate);
@@ -300,8 +302,8 @@ export function TransactionLedgerBoard({
     setStatus("상태 전체");
     setDepositor("");
     setAmount("");
-    setStartDate("01-01");
-    setEndDate("12-31");
+    setStartDate(minQueryDate);
+    setEndDate(maxQueryDate);
     setPage(1);
   }
 
@@ -341,16 +343,21 @@ export function TransactionLedgerBoard({
 
   return (
     <section className="rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
-      <div className="flex flex-col gap-4 border-b border-white/8 px-5 py-5 2xl:flex-row 2xl:items-center">
-        <h2 className="text-2xl font-semibold tracking-[-0.04em] text-white">
-          Transaction
-        </h2>
+      <div className="space-y-5 border-b border-white/8 px-5 py-5">
+        <div>
+          <p className="text-xs uppercase tracking-[0.24em] text-cyan-300/55">
+            Transaction
+          </p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">
+            충/환전 거래내역
+          </h2>
+        </div>
 
-        <div className="grid flex-1 gap-3 md:grid-cols-3 xl:grid-cols-[180px_180px_180px_180px_180px_105px_105px_68px_118px_118px]">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-[minmax(150px,1fr)_minmax(150px,1fr)_minmax(150px,1fr)_minmax(150px,1fr)_minmax(150px,1fr)_160px_160px_92px_120px_132px] 2xl:items-end">
           <select
             value={company}
             onChange={(event) => setCompany(event.target.value)}
-            className="h-12 rounded-xl border border-white/14 bg-white/[0.82] px-3 text-sm font-semibold text-slate-900 outline-none"
+            className="h-11 min-w-0 rounded-2xl border border-white/14 bg-white/[0.82] px-3 text-sm font-semibold text-slate-900 outline-none"
           >
             <option>업체 전체</option>
             {companyOptions.map((option) => (
@@ -360,7 +367,7 @@ export function TransactionLedgerBoard({
           <select
             value={transactionType}
             onChange={(event) => setTransactionType(event.target.value)}
-            className="h-12 rounded-xl border border-white/14 bg-white/[0.82] px-3 text-sm font-semibold text-slate-900 outline-none"
+            className="h-11 min-w-0 rounded-2xl border border-white/14 bg-white/[0.82] px-3 text-sm font-semibold text-slate-900 outline-none"
           >
             <option>충/환전 전체</option>
             <option>충전</option>
@@ -369,7 +376,7 @@ export function TransactionLedgerBoard({
           <select
             value={status}
             onChange={(event) => setStatus(event.target.value)}
-            className="h-12 rounded-xl border border-white/14 bg-white/[0.82] px-3 text-sm font-semibold text-slate-900 outline-none"
+            className="h-11 min-w-0 rounded-2xl border border-white/14 bg-white/[0.82] px-3 text-sm font-semibold text-slate-900 outline-none"
           >
             <option>상태 전체</option>
             <option>승인중</option>
@@ -380,41 +387,51 @@ export function TransactionLedgerBoard({
             value={depositor}
             onChange={(event) => setDepositor(event.target.value)}
             placeholder="입금자"
-            className="h-12 rounded-xl border border-white/14 bg-white/[0.035] px-4 text-sm text-white outline-none placeholder:text-white/38 focus:border-cyan-300/40"
+            className="h-11 min-w-0 rounded-2xl border border-white/14 bg-white/[0.035] px-4 text-sm text-white outline-none placeholder:text-white/38 focus:border-cyan-300/40"
           />
           <input
             value={amount}
             onChange={(event) => setAmount(event.target.value)}
             placeholder="신청금액"
-            className="h-12 rounded-xl border border-white/14 bg-white/[0.035] px-4 text-sm text-white outline-none placeholder:text-white/38 focus:border-cyan-300/40"
+            className="h-11 min-w-0 rounded-2xl border border-white/14 bg-white/[0.035] px-4 text-sm text-white outline-none placeholder:text-white/38 focus:border-cyan-300/40"
           />
-          <label className="text-xs text-white/42">
-            시작일
+          <label className="block">
+            <span className="mb-2 block text-xs uppercase tracking-[0.18em] text-white/38">
+              시작일
+            </span>
             <input
+              type="date"
               value={startDate}
+              min={minQueryDate}
+              max={endDate}
               onChange={(event) => setStartDate(event.target.value)}
-              className="mt-1 h-8 w-full border-b border-white/36 bg-transparent text-base font-semibold text-white outline-none"
+              className="h-11 w-full rounded-2xl border border-white/10 bg-black/20 px-4 text-sm text-white outline-none [color-scheme:dark]"
             />
           </label>
-          <label className="text-xs text-white/42">
-            종료일
+          <label className="block">
+            <span className="mb-2 block text-xs uppercase tracking-[0.18em] text-white/38">
+              종료일
+            </span>
             <input
+              type="date"
               value={endDate}
+              min={startDate}
+              max={maxQueryDate}
               onChange={(event) => setEndDate(event.target.value)}
-              className="mt-1 h-8 w-full border-b border-white/36 bg-transparent text-base font-semibold text-white outline-none"
+              className="h-11 w-full rounded-2xl border border-white/10 bg-black/20 px-4 text-sm text-white outline-none [color-scheme:dark]"
             />
           </label>
           <button
             type="button"
             onClick={() => setPage(1)}
-            className="h-12 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white transition hover:bg-red-500"
+            className="h-11 rounded-2xl bg-red-600 px-4 text-sm font-semibold text-white transition hover:bg-red-500"
           >
             검색
           </button>
           <button
             type="button"
             onClick={resetSearch}
-            className="h-12 rounded-xl bg-teal-500 px-4 text-sm font-semibold text-white transition hover:bg-teal-400"
+            className="h-11 rounded-2xl bg-teal-500 px-4 text-sm font-semibold text-white transition hover:bg-teal-400"
           >
             검색 초기화
           </button>
@@ -422,7 +439,7 @@ export function TransactionLedgerBoard({
             type="button"
             onClick={exportRows}
             disabled={!filteredRows.length}
-            className="h-12 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-500"
+            className="h-11 rounded-2xl bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-45"
           >
             엑셀 다운로드
           </button>
