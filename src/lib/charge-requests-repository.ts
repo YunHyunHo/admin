@@ -44,6 +44,7 @@ type CreateChargeRequestInput = {
   depositor?: string;
   bankName?: string;
   accountNumber?: string;
+  domainId?: string;
   domainName?: string;
   rawPayload?: unknown;
 };
@@ -165,8 +166,12 @@ export async function getChargeRequestsForUser(user: SessionUser) {
   return companyRequests;
 }
 
-async function ensureDbScope(domainName = "전체", user: SessionUser) {
-  const scope = getScopedDistributorCondition(user);
+async function ensureDbScope(input: { domainId?: string; domainName?: string; user: SessionUser }) {
+  const scope = getScopedDistributorCondition(input.user);
+  const domainValue = input.domainId ?? input.domainName ?? "전체";
+  const domainPredicate = input.domainId
+    ? "dom.id = $2::uuid"
+    : "dom.domain_name = $2";
   const existingDomain = await query<{
     company_id: string;
     domain_id: string;
@@ -180,12 +185,12 @@ async function ensureDbScope(domainName = "전체", user: SessionUser) {
       from domains dom
       join distributors dist on dist.id = dom.distributor_id
       left join admins dist_admin on dist_admin.id = dist.admin_id
-      where dom.domain_name = $2 and dom.status <> 'DELETED'
+      where ${domainPredicate} and dom.status <> 'DELETED'
         ${scope.sql}
       order by dom.created_at desc
       limit 1
     `,
-    [...scope.values, domainName],
+    [...scope.values, domainValue],
   );
   const domain = existingDomain.rows[0];
 
@@ -201,10 +206,11 @@ async function ensureDbScope(domainName = "전체", user: SessionUser) {
 }
 
 export async function createDbChargeRequest(input: CreateChargeRequestInput & { user: SessionUser }) {
-  const { companyId, domainId, distributorId } = await ensureDbScope(
-    input.domainName,
-    input.user,
-  );
+  const { companyId, domainId, distributorId } = await ensureDbScope({
+    domainId: input.domainId,
+    domainName: input.domainName,
+    user: input.user,
+  });
   const result = await query<{ id: string }>(
     `
       insert into charge_requests (

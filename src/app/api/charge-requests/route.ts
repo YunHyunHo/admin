@@ -48,6 +48,7 @@ export async function POST(request: Request) {
     depositor?: string;
     bankName?: string;
     accountNumber?: string;
+    domainId?: string;
     domainName?: string;
   };
 
@@ -73,26 +74,40 @@ export async function POST(request: Request) {
     }
 
     const userId = body.userId?.trim() ?? "";
+    const domainId = body.domainId?.trim() ?? "";
     const amount = Number(body.amount);
 
-    if (!userId || !Number.isFinite(amount) || amount <= 0) {
+    if (!userId || !domainId || !Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json(
-        { message: "유저ID와 신청금액을 확인해주세요." },
+        { message: "도메인, 유저ID, 신청금액을 확인해주세요." },
         { status: 400 },
       );
     }
 
-    await createDbChargeRequest({
-      externalId: body.externalId,
-      userId,
-      amount,
-      depositor: body.depositor,
-      bankName: body.bankName,
-      accountNumber: body.accountNumber,
-      domainName: body.domainName,
-      rawPayload: body,
-      user,
-    });
+    try {
+      await createDbChargeRequest({
+        externalId: body.externalId,
+        userId,
+        amount,
+        depositor: body.depositor,
+        bankName: body.bankName,
+        accountNumber: body.accountNumber,
+        domainId,
+        domainName: body.domainName,
+        rawPayload: body,
+        user,
+      });
+    } catch (error) {
+      return NextResponse.json(
+        {
+          message:
+            error instanceof Error
+              ? error.message
+              : "충전신청 생성 중 오류가 발생했습니다.",
+        },
+        { status: 400 },
+      );
+    }
 
     return NextResponse.json(await getChargeRequestsForUser(user), { status: 201 });
   }

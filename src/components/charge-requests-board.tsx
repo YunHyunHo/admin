@@ -31,6 +31,7 @@ type ChargeRequestPayload = {
   depositor?: string;
   bankName?: string;
   accountNumber?: string;
+  domainId?: string;
   domainName?: string;
 };
 
@@ -122,7 +123,7 @@ export function ChargeRequestsBoard({
   const [isLoading, setIsLoading] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [createDomainName, setCreateDomainName] = useState(domainOptions[0]?.name ?? "");
+  const [createDomainId, setCreateDomainId] = useState(domainOptions[0]?.id ?? "");
   const [createUserId, setCreateUserId] = useState("");
   const [createAmount, setCreateAmount] = useState("");
   const [createDepositor, setCreateDepositor] = useState("");
@@ -151,7 +152,7 @@ export function ChargeRequestsBoard({
     });
 
     if (!response.ok) {
-      const error = (await response.json()) as { message?: string };
+      const error = (await response.json().catch(() => ({}))) as { message?: string };
       throw new Error(error.message ?? "API 요청에 실패했습니다.");
     }
 
@@ -189,9 +190,11 @@ export function ChargeRequestsBoard({
   async function createChargeRequest() {
     const amount = Number(createAmount.replaceAll(",", ""));
     const userId = createUserId.trim();
-    const domainName = createDomainName.trim();
+    const domainId = createDomainId.trim();
+    const domainName =
+      domainOptions.find((domain) => domain.id === domainId)?.name ?? "";
 
-    if (!domainName) {
+    if (!domainId) {
       setMessage("충전신청을 연결할 도메인을 선택해주세요.");
       return;
     }
@@ -213,6 +216,7 @@ export function ChargeRequestsBoard({
           depositor: createDepositor,
           bankName: createBankName,
           accountNumber: createAccountNumber,
+          domainId,
           domainName,
         }),
       );
@@ -589,13 +593,13 @@ export function ChargeRequestsBoard({
               <label className="block">
                 <span className="sr-only">도메인 선택</span>
                 <select
-                  value={createDomainName}
-                  onChange={(event) => setCreateDomainName(event.target.value)}
+                  value={createDomainId}
+                  onChange={(event) => setCreateDomainId(event.target.value)}
                   className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-slate-500"
                 >
                   <option value="">도메인 선택</option>
                   {domainOptions.map((domain) => (
-                    <option key={domain.id} value={domain.name}>
+                    <option key={domain.id} value={domain.id}>
                       {domain.name}
                     </option>
                   ))}
@@ -658,7 +662,7 @@ export function ChargeRequestsBoard({
               <button
                 type="button"
                 onClick={() => void createChargeRequest()}
-                disabled={isLoading || !createDomainName || !createUserId || !createAmount}
+                disabled={isLoading || !createDomainId || !createUserId || !createAmount}
                 className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 생성
