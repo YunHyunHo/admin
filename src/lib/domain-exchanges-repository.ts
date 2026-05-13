@@ -56,10 +56,10 @@ function formatStamp(value: Date | string | null) {
 
 function toStatus(status: ExchangeRequestDbRow["status"]): DomainExchangeRow["status"] {
   if (status === "PENDING") {
-    return "대기";
+    return "승인중";
   }
 
-  return status === "REJECTED" || status === "CANCELED" ? "거절" : "승인";
+  return status === "REJECTED" || status === "CANCELED" ? "승인거절" : "승인";
 }
 
 function toExchangeRow(row: ExchangeRequestDbRow): DomainExchangeRow {

@@ -206,11 +206,8 @@ function normalizeExchangeRow(row: DomainExchangeRow): DomainExchangeRow {
   return {
     ...row,
     branch: row.distributor,
+    domain: row.domain || "-",
   };
-}
-
-function formatKoreanWon(value: number) {
-  return `${value.toLocaleString("ko-KR")} 원`;
 }
 
 function getNowStamp() {
@@ -236,6 +233,7 @@ export function DomainExchangesBoard({
   const [rows, setRows] = useState(initialRows.map(normalizeExchangeRow));
   const [page, setPage] = useState(1);
   const [message, setMessage] = useState("");
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [domainId, setDomainId] = useState("");
   const [userId, setUserId] = useState("");
   const [amount, setAmount] = useState("");
@@ -290,6 +288,7 @@ export function DomainExchangesBoard({
     setAccountHolder("");
     setAccountNumber("");
     setMessage(data.message ?? "환전신청이 생성되었습니다.");
+    setIsCreateModalOpen(false);
   }
 
   async function persistExchangePatch(id: string, action: "approve" | "reject") {
@@ -338,7 +337,7 @@ export function DomainExchangesBoard({
         row.id === id
           ? {
               ...row,
-              status: "거절",
+              status: "승인거절",
               completedAt: row.completedAt || getNowStamp(),
             }
           : row,
@@ -363,61 +362,14 @@ export function DomainExchangesBoard({
 
       <div className="p-5 sm:p-6">
         {canCreateExchanges ? (
-          <div className="mb-5 rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
-            <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-              <select
-                value={domainId}
-                onChange={(event) => setDomainId(event.target.value)}
-                className="h-11 rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-white outline-none"
-              >
-                <option value="">도메인 선택</option>
-                {domainOptions.map((domain) => (
-                  <option key={domain.id} value={domain.id}>
-                    {domain.name}
-                  </option>
-                ))}
-              </select>
-              <input
-                value={userId}
-                onChange={(event) => setUserId(event.target.value)}
-                placeholder="유저ID"
-                className="h-11 rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-white outline-none placeholder:text-white/35"
-              />
-              <input
-                value={amount}
-                onChange={(event) => setAmount(event.target.value)}
-                placeholder="환전금액"
-                inputMode="numeric"
-                className="h-11 rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-white outline-none placeholder:text-white/35"
-              />
-              <input
-                value={bankName}
-                onChange={(event) => setBankName(event.target.value)}
-                placeholder="출금은행"
-                className="h-11 rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-white outline-none placeholder:text-white/35"
-              />
-              <input
-                value={accountHolder}
-                onChange={(event) => setAccountHolder(event.target.value)}
-                placeholder="예금주"
-                className="h-11 rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-white outline-none placeholder:text-white/35"
-              />
-              <div className="flex gap-2">
-                <input
-                  value={accountNumber}
-                  onChange={(event) => setAccountNumber(event.target.value)}
-                  placeholder="계좌번호"
-                  className="h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-white outline-none placeholder:text-white/35"
-                />
-                <button
-                  type="button"
-                  onClick={createExchange}
-                  className="h-11 rounded-xl bg-fuchsia-500 px-4 text-sm font-semibold text-white transition hover:bg-fuchsia-400"
-                >
-                  신청
-                </button>
-              </div>
-            </div>
+          <div className="mb-5 flex justify-end">
+            <button
+              type="button"
+              onClick={() => setIsCreateModalOpen(true)}
+              className="rounded-2xl bg-fuchsia-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-fuchsia-400"
+            >
+              환전신청
+            </button>
           </div>
         ) : null}
 
@@ -428,12 +380,11 @@ export function DomainExchangesBoard({
         ) : null}
 
         <div className="overflow-x-auto rounded-[26px] border border-white/8 bg-black/18">
-          <table className="w-full min-w-[1500px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[1320px] border-collapse text-left text-sm">
             <thead className="bg-black/52 text-white/72">
               <tr>
                 {[
                   "ID",
-                  "본사",
                   "상위총판",
                   "총판",
                   "로그인 ID",
@@ -441,9 +392,8 @@ export function DomainExchangesBoard({
                   "출금은행",
                   "예금주",
                   "계좌번호",
-                  "요청금액",
                   "요청일",
-                  canProcessExchanges ? "승인/거절" : "상태",
+                  "상태",
                   "완료일",
                 ].map((header) => (
                   <th
@@ -465,7 +415,6 @@ export function DomainExchangesBoard({
                     <td className="max-w-[150px] px-4 py-4 font-mono text-xs text-white/56">
                       {row.id}
                     </td>
-                    <td className="px-4 py-4 text-center">{row.branch}</td>
                     <td className="px-4 py-4 text-center">{row.topDistributor}</td>
                     <td className="px-4 py-4 text-center">{row.distributor}</td>
                     <td className="px-4 py-4 text-center">{row.loginId}</td>
@@ -473,12 +422,9 @@ export function DomainExchangesBoard({
                     <td className="px-4 py-4 text-center">{row.bankName}</td>
                     <td className="px-4 py-4 text-center">{row.accountHolder}</td>
                     <td className="px-4 py-4 text-center">{row.accountNumber}</td>
-                    <td className="px-4 py-4 text-right font-semibold text-white">
-                      {formatKoreanWon(row.amount)}
-                    </td>
                     <td className="px-4 py-4 text-center">{row.requestedAt}</td>
                     <td className="px-4 py-4 text-center">
-                      {canProcessExchanges && row.status === "대기" ? (
+                      {canProcessExchanges && row.status === "승인중" ? (
                         <div className="flex flex-col items-center gap-1">
                           <button
                             type="button"
@@ -504,7 +450,7 @@ export function DomainExchangesBoard({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={13} className="px-4 py-10 text-center text-sm text-white/40">
+                  <td colSpan={11} className="px-4 py-10 text-center text-sm text-white/40">
                     조건에 맞는 환전 요청이 없습니다.
                   </td>
                 </tr>
@@ -570,6 +516,103 @@ export function DomainExchangesBoard({
           </div>
         </div>
       </div>
+
+      {isCreateModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-[520px] rounded-[28px] border border-white/10 bg-white p-6 text-slate-950 shadow-[0_28px_120px_rgba(0,0,0,0.58)]">
+            <h3 className="text-xl font-semibold tracking-[-0.03em]">
+              환전신청
+            </h3>
+
+            <div className="mt-7 space-y-4">
+              <label className="block">
+                <span className="sr-only">도메인 선택</span>
+                <select
+                  value={domainId}
+                  onChange={(event) => setDomainId(event.target.value)}
+                  className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-slate-500"
+                >
+                  <option value="">도메인 선택</option>
+                  {domainOptions.map((domain) => (
+                    <option key={domain.id} value={domain.id}>
+                      {domain.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="sr-only">유저ID</span>
+                <input
+                  value={userId}
+                  onChange={(event) => setUserId(event.target.value)}
+                  placeholder="유저ID"
+                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
+                />
+              </label>
+
+              <label className="block">
+                <span className="sr-only">환전금액</span>
+                <input
+                  value={amount}
+                  onChange={(event) => setAmount(event.target.value)}
+                  placeholder="환전금액"
+                  inputMode="numeric"
+                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
+                />
+              </label>
+
+              <label className="block">
+                <span className="sr-only">출금은행</span>
+                <input
+                  value={bankName}
+                  onChange={(event) => setBankName(event.target.value)}
+                  placeholder="출금은행"
+                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
+                />
+              </label>
+
+              <label className="block">
+                <span className="sr-only">예금주</span>
+                <input
+                  value={accountHolder}
+                  onChange={(event) => setAccountHolder(event.target.value)}
+                  placeholder="예금주"
+                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
+                />
+              </label>
+
+              <label className="block">
+                <span className="sr-only">계좌번호</span>
+                <input
+                  value={accountNumber}
+                  onChange={(event) => setAccountNumber(event.target.value)}
+                  placeholder="계좌번호"
+                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
+                />
+              </label>
+            </div>
+
+            <div className="mt-10 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={createExchange}
+                disabled={!domainId || !userId || !amount}
+                className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                신청
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsCreateModalOpen(false)}
+                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
