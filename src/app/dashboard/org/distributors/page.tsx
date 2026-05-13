@@ -6,6 +6,9 @@ import { getAllAdminAccounts } from "@/lib/admin-accounts";
 import { getSessionUser } from "@/lib/auth";
 import { canManageMasterResources } from "@/lib/permissions";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function DistributorsPage() {
   const user = await getSessionUser();
 

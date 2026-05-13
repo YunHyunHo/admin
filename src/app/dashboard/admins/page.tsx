@@ -9,6 +9,9 @@ import {
 import { getSessionUser } from "@/lib/auth";
 import { canManageMasterResources } from "@/lib/permissions";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function AdminsPage() {
   const user = await getSessionUser();
 
