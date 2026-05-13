@@ -124,9 +124,8 @@ export function ChargeRequestsBoard({
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createDomainId, setCreateDomainId] = useState(domainOptions[0]?.id ?? "");
-  const [createUserId, setCreateUserId] = useState("");
+  const [createDepositorName, setCreateDepositorName] = useState("");
   const [createAmount, setCreateAmount] = useState("");
-  const [createDepositor, setCreateDepositor] = useState("");
   const [createBankName, setCreateBankName] = useState("");
   const [createAccountNumber, setCreateAccountNumber] = useState("");
   const [message, setMessage] = useState(
@@ -189,13 +188,13 @@ export function ChargeRequestsBoard({
 
   async function createChargeRequest() {
     const amount = Number(createAmount.replaceAll(",", ""));
-    const userId = createUserId.trim();
+    const depositorName = createDepositorName.trim();
     const domainId = createDomainId.trim();
     const domainName =
       domainOptions.find((domain) => domain.id === domainId)?.name ?? "";
 
-    if (!userId || !Number.isFinite(amount) || amount <= 0) {
-      setMessage("유저ID와 신청금액을 확인해주세요.");
+    if (!depositorName || !Number.isFinite(amount) || amount <= 0) {
+      setMessage("입금자명과 신청금액을 확인해주세요.");
       return;
     }
 
@@ -206,18 +205,17 @@ export function ChargeRequestsBoard({
       applyServerData(
         await requestChargeData({
           action: "create",
-          userId,
+          userId: depositorName,
           amount,
-          depositor: createDepositor,
+          depositor: depositorName,
           bankName: createBankName,
           accountNumber: createAccountNumber,
           domainId,
           domainName,
         }),
       );
-      setCreateUserId("");
+      setCreateDepositorName("");
       setCreateAmount("");
-      setCreateDepositor("");
       setCreateBankName("");
       setCreateAccountNumber("");
       setIsCreateModalOpen(false);
@@ -327,7 +325,7 @@ export function ChargeRequestsBoard({
                     setSearchKeyword(event.target.value);
                     setPendingPage(1);
                   }}
-                  placeholder="입금자 / 유저ID / 계좌번호 검색"
+                  placeholder="입금자명 / 계좌번호 검색"
                   className="h-11 w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 text-sm text-white outline-none placeholder:text-white/28 lg:w-72"
                 />
                 <button
@@ -374,7 +372,7 @@ export function ChargeRequestsBoard({
                     {[
                       "ID",
                       "본사",
-                      "유저ID",
+                      "입금자명",
                       "상위총판",
                       "총판",
                       "도메인",
@@ -467,7 +465,7 @@ export function ChargeRequestsBoard({
                     <tr>
                       {[
                         "ID",
-                        "유저ID",
+                        "입금자명",
                         "은행명",
                         "계좌번호",
                         "입금자",
@@ -524,7 +522,7 @@ export function ChargeRequestsBoard({
                     <tr>
                       {[
                         "ID",
-                        "유저ID",
+                        "입금자명",
                         "은행명",
                         "계좌번호",
                         "입금자",
@@ -602,11 +600,11 @@ export function ChargeRequestsBoard({
               </label>
 
               <label className="block">
-                <span className="sr-only">유저ID</span>
+                <span className="sr-only">입금자명</span>
                 <input
-                  value={createUserId}
-                  onChange={(event) => setCreateUserId(event.target.value)}
-                  placeholder="유저ID"
+                  value={createDepositorName}
+                  onChange={(event) => setCreateDepositorName(event.target.value)}
+                  placeholder="입금자명"
                   className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
                 />
               </label>
@@ -618,16 +616,6 @@ export function ChargeRequestsBoard({
                   onChange={(event) => setCreateAmount(event.target.value)}
                   placeholder="신청금액"
                   inputMode="numeric"
-                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
-                />
-              </label>
-
-              <label className="block">
-                <span className="sr-only">입금자</span>
-                <input
-                  value={createDepositor}
-                  onChange={(event) => setCreateDepositor(event.target.value)}
-                  placeholder="입금자"
                   className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
                 />
               </label>
@@ -657,7 +645,7 @@ export function ChargeRequestsBoard({
               <button
                 type="button"
                 onClick={() => void createChargeRequest()}
-                disabled={isLoading || !createUserId || !createAmount}
+                disabled={isLoading || !createDepositorName || !createAmount}
                 className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 생성

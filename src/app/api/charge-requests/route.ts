@@ -79,7 +79,7 @@ export async function POST(request: Request) {
 
     if (!userId || !Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json(
-        { message: "유저ID와 신청금액을 확인해주세요." },
+        { message: "입금자명과 신청금액을 확인해주세요." },
         { status: 400 },
       );
     }
