@@ -4,17 +4,17 @@ import { getSessionUser } from "@/lib/auth";
 import {
   approveDomainExchange,
   createDomainExchange,
-  deleteDomainExchange,
   getDomainExchangeRows,
+  rejectDomainExchange,
 } from "@/lib/domain-exchanges-repository";
 import { hasDatabaseUrl } from "@/lib/db";
-import { canProcessRequests } from "@/lib/permissions";
+import { canManageMasterResources } from "@/lib/permissions";
 
 export const runtime = "nodejs";
 
 type PatchDomainExchangePayload = {
   id?: string;
-  action?: "approve" | "delete";
+  action?: "approve" | "reject";
 };
 
 type CreateDomainExchangePayload = {
@@ -25,7 +25,7 @@ type CreateDomainExchangePayload = {
   bankName?: string;
   accountHolder?: string;
   accountNumber?: string;
-  domainName?: string;
+  domainId?: string;
 };
 
 function isUuid(value: string | undefined) {
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
 
-  if (!canProcessRequests(user)) {
+  if (user.role !== "ADMIN") {
     return NextResponse.json(
       { message: "환전 요청을 생성할 권한이 없습니다." },
       { status: 403 },
@@ -68,8 +68,16 @@ export async function POST(request: Request) {
   }
 
   const payload = (await request.json()) as CreateDomainExchangePayload;
+  const domainId = payload.domainId?.trim();
   const userId = payload.userId?.trim() ?? "";
   const amount = Number(payload.amount);
+
+  if (!domainId || !isUuid(domainId)) {
+    return NextResponse.json(
+      { message: "도메인을 선택해주세요." },
+      { status: 400 },
+    );
+  }
 
   if (!userId || !Number.isFinite(amount) || amount <= 0) {
     return NextResponse.json(
@@ -86,7 +94,7 @@ export async function POST(request: Request) {
       bankName: payload.bankName,
       accountHolder: payload.accountHolder,
       accountNumber: payload.accountNumber,
-      domainName: payload.domainName,
+      domainId,
       rawPayload: payload,
       user,
     });
@@ -118,7 +126,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
 
-  if (!canProcessRequests(user)) {
+  if (!canManageMasterResources(user)) {
     return NextResponse.json(
       { message: "환전 요청을 처리할 권한이 없습니다." },
       { status: 403 },
@@ -145,7 +153,7 @@ export async function PATCH(request: Request) {
     if (payload.action === "approve") {
       await approveDomainExchange(payload.id, user.id);
     } else {
-      await deleteDomainExchange(payload.id);
+      await rejectDomainExchange(payload.id, user.id);
     }
 
     return NextResponse.json({
@@ -153,7 +161,7 @@ export async function PATCH(request: Request) {
       message:
         payload.action === "approve"
           ? "환전 요청이 승인되었습니다."
-          : "환전 요청이 삭제되었습니다.",
+          : "환전 요청이 거절되었습니다.",
     });
   }
 
@@ -161,6 +169,6 @@ export async function PATCH(request: Request) {
     message:
       payload.action === "approve"
         ? "환전 요청이 승인되었습니다."
-        : "환전 요청이 삭제되었습니다.",
+        : "환전 요청이 거절되었습니다.",
   });
 }

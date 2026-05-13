@@ -6,8 +6,11 @@ import {
   fallbackDomainExchanges,
 } from "@/components/domain-exchanges-board";
 import { getSessionUser } from "@/lib/auth";
-import { getDomainExchangeRows } from "@/lib/domain-exchanges-repository";
-import { canProcessRequests } from "@/lib/permissions";
+import {
+  getDomainExchangeOptions,
+  getDomainExchangeRows,
+} from "@/lib/domain-exchanges-repository";
+import { canManageMasterResources } from "@/lib/permissions";
 
 export default async function DomainExchangesPage() {
   const user = await getSessionUser();
@@ -17,6 +20,8 @@ export default async function DomainExchangesPage() {
   }
 
   const exchangeRows = await getDomainExchangeRows(fallbackDomainExchanges, user);
+  const domainOptions = await getDomainExchangeOptions(user);
+  const isMaster = canManageMasterResources(user);
 
   return (
     <AdminShell
@@ -27,7 +32,9 @@ export default async function DomainExchangesPage() {
     >
       <DomainExchangesBoard
         initialRows={exchangeRows}
-        canProcessExchanges={canProcessRequests(user)}
+        domainOptions={domainOptions}
+        canCreateExchanges={!isMaster}
+        canProcessExchanges={isMaster}
       />
     </AdminShell>
   );

@@ -1,7 +1,10 @@
 import { hasDatabaseUrl, query } from "@/lib/db";
 import { getScopedDistributorCondition } from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
-import type { DomainExchangeRow } from "@/lib/domain-exchanges-types";
+import type {
+  DomainExchangeOption,
+  DomainExchangeRow,
+} from "@/lib/domain-exchanges-types";
 
 const DEFAULT_ROW_LIMIT = 200;
 
@@ -27,8 +30,8 @@ type CreateDomainExchangeInput = {
   bankName?: string;
   accountHolder?: string;
   accountNumber?: string;
-  domainName?: string;
   rawPayload?: unknown;
+  domainId: string;
 };
 
 function formatStamp(value: Date | string | null) {
@@ -52,7 +55,11 @@ function formatStamp(value: Date | string | null) {
 }
 
 function toStatus(status: ExchangeRequestDbRow["status"]): DomainExchangeRow["status"] {
-  return status === "PENDING" ? "대기" : "승인";
+  if (status === "PENDING") {
+    return "대기";
+  }
+
+  return status === "REJECTED" || status === "CANCELED" ? "거절" : "승인";
 }
 
 function toExchangeRow(row: ExchangeRequestDbRow): DomainExchangeRow {
@@ -117,7 +124,29 @@ export async function getDomainExchangeRows(
   return result.rows.map(toExchangeRow);
 }
 
-async function findExchangeScope(domainName = "전체", user: SessionUser) {
+export async function getDomainExchangeOptions(user: SessionUser) {
+  if (!hasDatabaseUrl()) {
+    return [] satisfies DomainExchangeOption[];
+  }
+
+  const scope = getScopedDistributorCondition(user);
+  const result = await query<DomainExchangeOption>(
+    `
+      select dom.id::text, dom.domain_name as name
+      from domains dom
+      join distributors dist on dist.id = dom.distributor_id
+      left join admins dist_admin on dist_admin.id = dist.admin_id
+      where dom.status <> 'DELETED'
+        ${scope.sql}
+      order by dom.domain_name asc
+    `,
+    scope.values,
+  );
+
+  return result.rows;
+}
+
+async function findExchangeScope(domainId: string, user: SessionUser) {
   const scope = getScopedDistributorCondition(user);
   const result = await query<{
     company_id: string;
@@ -132,12 +161,12 @@ async function findExchangeScope(domainName = "전체", user: SessionUser) {
       from domains dom
       join distributors dist on dist.id = dom.distributor_id
       left join admins dist_admin on dist_admin.id = dist.admin_id
-      where dom.domain_name = $2 and dom.status <> 'DELETED'
+      where dom.id = $2::uuid and dom.status <> 'DELETED'
         ${scope.sql}
       order by dom.created_at desc
       limit 1
     `,
-    [...scope.values, domainName],
+    [...scope.values, domainId],
   );
   const domainScope = result.rows[0];
 
@@ -148,8 +177,10 @@ async function findExchangeScope(domainName = "전체", user: SessionUser) {
   return domainScope;
 }
 
-export async function createDomainExchange(input: CreateDomainExchangeInput & { user: SessionUser }) {
-  const scope = await findExchangeScope(input.domainName, input.user);
+export async function createDomainExchange(
+  input: CreateDomainExchangeInput & { user: SessionUser },
+) {
+  const scope = await findExchangeScope(input.domainId, input.user);
   const result = await query<{ id: string }>(
     `
       insert into exchange_requests (
@@ -213,6 +244,16 @@ export async function approveDomainExchange(id: string, processedBy: string) {
   );
 }
 
-export async function deleteDomainExchange(id: string) {
-  await query("delete from exchange_requests where id = $1::uuid", [id]);
+export async function rejectDomainExchange(id: string, processedBy: string) {
+  await query(
+    `
+      update exchange_requests
+      set status = 'REJECTED',
+          processed_at = coalesce(processed_at, now()),
+          processed_by = $2::uuid,
+          updated_at = now()
+      where id = $1::uuid and status = 'PENDING'
+    `,
+    [id, processedBy],
+  );
 }

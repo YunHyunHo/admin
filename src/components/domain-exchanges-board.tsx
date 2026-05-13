@@ -2,7 +2,10 @@
 
 import { useMemo, useState } from "react";
 
-import type { DomainExchangeRow } from "@/lib/domain-exchanges-types";
+import type {
+  DomainExchangeOption,
+  DomainExchangeRow,
+} from "@/lib/domain-exchanges-types";
 
 export const fallbackDomainExchanges: DomainExchangeRow[] = [
   {
@@ -194,6 +197,8 @@ type DomainExchangesBoardProps = {
   eyebrow?: string;
   title?: string;
   description?: string;
+  domainOptions?: DomainExchangeOption[];
+  canCreateExchanges?: boolean;
   canProcessExchanges?: boolean;
 };
 
@@ -223,19 +228,71 @@ export function DomainExchangesBoard({
   initialRows = fallbackDomainExchanges,
   eyebrow = "Domain Exchange",
   title = "도메인 환전",
-  description = "도메인에서 들어온 환전 요청을 확인하고 승인/삭제 처리하는 화면입니다.",
+  description = "하부계정은 환전을 신청하고, 마스터는 신청 내역을 승인 또는 거절합니다.",
+  domainOptions = [],
+  canCreateExchanges = false,
   canProcessExchanges = true,
 }: DomainExchangesBoardProps) {
   const [rows, setRows] = useState(initialRows.map(normalizeExchangeRow));
   const [page, setPage] = useState(1);
   const [message, setMessage] = useState("");
+  const [domainId, setDomainId] = useState("");
+  const [userId, setUserId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [accountHolder, setAccountHolder] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
   const pageCount = Math.max(1, Math.ceil(rows.length / rowsPerPage));
   const pageRows = useMemo(
     () => rows.slice((page - 1) * rowsPerPage, page * rowsPerPage),
     [rows, page],
   );
 
-  async function persistExchangePatch(id: string, action: "approve" | "delete") {
+  async function createExchange() {
+    const numericAmount = Number(amount.replaceAll(",", ""));
+
+    if (!domainId || !userId || !Number.isFinite(numericAmount) || numericAmount <= 0) {
+      setMessage("도메인, 유저ID, 환전금액을 확인해주세요.");
+      return;
+    }
+
+    const response = await fetch("/api/domain-exchanges", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        domainId,
+        userId,
+        amount: numericAmount,
+        bankName,
+        accountHolder,
+        accountNumber,
+      }),
+    });
+    const data = (await response.json()) as {
+      rows?: DomainExchangeRow[];
+      message?: string;
+    };
+
+    if (!response.ok) {
+      setMessage(data.message ?? "환전신청 생성 중 오류가 발생했습니다.");
+      return;
+    }
+
+    if (data.rows) {
+      setRows(data.rows.map(normalizeExchangeRow));
+    }
+
+    setPage(1);
+    setDomainId("");
+    setUserId("");
+    setAmount("");
+    setBankName("");
+    setAccountHolder("");
+    setAccountNumber("");
+    setMessage(data.message ?? "환전신청이 생성되었습니다.");
+  }
+
+  async function persistExchangePatch(id: string, action: "approve" | "reject") {
     const response = await fetch("/api/domain-exchanges", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -275,10 +332,19 @@ export function DomainExchangesBoard({
     void persistExchangePatch(id, "approve");
   }
 
-  function deleteRow(id: string) {
-    setRows((current) => current.filter((row) => row.id !== id));
-    setPage((currentPage) => Math.min(currentPage, pageCount));
-    void persistExchangePatch(id, "delete");
+  function rejectRow(id: string) {
+    setRows((current) =>
+      current.map((row) =>
+        row.id === id
+          ? {
+              ...row,
+              status: "거절",
+              completedAt: row.completedAt || getNowStamp(),
+            }
+          : row,
+      ),
+    );
+    void persistExchangePatch(id, "reject");
   }
 
   return (
@@ -296,6 +362,65 @@ export function DomainExchangesBoard({
       </div>
 
       <div className="p-5 sm:p-6">
+        {canCreateExchanges ? (
+          <div className="mb-5 rounded-[24px] border border-white/8 bg-white/[0.04] p-4">
+            <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+              <select
+                value={domainId}
+                onChange={(event) => setDomainId(event.target.value)}
+                className="h-11 rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-white outline-none"
+              >
+                <option value="">도메인 선택</option>
+                {domainOptions.map((domain) => (
+                  <option key={domain.id} value={domain.id}>
+                    {domain.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={userId}
+                onChange={(event) => setUserId(event.target.value)}
+                placeholder="유저ID"
+                className="h-11 rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-white outline-none placeholder:text-white/35"
+              />
+              <input
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                placeholder="환전금액"
+                inputMode="numeric"
+                className="h-11 rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-white outline-none placeholder:text-white/35"
+              />
+              <input
+                value={bankName}
+                onChange={(event) => setBankName(event.target.value)}
+                placeholder="출금은행"
+                className="h-11 rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-white outline-none placeholder:text-white/35"
+              />
+              <input
+                value={accountHolder}
+                onChange={(event) => setAccountHolder(event.target.value)}
+                placeholder="예금주"
+                className="h-11 rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-white outline-none placeholder:text-white/35"
+              />
+              <div className="flex gap-2">
+                <input
+                  value={accountNumber}
+                  onChange={(event) => setAccountNumber(event.target.value)}
+                  placeholder="계좌번호"
+                  className="h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-white outline-none placeholder:text-white/35"
+                />
+                <button
+                  type="button"
+                  onClick={createExchange}
+                  className="h-11 rounded-xl bg-fuchsia-500 px-4 text-sm font-semibold text-white transition hover:bg-fuchsia-400"
+                >
+                  신청
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {message ? (
           <div className="mb-4 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-100">
             {message}
@@ -318,7 +443,7 @@ export function DomainExchangesBoard({
                   "계좌번호",
                   "요청금액",
                   "요청일",
-                  "승인/거절",
+                  canProcessExchanges ? "승인/거절" : "상태",
                   "완료일",
                 ].map((header) => (
                   <th
@@ -353,7 +478,7 @@ export function DomainExchangesBoard({
                     </td>
                     <td className="px-4 py-4 text-center">{row.requestedAt}</td>
                     <td className="px-4 py-4 text-center">
-                      {canProcessExchanges ? (
+                      {canProcessExchanges && row.status === "대기" ? (
                         <div className="flex flex-col items-center gap-1">
                           <button
                             type="button"
@@ -364,14 +489,14 @@ export function DomainExchangesBoard({
                           </button>
                           <button
                             type="button"
-                            onClick={() => deleteRow(row.id)}
+                            onClick={() => rejectRow(row.id)}
                             className="rounded-lg bg-white px-3 py-1 text-xs font-semibold text-slate-950 transition hover:bg-red-100"
                           >
-                            삭제
+                            거절
                           </button>
                         </div>
                       ) : (
-                        <span className="text-white/34">-</span>
+                        <span className="text-white/68">{row.status}</span>
                       )}
                     </td>
                     <td className="px-4 py-4 text-center">{row.completedAt || "-"}</td>

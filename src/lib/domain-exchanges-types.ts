@@ -11,5 +11,10 @@ export type DomainExchangeRow = {
   amount: number;
   requestedAt: string;
   completedAt: string;
-  status: "대기" | "승인";
+  status: "대기" | "승인" | "거절";
+};
+
+export type DomainExchangeOption = {
+  id: string;
+  name: string;
 };
