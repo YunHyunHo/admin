@@ -30,19 +30,19 @@ async function getCommissionAggregates(
     `
       select
         date::text,
-        domain_name,
+        coalesce(domain_name, '-') as domain_name,
         coalesce(sum(charge_total), 0)::text as charge_total,
         coalesce(sum(exchange_total), 0)::text as exchange_total,
         coalesce(sum(fee_total), 0)::text as fee_total
       from (
         select
           co.created_at::date as date,
-          d.domain_name,
+          coalesce(d.domain_name, '-') as domain_name,
           co.charge_amount as charge_total,
           0::numeric as exchange_total,
           co.saved_commission as fee_total
         from commission_records co
-        join domains d on d.id = co.domain_id
+        left join domains d on d.id = co.domain_id
         left join distributors dist on dist.id = co.distributor_id
         left join admins dist_admin on dist_admin.id = dist.admin_id
         where

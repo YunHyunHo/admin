@@ -11,7 +11,7 @@ type TransactionLedgerDbRow = {
   user_uid: string;
   master_name: string | null;
   distributor_name: string | null;
-  domain_name: string;
+  domain_name: string | null;
   bank_name: string | null;
   account_number: string | null;
   account_holder: string | null;
@@ -61,7 +61,7 @@ function toLedgerRow(row: TransactionLedgerDbRow): LedgerRow {
     userId: row.request_type === "EXCHANGE" ? "업체 환전" : row.user_uid,
     topDistributor: row.master_name ?? "마스터 관리자",
     distributor: distributorName,
-    domain: row.domain_name,
+    domain: row.domain_name ?? "-",
     bankInfo: toBankInfo(row),
     depositor: row.depositor ?? row.account_holder ?? "-",
     amount: Number(row.amount),
@@ -103,7 +103,7 @@ export async function getTransactionLedgerRows(
           cr.processed_at,
           cr.status::text as status
         from charge_requests cr
-        join domains dom on dom.id = cr.domain_id
+        left join domains dom on dom.id = cr.domain_id
         left join distributors dist on dist.id = cr.distributor_id
         left join admins dist_admin on dist_admin.id = dist.admin_id
         left join admins owner_master on owner_master.id = dist_admin.created_by

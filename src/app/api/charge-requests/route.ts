@@ -77,9 +77,9 @@ export async function POST(request: Request) {
     const domainId = body.domainId?.trim() ?? "";
     const amount = Number(body.amount);
 
-    if (!userId || !domainId || !Number.isFinite(amount) || amount <= 0) {
+    if (!userId || !Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json(
-        { message: "도메인, 유저ID, 신청금액을 확인해주세요." },
+        { message: "유저ID와 신청금액을 확인해주세요." },
         { status: 400 },
       );
     }

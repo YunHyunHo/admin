@@ -8,7 +8,7 @@ const DEFAULT_ROW_LIMIT = 200;
 type TransactionCreateDbRow = {
   id: string;
   user_uid: string;
-  domain_name: string;
+  domain_name: string | null;
   bank_name: string | null;
   account_number: string | null;
   depositor: string | null;
@@ -50,7 +50,7 @@ function toTransactionCreateRow(row: TransactionCreateDbRow): TransactionCreateR
     id: row.id,
     tradedAt: formatStamp(row.requested_at),
     buyerWallet: row.user_uid,
-    coin: row.domain_name,
+    coin: row.domain_name ?? "-",
     quantity: Math.max(1, Math.floor(amount / 10000)),
     depositor: row.depositor ?? "-",
     amount,
@@ -84,7 +84,7 @@ export async function getTransactionCreateRows(
         cr.status::text as status,
         cr.requested_at
       from charge_requests cr
-      join domains dom on dom.id = cr.domain_id
+      left join domains dom on dom.id = cr.domain_id
       left join distributors dist on dist.id = cr.distributor_id
       left join admins dist_admin on dist_admin.id = dist.admin_id
       where 1 = 1

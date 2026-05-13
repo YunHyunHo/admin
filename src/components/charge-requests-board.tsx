@@ -194,11 +194,6 @@ export function ChargeRequestsBoard({
     const domainName =
       domainOptions.find((domain) => domain.id === domainId)?.name ?? "";
 
-    if (!domainId) {
-      setMessage("충전신청을 연결할 도메인을 선택해주세요.");
-      return;
-    }
-
     if (!userId || !Number.isFinite(amount) || amount <= 0) {
       setMessage("유저ID와 신청금액을 확인해주세요.");
       return;
@@ -345,7 +340,7 @@ export function ChargeRequestsBoard({
                   <button
                     type="button"
                     onClick={() => setIsCreateModalOpen(true)}
-                    disabled={isLoading || !domainOptions.length}
+                    disabled={isLoading}
                     className="rounded-2xl bg-fuchsia-500 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     충전신청 생성
@@ -597,7 +592,7 @@ export function ChargeRequestsBoard({
                   onChange={(event) => setCreateDomainId(event.target.value)}
                   className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-slate-500"
                 >
-                  <option value="">도메인 선택</option>
+                  <option value="">수기 입력(도메인 없음)</option>
                   {domainOptions.map((domain) => (
                     <option key={domain.id} value={domain.id}>
                       {domain.name}
@@ -662,7 +657,7 @@ export function ChargeRequestsBoard({
               <button
                 type="button"
                 onClick={() => void createChargeRequest()}
-                disabled={isLoading || !createDomainId || !createUserId || !createAmount}
+                disabled={isLoading || !createUserId || !createAmount}
                 className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 생성

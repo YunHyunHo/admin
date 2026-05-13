@@ -90,7 +90,7 @@ export async function getFeeRecordsForUser(
         owner_master.name as top_agent,
         dist.name as sub_agent,
         coalesce(dist.name, c.company_name) as acquisition_branch,
-        d.domain_name as domain,
+        coalesce(d.domain_name, '-') as domain,
         cr.user_uid as uid,
         co.charge_amount::text as amount,
         co.commission_rate::text as fee_rate,
@@ -101,7 +101,7 @@ export async function getFeeRecordsForUser(
       from commission_records co
       join charge_requests cr on cr.id = co.charge_request_id
       join companies c on c.id = co.company_id
-      join domains d on d.id = co.domain_id
+      left join domains d on d.id = co.domain_id
       left join distributors dist on dist.id = co.distributor_id
       left join admins dist_admin on dist_admin.id = dist.admin_id
       left join admins owner_master on owner_master.id = dist_admin.created_by

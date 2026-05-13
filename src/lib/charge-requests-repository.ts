@@ -32,7 +32,7 @@ type ChargeRequestRow = {
   requested_at: Date | string;
   processed_at: Date | string | null;
   company_name: string;
-  domain_name: string;
+  domain_name: string | null;
   master_name: string | null;
   distributor_name: string | null;
 };
@@ -82,7 +82,7 @@ function toPendingRequest(row: ChargeRequestRow): PendingRequest {
     userId: row.user_uid,
     topAgent: row.master_name ?? "마스터 관리자",
     subAgent: row.distributor_name ?? "-",
-    domain: row.domain_name,
+    domain: row.domain_name ?? "-",
     bankName: row.bank_name ?? "-",
     accountNumber: row.account_number ?? "-",
     depositor: row.depositor ?? "-",
@@ -131,7 +131,7 @@ async function getDbChargeRequests(user: SessionUser) {
         dist.name as distributor_name
       from charge_requests cr
       join companies c on c.id = cr.company_id
-      join domains d on d.id = cr.domain_id
+      left join domains d on d.id = cr.domain_id
       left join distributors dist on dist.id = cr.distributor_id
       left join admins dist_admin on dist_admin.id = dist.admin_id
       left join admins owner_master on owner_master.id = dist_admin.created_by
@@ -168,13 +168,45 @@ export async function getChargeRequestsForUser(user: SessionUser) {
 
 async function ensureDbScope(input: { domainId?: string; domainName?: string; user: SessionUser }) {
   const scope = getScopedDistributorCondition(input.user);
-  const domainValue = input.domainId ?? input.domainName ?? "전체";
+  const domainValue = input.domainId ?? input.domainName;
   const domainPredicate = input.domainId
     ? "dom.id = $2::uuid"
     : "dom.domain_name = $2";
+
+  if (!domainValue) {
+    const distributorResult = await query<{
+      company_id: string;
+      distributor_id: string;
+    }>(
+      `
+        select
+          dist.company_id::text,
+          dist.id::text as distributor_id
+        from distributors dist
+        left join admins dist_admin on dist_admin.id = dist.admin_id
+        where dist.status = 'ACTIVE'
+          ${scope.sql}
+        order by dist.created_at desc
+        limit 1
+      `,
+      scope.values,
+    );
+    const distributor = distributorResult.rows[0];
+
+    if (!distributor) {
+      throw new Error("충전신청을 연결할 하부계정을 찾을 수 없습니다.");
+    }
+
+    return {
+      companyId: distributor.company_id,
+      domainId: null,
+      distributorId: distributor.distributor_id,
+    };
+  }
+
   const existingDomain = await query<{
     company_id: string;
-    domain_id: string;
+    domain_id: string | null;
     distributor_id: string | null;
   }>(
     `
@@ -270,7 +302,7 @@ export async function processDbChargeRequest(input: {
     const updateResult = await client.query<
       ChargeRequestRow & {
         company_id: string;
-        domain_id: string;
+        domain_id: string | null;
         distributor_id: string | null;
       }
     >(
