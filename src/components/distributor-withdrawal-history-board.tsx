@@ -225,10 +225,6 @@ function formatKoreanWon(value: number) {
   return `${value.toLocaleString("ko-KR")} 원`;
 }
 
-function truncateId(value: string) {
-  return value.length > 18 ? `${value.slice(0, 18)}...` : value;
-}
-
 export function DistributorWithdrawalHistoryBoard({
   initialRows = fallbackDistributorWithdrawals,
   canCreateWithdrawals = false,
@@ -355,7 +351,6 @@ export function DistributorWithdrawalHistoryBoard({
             <thead className="bg-black/68 text-white">
               <tr>
                 {[
-                  "ID",
                   "상위총판",
                   "환전신청 지점",
                   "보유액",
@@ -383,9 +378,6 @@ export function DistributorWithdrawalHistoryBoard({
                   key={row.id}
                   className="border-b border-white/16 bg-white/[0.035] text-white/86 last:border-b-0"
                 >
-                  <td className="max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap border border-white/18 px-3 py-4 text-center font-mono text-xs">
-                    {truncateId(row.id)}
-                  </td>
                   <td className="border border-white/18 px-4 py-4 text-center">
                     {row.topDistributor}
                   </td>

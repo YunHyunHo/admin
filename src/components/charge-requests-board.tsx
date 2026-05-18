@@ -509,7 +509,6 @@ export function ChargeRequestsBoard({
                 <thead className="bg-black/30 text-white/58">
                   <tr>
                     {[
-                      "ID",
                       "본사",
                       "입금자명",
                       "상위총판",
@@ -535,9 +534,6 @@ export function ChargeRequestsBoard({
                   {filteredPendingRequests.length ? (
                     visiblePendingRequests.map((row) => (
                       <tr key={row.id} className="border-t border-white/8 text-white/82">
-                        <td className="max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap px-4 py-4 font-mono text-xs">
-                          {row.id}
-                        </td>
                         <td className="px-4 py-4">{row.branch}</td>
                         <td className="px-4 py-4">{row.userId}</td>
                         <td className="px-4 py-4">{row.topAgent}</td>
@@ -577,7 +573,7 @@ export function ChargeRequestsBoard({
                   ) : (
                     <tr>
                       <td
-                        colSpan={12}
+                        colSpan={11}
                         className="px-4 py-10 text-center text-sm text-white/40"
                       >
                         조건에 맞는 충전신청이 없습니다.
@@ -603,7 +599,6 @@ export function ChargeRequestsBoard({
                   <thead className="bg-black/30 text-white/58">
                     <tr>
                       {[
-                        "ID",
                         "입금자명",
                         "은행명",
                         "계좌번호",
@@ -625,9 +620,6 @@ export function ChargeRequestsBoard({
                   <tbody>
                     {visibleApprovedRequests.map((row) => (
                       <tr key={row.id} className="border-t border-white/8 text-white/82">
-                        <td className="max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap px-4 py-4 font-mono text-xs">
-                          {row.id}
-                        </td>
                         <td className="px-4 py-4">{row.userId}</td>
                         <td className="px-4 py-4">{row.bankName}</td>
                         <td className="px-4 py-4">{row.accountNumber}</td>
@@ -660,7 +652,6 @@ export function ChargeRequestsBoard({
                   <thead className="bg-black/30 text-white/58">
                     <tr>
                       {[
-                        "ID",
                         "입금자명",
                         "은행명",
                         "계좌번호",
@@ -682,9 +673,6 @@ export function ChargeRequestsBoard({
                   <tbody>
                     {visibleRejectedRequests.map((row) => (
                       <tr key={row.id} className="border-t border-white/8 text-white/82">
-                        <td className="max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap px-4 py-4 font-mono text-xs">
-                          {row.id}
-                        </td>
                         <td className="px-4 py-4">{row.userId}</td>
                         <td className="px-4 py-4">{row.bankName}</td>
                         <td className="px-4 py-4">{row.accountNumber}</td>

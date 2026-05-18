@@ -453,7 +453,6 @@ export function TransactionLedgerBoard({
             <thead className="bg-black/52 text-white/72">
               <tr>
                 {[
-                  "ID",
                   "본사",
                   "유저ID",
                   "상위총판",
@@ -482,9 +481,6 @@ export function TransactionLedgerBoard({
                     key={row.id}
                     className="border-b border-white/8 text-white/78 last:border-b-0"
                   >
-                    <td className="max-w-[92px] overflow-hidden text-ellipsis whitespace-nowrap px-3 py-3 text-center font-mono text-xs">
-                      {row.id}
-                    </td>
                     <td className="px-4 py-3 text-center">{row.branch}</td>
                     <td className="px-4 py-3 text-center">{row.userId}</td>
                     <td className="px-4 py-3 text-center">{row.topDistributor}</td>
@@ -506,7 +502,7 @@ export function TransactionLedgerBoard({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={12} className="px-4 py-10 text-center text-sm text-white/40">
+                  <td colSpan={11} className="px-4 py-10 text-center text-sm text-white/40">
                     조건에 맞는 거래 내역이 없습니다.
                   </td>
                 </tr>

@@ -49,10 +49,6 @@ type AdminsBoardProps = {
   canManageAdmins: boolean;
 };
 
-function truncateId(value: string) {
-  return value.length > 24 ? `${value.slice(0, 24)}...` : value;
-}
-
 export function AdminsBoard({
   initialAdmins,
   managedCompanies,
@@ -331,7 +327,6 @@ export function AdminsBoard({
             <thead className="bg-black/72 text-white">
               <tr>
                 {[
-                  "ID",
                   "닉네임",
                   "아이디",
                   "분류",
@@ -357,9 +352,6 @@ export function AdminsBoard({
                   key={admin.id}
                   className="border-b border-white/16 bg-white/[0.035] text-white/88 last:border-b-0"
                 >
-                  <td className="border border-white/18 px-4 py-4 text-center font-mono text-xs">
-                    {truncateId(admin.id)}
-                  </td>
                   <td className="border border-white/18 px-4 py-4 text-center font-semibold">
                     {admin.nickname}
                   </td>

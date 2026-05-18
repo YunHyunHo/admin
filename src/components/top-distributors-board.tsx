@@ -23,10 +23,6 @@ type ApiResponse =
 
 const rowsPerPage = 10;
 
-function truncateId(value: string) {
-  return value.length > 24 ? `${value.slice(0, 24)}...` : value;
-}
-
 function toRows(accounts: AdminAccountRecord[]): TopDistributorRow[] {
   return accounts
     .filter((account) => account.role === "TOP_DISTRIBUTOR")
@@ -243,7 +239,6 @@ export function TopDistributorsBoard({
             <thead className="bg-black/52 text-white/72">
               <tr>
                 {[
-                  "ID",
                   "관리자/아이디",
                   "비밀번호",
                   "상위총판",
@@ -267,9 +262,6 @@ export function TopDistributorsBoard({
                   key={row.id}
                   className="border-b border-white/8 text-white/76 last:border-b-0"
                 >
-                  <td className="px-4 py-4 text-center font-mono text-xs text-white/52">
-                    {truncateId(row.id)}
-                  </td>
                   <td className="px-4 py-4 text-center">
                     <span className="font-semibold text-white">{row.nickname}</span>
                     <span className="text-white/34"> / </span>

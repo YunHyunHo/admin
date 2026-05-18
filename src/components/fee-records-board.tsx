@@ -73,14 +73,6 @@ function clampDate(value: string, min: string, max: string) {
   return value;
 }
 
-function truncateId(id: string) {
-  if (id.length <= 8) {
-    return id;
-  }
-
-  return `${id.slice(0, 4)} ${id.slice(4, 8)}...`;
-}
-
 function formatRate(rate: number) {
   return `${rate}%`;
 }
@@ -251,7 +243,6 @@ export function FeeRecordsBoard({
             <thead>
               <tr className="bg-black/60 text-white">
                 {[
-                  "ID",
                   "상위총판",
                   "총판",
                   "획득지점",
@@ -280,9 +271,6 @@ export function FeeRecordsBoard({
                     key={row.id}
                     className="bg-white/[0.035] text-white/86 transition hover:bg-cyan-400/[0.06]"
                   >
-                    <td className="border border-white/14 px-4 py-4 text-center font-mono text-xs text-white/72">
-                      {truncateId(row.id)}
-                    </td>
                     <td className="border border-white/14 px-4 py-4 text-center">
                       {row.topAgent}
                     </td>

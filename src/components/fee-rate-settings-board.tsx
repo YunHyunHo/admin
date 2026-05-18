@@ -24,7 +24,7 @@ type FeeRateSettingsBoardProps = {
 };
 
 const rowsPerPage = 10;
-const rateKeys = ["totalRate"] as const;
+const rateKeys = ["topDistributorRate", "distributorRate"] as const;
 
 type RateKey = (typeof rateKeys)[number];
 type DraftRates = Pick<FeeRateRow, RateKey>;
@@ -47,7 +47,8 @@ function clampRate(value: number) {
 
 function getDraftRates(row: FeeRateRow): DraftRates {
   return {
-    totalRate: row.totalRate,
+    topDistributorRate: row.topDistributorRate,
+    distributorRate: row.distributorRate,
   };
 }
 
@@ -68,10 +69,8 @@ export function FeeRateSettingsBoard({
       initialRows.map((row) => [row.id, getDraftRates(row)]),
     ),
   );
-  const [selectedRowId, setSelectedRowId] = useState(rows[0]?.id ?? "");
   const [message, setMessage] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
-  const selectedRow = rows.find((row) => row.id === selectedRowId) ?? rows[0];
 
   const filteredRows = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -123,9 +122,9 @@ export function FeeRateSettingsBoard({
         body: JSON.stringify({
           id: row.id,
           distributorId: row.distributorId,
-          ...draft,
-          topDistributorRate: draft.totalRate,
-          distributorRate: 0,
+          totalRate: Number((draft.topDistributorRate + draft.distributorRate).toFixed(2)),
+          topDistributorRate: draft.topDistributorRate,
+          distributorRate: draft.distributorRate,
         }),
       });
       const data = (await response.json()) as {
@@ -144,10 +143,13 @@ export function FeeRateSettingsBoard({
         );
       } else {
         setRows((current) =>
-          current.map((currentRow) =>
-            currentRow.id === row.id
-              ? {
+            current.map((currentRow) =>
+              currentRow.id === row.id
+                ? {
                   ...currentRow,
+                  totalRate: Number(
+                    (draft.topDistributorRate + draft.distributorRate).toFixed(2),
+                  ),
                   ...draft,
                   updatedAt: getNowStamp(),
                 }
@@ -210,11 +212,14 @@ export function FeeRateSettingsBoard({
           </label>
 
           <div className="overflow-x-auto rounded-[26px] border border-white/8 bg-black/18">
-            <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[1040px] border-collapse text-left text-sm">
               <thead className="bg-black/52 text-white/72">
                 <tr>
                   {[
+                    "상위총판",
+                    "상위총판 요율",
                     "총판",
+                    "총판 요율",
                     "총 수수료",
                     "수정일",
                     "관리",
@@ -232,28 +237,46 @@ export function FeeRateSettingsBoard({
                 {visibleRows.map((row) => {
                   const draft = draftRates[row.id] ?? getDraftRates(row);
                   const isChanged = hasDraftChanges(row, draft);
+                  const totalRate = Number(
+                    (draft.topDistributorRate + draft.distributorRate).toFixed(2),
+                  );
 
                   return (
                     <tr
                       key={row.id}
-                      onClick={() => setSelectedRowId(row.id)}
-                      className={`cursor-pointer border-b border-white/8 text-white/76 last:border-b-0 ${
-                        row.id === selectedRow?.id
-                          ? "bg-cyan-400/[0.06]"
-                          : "hover:bg-white/[0.025]"
-                      }`}
+                      className="border-b border-white/8 text-white/76 last:border-b-0 hover:bg-white/[0.025]"
                     >
                       <td className="px-4 py-4 text-center font-semibold text-white">
-                        {row.domainName}
+                        {row.topDistributor}
                       </td>
                       <td className="px-4 py-4 text-center">
                         <RateInput
-                          value={draft.totalRate}
+                          value={draft.topDistributorRate}
                           disabled={!canManageFeeRates}
                           onChange={(value) =>
-                            updateDraftRate(row.id, "totalRate", value)
+                            updateDraftRate(row.id, "topDistributorRate", value)
                           }
                         />
+                      </td>
+                      <td className="px-4 py-4 text-center font-semibold text-white">
+                        {row.distributor}
+                      </td>
+                      <td className="px-4 py-4 text-center">
+                        <RateInput
+                          value={draft.distributorRate}
+                          disabled={!canManageFeeRates}
+                          onChange={(value) =>
+                            updateDraftRate(row.id, "distributorRate", value)
+                          }
+                        />
+                      </td>
+                      <td className="px-4 py-4 text-center">
+                        <div className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                          <span className="text-sm font-semibold text-white">
+                            {totalRate.toFixed(2)}
+                          </span>
+                          <span className="font-semibold text-white/64">%</span>
+                        </div>
                       </td>
                       <td className="px-4 py-4 text-center text-white/52">
                         {row.updatedAt}

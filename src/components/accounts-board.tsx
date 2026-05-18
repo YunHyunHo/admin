@@ -629,7 +629,6 @@ export function AccountsBoard({
                 <thead className="bg-black text-white">
                   <tr>
                     {[
-                      "ID",
                       "사이트명",
                       "API 주소",
                       "연동상태",
@@ -649,9 +648,6 @@ export function AccountsBoard({
                 <tbody>
                   {visibleLinkedDomains.map((domain) => (
                       <tr key={domain.id} className="text-white/86">
-                        <td className="max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap border border-white/55 px-4 py-4 font-mono text-xs">
-                          {domain.id}
-                        </td>
                         <td className="border border-white/55 px-4 py-4 text-center font-semibold">
                           {domain.name}
                         </td>

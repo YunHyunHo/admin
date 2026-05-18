@@ -286,7 +286,6 @@ export function DomainManagementBoard({
             <thead className="bg-black/48 text-white/72">
               <tr>
                 {[
-                  "ID",
                   "본사",
                   "상위총판",
                   "총판",
@@ -316,9 +315,6 @@ export function DomainManagementBoard({
                   key={row.id}
                   className="border-b border-white/8 text-white/76 last:border-b-0"
                 >
-                  <td className="max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap px-4 py-5 font-mono text-xs text-white/52">
-                    {row.id}
-                  </td>
                   <td className="px-4 py-5 text-center">{row.headquarters}</td>
                   <td className="px-4 py-5 text-center">{row.topDistributor}</td>
                   <td className="px-4 py-5 text-center">{row.distributor}</td>
@@ -537,7 +533,6 @@ export function DomainManagementBoard({
                 <thead className="bg-black/48 text-white/72">
                   <tr>
                     {[
-                      "ID",
                       "본사",
                       "상위총판",
                       "총판",
@@ -562,9 +557,6 @@ export function DomainManagementBoard({
                       key={user.id}
                       className="border-b border-white/8 text-white/72 last:border-b-0"
                     >
-                      <td className="max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap px-4 py-5 font-mono text-xs text-white/50">
-                        {user.id}
-                      </td>
                       <td className="px-4 py-5 text-center">{user.branch}</td>
                       <td className="px-4 py-5 text-center">
                         {user.topDistributor}
