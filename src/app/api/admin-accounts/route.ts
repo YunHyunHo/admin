@@ -15,7 +15,7 @@ import {
   type AdminRole,
 } from "@/lib/admin-accounts";
 import { getSessionUser } from "@/lib/auth";
-import { hasDatabaseUrl } from "@/lib/db";
+import { hasDatabaseUrl, query } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -155,6 +155,23 @@ export async function POST(request: Request) {
     }
 
     if (hasDatabaseUrl()) {
+      const duplicateAdmin = await query<{ id: string }>(
+        `
+          select id::text
+          from admins
+          where login_id = $1
+          limit 1
+        `,
+        [loginId],
+      );
+
+      if (duplicateAdmin.rows[0]) {
+        return NextResponse.json(
+          { message: "이미 사용 중인 아이디입니다." },
+          { status: 409 },
+        );
+      }
+
       await createPersistedAdminAccount({
         loginId,
         password,
@@ -199,6 +216,18 @@ export async function POST(request: Request) {
 
     return response;
   } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "23505"
+    ) {
+      return NextResponse.json(
+        { message: "이미 사용 중인 아이디입니다." },
+        { status: 409 },
+      );
+    }
+
     return NextResponse.json(
       {
         message:
