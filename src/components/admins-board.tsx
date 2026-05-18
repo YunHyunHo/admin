@@ -24,6 +24,10 @@ const accountTypeOptions = [
   { value: "DOMAIN_ADMIN", label: "업체" },
 ] as const;
 
+function getVisibleAdmins(accounts: PublicAdminAccount[]) {
+  return accounts.filter((account) => account.role !== "MASTER");
+}
+
 function getRoleLabel(role: AdminRole) {
   switch (role) {
     case "MASTER":
@@ -54,7 +58,7 @@ export function AdminsBoard({
   managedCompanies,
   canManageAdmins,
 }: AdminsBoardProps) {
-  const [admins, setAdmins] = useState<AdminRow[]>(initialAdmins);
+  const [admins, setAdmins] = useState<AdminRow[]>(getVisibleAdmins(initialAdmins));
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -107,7 +111,7 @@ export function AdminsBoard({
     accounts: PublicAdminAccount[];
     managedCompanies: string[];
   }) {
-    setAdmins(data.accounts);
+    setAdmins(getVisibleAdmins(data.accounts));
     setPage(1);
   }
 
