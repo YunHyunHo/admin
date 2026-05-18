@@ -65,6 +65,7 @@ export function AdminsBoard({
     managedCompanies[0],
   ]);
   const [selectedTopDistributorId, setSelectedTopDistributorId] = useState("");
+  const [selectedDomainOwnerId, setSelectedDomainOwnerId] = useState("");
   const [nickname, setNickname] = useState("");
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
@@ -94,8 +95,20 @@ export function AdminsBoard({
         .map((admin) => ({
           id: admin.id,
           name: admin.nickname,
+          company: admin.managedCompanies[0] ?? managedCompanies[0],
         })),
-    [admins],
+    [admins, managedCompanies],
+  );
+  const distributorOwnerOptions = useMemo(
+    () =>
+      admins
+        .filter((admin) => admin.role === "ADMIN")
+        .map((admin) => ({
+          id: admin.id,
+          name: admin.nickname,
+          company: admin.managedCompanies[0] ?? managedCompanies[0],
+        })),
+    [admins, managedCompanies],
   );
   const pageCount = Math.max(1, Math.ceil(filteredAdmins.length / rowsPerPage));
   const visibleAdmins = filteredAdmins.slice(
@@ -184,6 +197,7 @@ export function AdminsBoard({
       setPassword("");
       setAccountType("ADMIN");
       setSelectedTopDistributorId("");
+      setSelectedDomainOwnerId("");
       setSelectedCompanies([managedCompanies[0]]);
       setIsCreateModalOpen(false);
       setMessage(
@@ -458,9 +472,13 @@ export function AdminsBoard({
             <div className="mt-9 space-y-6">
               <select
                 value={accountType}
-                onChange={(event) =>
-                  setAccountType(event.target.value as "ADMIN" | "DOMAIN_ADMIN")
-                }
+                onChange={(event) => {
+                  const nextType = event.target.value as "ADMIN" | "DOMAIN_ADMIN";
+                  setAccountType(nextType);
+                  setSelectedTopDistributorId("");
+                  setSelectedDomainOwnerId("");
+                  setSelectedCompanies([managedCompanies[0]]);
+                }}
                 className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none"
               >
                 {accountTypeOptions.map((option) => (
@@ -502,6 +520,44 @@ export function AdminsBoard({
                   ))}
                 </select>
               ) : null}
+              {accountType === "DOMAIN_ADMIN" ? (
+                <select
+                  value={selectedDomainOwnerId}
+                  onChange={(event) => {
+                    const nextId = event.target.value;
+                    const owner =
+                      topDistributorOptions.find((option) => option.id === nextId) ??
+                      distributorOwnerOptions.find((option) => option.id === nextId);
+
+                    setSelectedDomainOwnerId(nextId);
+
+                    if (owner?.company) {
+                      setSelectedCompanies([owner.company]);
+                    }
+                  }}
+                  className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none"
+                >
+                  <option value="">업체 소속 선택</option>
+                  {topDistributorOptions.length ? (
+                    <optgroup label="상위총판">
+                      {topDistributorOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : null}
+                  {distributorOwnerOptions.length ? (
+                    <optgroup label="총판">
+                      {distributorOwnerOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : null}
+                </select>
+              ) : null}
               <select
                 value={selectedCompanies[0] ?? ""}
                 onChange={(event) => setSelectedCompanies([event.target.value])}
@@ -515,7 +571,7 @@ export function AdminsBoard({
               </select>
               <p className="text-sm text-slate-500">
                 {accountType === "DOMAIN_ADMIN"
-                  ? "업체 계정은 선택한 업체 기준으로 권한이 설정됩니다."
+                  ? "업체 계정은 상위총판/총판 소속을 먼저 고른 뒤 해당 업체 기준으로 권한이 설정됩니다."
                   : "총판 계정도 기본 업체 범위를 함께 저장합니다."}
               </p>
             </div>
@@ -527,7 +583,8 @@ export function AdminsBoard({
                 disabled={
                   isCreating ||
                   (accountType === "ADMIN" &&
-                    (!topDistributorOptions.length || !selectedTopDistributorId))
+                    (!topDistributorOptions.length || !selectedTopDistributorId)) ||
+                  (accountType === "DOMAIN_ADMIN" && !selectedDomainOwnerId)
                 }
                 className="rounded bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
               >

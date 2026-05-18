@@ -24,7 +24,7 @@ type FeeRateSettingsBoardProps = {
 };
 
 const rowsPerPage = 10;
-const rateKeys = ["topDistributorRate", "distributorRate"] as const;
+const rateKeys = ["totalRate"] as const;
 
 type RateKey = (typeof rateKeys)[number];
 type DraftRates = Pick<FeeRateRow, RateKey>;
@@ -47,8 +47,7 @@ function clampRate(value: number) {
 
 function getDraftRates(row: FeeRateRow): DraftRates {
   return {
-    topDistributorRate: row.topDistributorRate,
-    distributorRate: row.distributorRate,
+    totalRate: row.totalRate,
   };
 }
 
@@ -122,9 +121,9 @@ export function FeeRateSettingsBoard({
         body: JSON.stringify({
           id: row.id,
           distributorId: row.distributorId,
-          totalRate: Number((draft.topDistributorRate + draft.distributorRate).toFixed(2)),
-          topDistributorRate: draft.topDistributorRate,
-          distributorRate: draft.distributorRate,
+          totalRate: draft.totalRate,
+          topDistributorRate: draft.totalRate,
+          distributorRate: 0,
         }),
       });
       const data = (await response.json()) as {
@@ -147,10 +146,9 @@ export function FeeRateSettingsBoard({
               currentRow.id === row.id
                 ? {
                   ...currentRow,
-                  totalRate: Number(
-                    (draft.topDistributorRate + draft.distributorRate).toFixed(2),
-                  ),
                   ...draft,
+                  topDistributorRate: draft.totalRate,
+                  distributorRate: 0,
                   updatedAt: getNowStamp(),
                 }
               : currentRow,
@@ -217,10 +215,8 @@ export function FeeRateSettingsBoard({
                 <tr>
                   {[
                     "상위총판",
-                    "상위총판 요율",
                     "총판",
-                    "총판 요율",
-                    "총 수수료",
+                    "수수료율",
                     "수정일",
                     "관리",
                   ].map((header, index) => (
@@ -237,9 +233,6 @@ export function FeeRateSettingsBoard({
                 {visibleRows.map((row) => {
                   const draft = draftRates[row.id] ?? getDraftRates(row);
                   const isChanged = hasDraftChanges(row, draft);
-                  const totalRate = Number(
-                    (draft.topDistributorRate + draft.distributorRate).toFixed(2),
-                  );
 
                   return (
                     <tr
@@ -249,34 +242,17 @@ export function FeeRateSettingsBoard({
                       <td className="px-4 py-4 text-center font-semibold text-white">
                         {row.topDistributor}
                       </td>
-                      <td className="px-4 py-4 text-center">
-                        <RateInput
-                          value={draft.topDistributorRate}
-                          disabled={!canManageFeeRates}
-                          onChange={(value) =>
-                            updateDraftRate(row.id, "topDistributorRate", value)
-                          }
-                        />
-                      </td>
                       <td className="px-4 py-4 text-center font-semibold text-white">
                         {row.distributor}
                       </td>
                       <td className="px-4 py-4 text-center">
                         <RateInput
-                          value={draft.distributorRate}
+                          value={draft.totalRate}
                           disabled={!canManageFeeRates}
                           onChange={(value) =>
-                            updateDraftRate(row.id, "distributorRate", value)
+                            updateDraftRate(row.id, "totalRate", value)
                           }
                         />
-                      </td>
-                      <td className="px-4 py-4 text-center">
-                        <div className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
-                          <span className="text-sm font-semibold text-white">
-                            {totalRate.toFixed(2)}
-                          </span>
-                          <span className="font-semibold text-white/64">%</span>
-                        </div>
                       </td>
                       <td className="px-4 py-4 text-center text-white/52">
                         {row.updatedAt}

@@ -9,6 +9,7 @@ type TopDistributorRow = {
   nickname: string;
   loginId: string;
   password: string;
+  lastLoginAt: string | null;
   createdAt: string;
   status: "ACTIVE" | "SUSPENDED";
   distributorsCount: number;
@@ -31,6 +32,7 @@ function toRows(accounts: AdminAccountRecord[]): TopDistributorRow[] {
       nickname: account.nickname,
       loginId: account.loginId,
       password: account.visiblePassword,
+      lastLoginAt: account.lastLoginAt,
       createdAt: account.createdAt,
       status: account.status,
       distributorsCount: accounts.filter(
@@ -244,6 +246,7 @@ export function TopDistributorsBoard({
                   "상위총판",
                   "연결 총판 수",
                   "상태",
+                  "최근 로그인",
                   "생성일",
                   "삭제",
                 ].map((header) => (
@@ -296,6 +299,9 @@ export function TopDistributorsBoard({
                           ? "중지"
                           : "사용"}
                     </button>
+                  </td>
+                  <td className="px-4 py-4 text-center text-white/62">
+                    {row.lastLoginAt ?? "-"}
                   </td>
                   <td className="px-4 py-4 text-center text-white/62">{row.createdAt}</td>
                   <td className="px-4 py-4 text-center">

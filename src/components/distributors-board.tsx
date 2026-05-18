@@ -11,6 +11,7 @@ type DistributorRow = {
   password: string;
   topDistributor: string;
   topDistributorId: string | null;
+  lastLoginAt: string | null;
   createdAt: string;
   status: "ACTIVE" | "SUSPENDED";
 };
@@ -34,6 +35,7 @@ function toRows(accounts: AdminAccountRecord[]): DistributorRow[] {
       password: account.visiblePassword,
       topDistributor: account.parentDistributorName ?? "-",
       topDistributorId: account.parentAdminId ?? null,
+      lastLoginAt: account.lastLoginAt,
       createdAt: account.createdAt,
       status: account.status,
     }));
@@ -245,7 +247,7 @@ export function DistributorsBoard({
           <table className="w-full min-w-[1120px] border-collapse text-left text-sm">
             <thead className="bg-black/52 text-white/72">
               <tr>
-                {["관리자/아이디", "비밀번호", "상위총판", "총판", "상태", "생성일", "삭제"].map(
+                {["관리자/아이디", "비밀번호", "상위총판", "총판", "상태", "최근 로그인", "생성일", "삭제"].map(
                   (header) => (
                     <th
                       key={header}
@@ -295,6 +297,9 @@ export function DistributorsBoard({
                           ? "중지"
                           : "사용"}
                     </button>
+                  </td>
+                  <td className="px-4 py-4 text-center text-white/62">
+                    {row.lastLoginAt ?? "-"}
                   </td>
                   <td className="px-4 py-4 text-center text-white/62">{row.createdAt}</td>
                   <td className="px-4 py-4 text-center">
