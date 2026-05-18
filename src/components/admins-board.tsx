@@ -452,7 +452,7 @@ export function AdminsBoard({
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder="비밀번호 [6글자 이상, 영어 + 숫자]"
+                placeholder="비밀번호 [4글자 이상]"
                 className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
               />
               {accountType === "ADMIN" ? (

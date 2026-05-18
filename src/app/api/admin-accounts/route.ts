@@ -130,9 +130,9 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!/^(?=.*[A-Za-z])(?=.*\d).{6,}$/.test(password)) {
+    if (password.trim().length < 4) {
       return NextResponse.json(
-        { message: "비밀번호는 6글자 이상, 영문과 숫자를 포함해야 합니다." },
+        { message: "비밀번호는 4글자 이상 입력해주세요." },
         { status: 400 },
       );
     }
