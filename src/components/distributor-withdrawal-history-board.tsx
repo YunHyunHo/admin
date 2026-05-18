@@ -546,8 +546,7 @@ export function DistributorWithdrawalHistoryBoard({
               <button
                 type="button"
                 onClick={() => void createWithdrawal()}
-                disabled={!amount || !bankName || !accountHolder || !accountNumber}
-                className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+                className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
               >
                 신청
               </button>
