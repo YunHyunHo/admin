@@ -130,7 +130,8 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
         select
           dist.id,
           dist.name,
-          dist.current_balance
+          dist.current_balance,
+          dist.admin_id
         from distributors dist
         left join admins dist_admin on dist_admin.id = dist.admin_id
         where dist.status = 'ACTIVE'
@@ -174,7 +175,7 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
         from scoped_entities entity
         left join charge_requests cr on (
           (entity.entity_type = 'DOMAIN' and cr.domain_id::text = replace(entity.entity_id, 'domain:', ''))
-          or (entity.entity_type = 'DISTRIBUTOR' and cr.distributor_id = entity.distributor_id and cr.domain_id is null)
+          or (entity.entity_type in ('DISTRIBUTOR', 'TOP_DISTRIBUTOR') and cr.distributor_id = entity.distributor_id and cr.domain_id is null)
         )
           and cr.status in ('APPROVED', 'COMPLETED')
         group by entity.entity_id
@@ -186,7 +187,7 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
         from scoped_entities entity
         left join commission_records co on (
           (entity.entity_type = 'DOMAIN' and co.domain_id::text = replace(entity.entity_id, 'domain:', ''))
-          or (entity.entity_type = 'DISTRIBUTOR' and co.distributor_id = entity.distributor_id and co.domain_id is null)
+          or (entity.entity_type in ('DISTRIBUTOR', 'TOP_DISTRIBUTOR') and co.distributor_id = entity.distributor_id and co.domain_id is null)
         )
           and co.status in ('APPROVED', 'COMPLETED')
         group by entity.entity_id
@@ -198,7 +199,7 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
         from scoped_entities entity
         left join exchange_requests er on (
           (entity.entity_type = 'DOMAIN' and er.domain_id::text = replace(entity.entity_id, 'domain:', ''))
-          or (entity.entity_type = 'DISTRIBUTOR' and er.distributor_id = entity.distributor_id and er.domain_id is null)
+          or (entity.entity_type in ('DISTRIBUTOR', 'TOP_DISTRIBUTOR') and er.distributor_id = entity.distributor_id and er.domain_id is null)
         )
           and er.status in ('APPROVED', 'COMPLETED')
         group by entity.entity_id
