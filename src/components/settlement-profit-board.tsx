@@ -175,10 +175,10 @@ export function SettlementProfitBoard({
       <div className="flex flex-col gap-4 border-b border-white/8 pb-5 xl:flex-row xl:items-end xl:justify-between">
         <div>
           <p className="text-xs uppercase tracking-[0.24em] text-cyan-300/55">
-            Settlement Profit
+            Daily Profit
           </p>
           <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">
-            본사/총판 수익
+            일별 수익
           </h2>
           <p className="mt-2 text-sm text-white/45">
             {companyName} / {domainName} 승인 완료 데이터 기준입니다. {message}

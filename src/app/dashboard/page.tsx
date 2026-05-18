@@ -4,6 +4,7 @@ import { AdminShell } from "@/components/admin-shell";
 import { getSessionUser } from "@/lib/auth";
 import { formatKoreanWon } from "@/lib/charge-utils";
 import { getDashboardSummaryForUser } from "@/lib/dashboard-summary-repository";
+import { getTransactionLedgerRows } from "@/lib/transaction-ledger-repository";
 
 export default async function DashboardPage() {
   const user = await getSessionUser();
@@ -16,7 +17,10 @@ export default async function DashboardPage() {
     redirect("/dashboard/org/top-distributors");
   }
 
-  const summary = await getDashboardSummaryForUser(user);
+  const [summary, recentTransactions] = await Promise.all([
+    getDashboardSummaryForUser(user),
+    getTransactionLedgerRows([], user),
+  ]);
 
   const topMetrics = [
     { label: "도메인", value: summary.domainName },
@@ -82,6 +86,72 @@ export default async function DashboardPage() {
             <p className="text-sm text-white/44">상태</p>
             <p className="mt-3 text-xl font-semibold text-emerald-200">정상</p>
           </article>
+        </section>
+
+        <section className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.28)] sm:p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.24em] text-cyan-300/55">
+                Recent Transactions
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">
+                최근 거래내역
+              </h2>
+              <p className="mt-2 text-sm text-white/45">
+                내 직속 업체와 하위 총판 기준의 충전/환전 거래를 확인합니다.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 overflow-hidden rounded-2xl border border-white/8">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-black/30 text-white/58">
+                  <tr>
+                    {["구분", "상위총판", "총판", "업체", "입금자", "금액", "신청시간", "상태"].map(
+                      (head) => (
+                        <th
+                          key={head}
+                          className="border-b border-white/8 px-4 py-3 font-medium"
+                        >
+                          {head}
+                        </th>
+                      ),
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentTransactions.length ? (
+                    recentTransactions.slice(0, 10).map((row) => (
+                      <tr key={row.id} className="border-t border-white/8 text-white/82">
+                        <td className="px-4 py-4">{row.transactionType ?? "-"}</td>
+                        <td className="px-4 py-4">{row.topDistributor}</td>
+                        <td className="px-4 py-4">{row.distributor}</td>
+                        <td className="px-4 py-4">{row.companyName ?? row.domain}</td>
+                        <td className="px-4 py-4">{row.depositor}</td>
+                        <td className="px-4 py-4 text-right">{formatKoreanWon(row.amount)}</td>
+                        <td className="px-4 py-4">{row.requestedAt}</td>
+                        <td className="px-4 py-4">
+                          <span className="rounded-full bg-white/8 px-3 py-1 text-xs font-medium text-white/88">
+                            {row.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan={8}
+                        className="px-4 py-10 text-center text-sm text-white/40"
+                      >
+                        표시할 거래내역이 없습니다.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </section>
       </div>
     </AdminShell>

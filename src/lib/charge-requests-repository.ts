@@ -98,7 +98,13 @@ function toProcessedRequest(row: ChargeRequestRow): ProcessedRequest {
 
 function splitRows(rows: ChargeRequestRow[]): ChargeRequestsResponse {
   return {
-    pending: rows.filter((row) => row.status === "PENDING").map(toPendingRequest),
+    pending: rows
+      .filter((row) => row.status === "PENDING")
+      .sort(
+        (left, right) =>
+          new Date(left.requested_at).getTime() - new Date(right.requested_at).getTime(),
+      )
+      .map(toPendingRequest),
     approved: rows
       .filter((row) => row.status === "APPROVED" || row.status === "COMPLETED")
       .map(toProcessedRequest),

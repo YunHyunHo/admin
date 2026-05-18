@@ -12,6 +12,13 @@ export function getScopedDistributorCondition(
     };
   }
 
+  if (user.role === "TOP_DISTRIBUTOR") {
+    return {
+      sql: `and (${distributorAlias}.admin_id = $1::uuid or ${distributorAlias}.parent_distributor_id in (select parent_scope.id from distributors parent_scope where parent_scope.admin_id = $1::uuid))`,
+      values: [user.id],
+    };
+  }
+
   return {
     sql: `and ${distributorAlias}.admin_id = $1::uuid`,
     values: [user.id],

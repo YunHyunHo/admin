@@ -336,12 +336,15 @@ export function ChargeRequestsBoard({
 
   const filteredPendingRequests = useMemo(() => {
     const keyword = searchKeyword.trim().toLowerCase();
+    const source = [...pendingRequests].sort((left, right) =>
+      left.requestedAt.localeCompare(right.requestedAt),
+    );
 
     if (!keyword) {
-      return pendingRequests;
+      return source;
     }
 
-    return pendingRequests.filter(
+    return source.filter(
       (row) =>
         row.depositor.toLowerCase().includes(keyword) ||
         row.userId.toLowerCase().includes(keyword) ||
@@ -374,12 +377,18 @@ export function ChargeRequestsBoard({
   );
 
   async function moveRequest(targetId: string, nextStatus: "승인" | "승인거절") {
+    const actionLabel = nextStatus === "승인" ? "승인" : "거절";
+
+    if (!window.confirm(`${targetId} 요청을 ${actionLabel}할까요?`)) {
+      return;
+    }
+
     setProcessingId(targetId);
-    setMessage(`${targetId} 요청을 ${nextStatus} 처리 중입니다.`);
+    setMessage(`${targetId} 요청을 ${actionLabel} 처리 중입니다.`);
 
     try {
       applyServerData(await requestChargeData({ id: targetId, status: nextStatus }));
-      setMessage(`${targetId} 요청이 ${nextStatus} 처리되었습니다.`);
+      setMessage(`${targetId} 요청이 ${actionLabel} 처리되었습니다.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "처리에 실패했습니다.");
     } finally {
