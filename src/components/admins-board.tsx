@@ -17,6 +17,25 @@ type AdminRow = {
 };
 
 const rowsPerPage = 10;
+const accountTypeOptions = [
+  { value: "ADMIN", label: "총판" },
+  { value: "DOMAIN_ADMIN", label: "업체" },
+] as const;
+
+function getRoleLabel(role: AdminRole) {
+  switch (role) {
+    case "MASTER":
+      return "마스터";
+    case "TOP_DISTRIBUTOR":
+      return "상위총판";
+    case "ADMIN":
+      return "총판";
+    case "DOMAIN_ADMIN":
+      return "업체";
+    default:
+      return role;
+  }
+}
 
 type AdminsBoardProps = {
   initialAdmins: PublicAdminAccount[];
@@ -37,6 +56,9 @@ export function AdminsBoard({
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [accountType, setAccountType] = useState<"ADMIN" | "DOMAIN_ADMIN">(
+    "ADMIN",
+  );
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([
     managedCompanies[0],
   ]);
@@ -128,15 +150,19 @@ export function AdminsBoard({
 
     try {
       const data = await requestAdminAccount("POST", {
-        role: "ADMIN",
+        role: accountType,
         nickname,
         loginId,
         password,
-        managedCompanies: selectedCompanies,
+        managedCompanies:
+          accountType === "DOMAIN_ADMIN"
+            ? selectedCompanies.slice(0, 1)
+            : selectedCompanies,
       });
       setNickname("");
       setLoginId("");
       setPassword("");
+      setAccountType("ADMIN");
       setSelectedCompanies([managedCompanies[0]]);
       setIsCreateModalOpen(false);
       setMessage(
@@ -223,7 +249,7 @@ export function AdminsBoard({
           disabled={!canManageAdmins}
           className="h-12 rounded-xl bg-fuchsia-600 px-5 text-sm font-semibold text-white transition hover:bg-fuchsia-500"
         >
-          하부계정 생성
+          계정 생성
         </button>
       </div>
       {message ? (
@@ -254,7 +280,8 @@ export function AdminsBoard({
                   "ID",
                   "닉네임",
                   "아이디",
-                  "권한",
+                  "분류",
+                  "업체",
                   "상태",
                   "최근 로그인",
                   "가입일",
@@ -285,7 +312,10 @@ export function AdminsBoard({
                     {admin.loginId}
                   </td>
                   <td className="border border-white/18 px-4 py-4 text-center">
-                    {admin.role}
+                    {getRoleLabel(admin.role)}
+                  </td>
+                  <td className="border border-white/18 px-4 py-4 text-center">
+                    {admin.managedCompanies.join(", ")}
                   </td>
                   <td className="border border-white/18 px-4 py-4 text-center">
                     <span className="mr-2 font-semibold text-sky-400">
@@ -364,9 +394,19 @@ export function AdminsBoard({
             </h3>
 
             <div className="mt-9 space-y-6">
-              <div className="flex h-14 items-center rounded border border-slate-300 bg-slate-50 px-5 text-sm font-semibold text-slate-600">
-                총판 계정
-              </div>
+              <select
+                value={accountType}
+                onChange={(event) =>
+                  setAccountType(event.target.value as "ADMIN" | "DOMAIN_ADMIN")
+                }
+                className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none"
+              >
+                {accountTypeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label} 계정
+                  </option>
+                ))}
+              </select>
               <input
                 value={nickname}
                 onChange={(event) => setNickname(event.target.value)}
@@ -386,6 +426,22 @@ export function AdminsBoard({
                 placeholder="비밀번호 [6글자 이상, 영어 + 숫자]"
                 className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
               />
+              <select
+                value={selectedCompanies[0] ?? ""}
+                onChange={(event) => setSelectedCompanies([event.target.value])}
+                className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none"
+              >
+                {managedCompanies.map((company) => (
+                  <option key={company} value={company}>
+                    {company}
+                  </option>
+                ))}
+              </select>
+              <p className="text-sm text-slate-500">
+                {accountType === "DOMAIN_ADMIN"
+                  ? "업체 계정은 선택한 업체 기준으로 권한이 설정됩니다."
+                  : "총판 계정도 기본 업체 범위를 함께 저장합니다."}
+              </p>
             </div>
 
             <div className="mt-12 flex justify-end gap-3">

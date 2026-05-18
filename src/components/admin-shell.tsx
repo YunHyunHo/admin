@@ -36,6 +36,11 @@ const sideMenuGroups = [
         href: "/dashboard/settings/fee-rate",
         key: "fee-rate-settings",
       },
+      {
+        title: "어드민리스트",
+        href: "/dashboard/admins",
+        key: "admins",
+      },
     ],
   },
   {
@@ -110,6 +115,7 @@ const masterOnlyMenuKeys = new Set([
   "org-distributors",
   "fee-rate-settings",
   "domains",
+  "admins",
 ]);
 
 type AdminShellProps = {
