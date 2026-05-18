@@ -24,7 +24,7 @@ type FeeRateRow = {
 type DashboardPartnerSummaryRow = {
   entity_id: string;
   entity_name: string;
-  entity_type: "DOMAIN" | "DISTRIBUTOR";
+  entity_type: "DOMAIN" | "DISTRIBUTOR" | "TOP_DISTRIBUTOR";
   charge_total: string;
   fee_total: string;
   exchange_total: string;
@@ -34,7 +34,7 @@ type DashboardPartnerSummaryRow = {
 export type DashboardPartnerSummary = {
   id: string;
   name: string;
-  type: "DOMAIN" | "DISTRIBUTOR";
+  type: "DOMAIN" | "DISTRIBUTOR" | "TOP_DISTRIBUTOR";
   chargeTotal: number;
   feeTotal: number;
   exchangeTotal: number;
@@ -152,10 +152,14 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
         select
           concat('distributor:', dist.id::text) as entity_id,
           dist.name as entity_name,
-          'DISTRIBUTOR'::text as entity_type,
+          case
+            when dist_admin.role = 'TOP_DISTRIBUTOR' then 'TOP_DISTRIBUTOR'::text
+            else 'DISTRIBUTOR'::text
+          end as entity_type,
           dist.id as distributor_id,
           dist.current_balance
         from scoped_distributors dist
+        left join admins dist_admin on dist_admin.id = dist.admin_id
         where not exists (
           select 1
           from domains dom

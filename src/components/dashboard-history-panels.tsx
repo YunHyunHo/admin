@@ -8,6 +8,19 @@ import type { LedgerRow } from "@/lib/transaction-ledger-types";
 
 const ROWS_PER_PAGE = 10;
 
+function getPartnerTypeLabel(type: DashboardPartnerSummary["type"]) {
+  switch (type) {
+    case "TOP_DISTRIBUTOR":
+      return "상위총판";
+    case "DISTRIBUTOR":
+      return "총판";
+    case "DOMAIN":
+      return "업체";
+    default:
+      return type;
+  }
+}
+
 function PaginationControls({
   page,
   pageCount,
@@ -114,7 +127,7 @@ export function DashboardHistoryPanels({
                         </span>
                       </td>
                       <td className="border-r border-white/8 px-4 py-4 last:border-r-0">
-                        {item.type === "DOMAIN" ? "업체" : "총판"}
+                        {getPartnerTypeLabel(item.type)}
                       </td>
                       <td className="border-r border-white/8 px-4 py-4 text-left font-semibold last:border-r-0">
                         <span className="block max-w-[220px] truncate">{item.name}</span>
@@ -180,7 +193,7 @@ export function DashboardHistoryPanels({
                           {rank}
                         </span>
                         <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs font-medium text-white/70">
-                          {item.type === "DOMAIN" ? "업체" : "총판"}
+                          {getPartnerTypeLabel(item.type)}
                         </span>
                       </div>
                       <h3 className="mt-3 truncate text-lg font-semibold text-white">
