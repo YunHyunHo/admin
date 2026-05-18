@@ -75,6 +75,13 @@ export default async function DashboardPage() {
     (sum, item) => sum + item.balanceTotal,
     0,
   );
+  const activePartnerCount = prioritizedPartnerSummaries.filter(
+    (item) =>
+      item.balanceTotal > 0 ||
+      item.chargeTotal > 0 ||
+      item.exchangeTotal > 0 ||
+      item.feeTotal > 0,
+  ).length;
   const summaryColumns = [
     { label: "총판", value: `${subcontractCount}` },
     { label: "업체", value: `${domainCount}` },
@@ -157,8 +164,96 @@ export default async function DashboardPage() {
               하위 총판과 직통 업체 기준으로 충전, 수수료, 환전, 보유 현황을 확인합니다.
             </p>
           </div>
+          <div className="mt-4 flex flex-wrap gap-2 text-sm text-white/60">
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5">
+              직속 총판 {subcontractCount}
+            </span>
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5">
+              직통 업체 {domainCount}
+            </span>
+            <span className="rounded-full border border-emerald-400/15 bg-emerald-400/10 px-3 py-1.5 text-emerald-100">
+              운영중 {activePartnerCount}
+            </span>
+          </div>
 
-          <div className="mt-5 grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+          <div className="mt-5 hidden overflow-hidden rounded-2xl border border-white/8 xl:block">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-center text-sm">
+                <thead className="bg-black/30 text-white/60">
+                  <tr>
+                    {["순위", "구분", "이름", "충전", "수수료", "환전", "보유", "상태"].map(
+                      (head) => (
+                        <th
+                          key={head}
+                          className="border-b border-r border-white/8 px-4 py-3 font-medium last:border-r-0"
+                        >
+                          {head}
+                        </th>
+                      ),
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {prioritizedPartnerSummaries.length ? (
+                    prioritizedPartnerSummaries.map((item, index) => {
+                      const isActive =
+                        item.balanceTotal > 0 ||
+                        item.chargeTotal > 0 ||
+                        item.exchangeTotal > 0 ||
+                        item.feeTotal > 0;
+
+                      return (
+                        <tr key={item.id} className="border-t border-white/8 text-white/88">
+                          <td className="border-r border-white/8 px-4 py-4 last:border-r-0">
+                            <span className="inline-flex min-w-8 items-center justify-center rounded-full border border-cyan-400/15 bg-cyan-400/10 px-2 py-1 text-xs font-semibold text-cyan-100">
+                              {index + 1}
+                            </span>
+                          </td>
+                          <td className="border-r border-white/8 px-4 py-4 last:border-r-0">
+                            {item.type === "DOMAIN" ? "업체" : "총판"}
+                          </td>
+                          <td className="border-r border-white/8 px-4 py-4 text-left font-semibold last:border-r-0">
+                            <span className="block max-w-[220px] truncate">{item.name}</span>
+                          </td>
+                          <td className="border-r border-white/8 px-4 py-4 text-right last:border-r-0">
+                            {formatKoreanWon(item.chargeTotal)}
+                          </td>
+                          <td className="border-r border-white/8 px-4 py-4 text-right last:border-r-0">
+                            {formatKoreanWon(item.feeTotal)}
+                          </td>
+                          <td className="border-r border-white/8 px-4 py-4 text-right last:border-r-0">
+                            {formatKoreanWon(item.exchangeTotal)}
+                          </td>
+                          <td className="border-r border-white/8 px-4 py-4 text-right font-semibold text-white last:border-r-0">
+                            {formatKoreanWon(item.balanceTotal)}
+                          </td>
+                          <td className="px-4 py-4">
+                            {isActive ? (
+                              <span className="rounded-full border border-emerald-400/15 bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-100">
+                                운영중
+                              </span>
+                            ) : (
+                              <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs font-medium text-white/55">
+                                대기
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-10 text-center text-sm text-white/40">
+                        표시할 하청/업체 현황이 없습니다.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 xl:hidden lg:grid-cols-2">
             {prioritizedPartnerSummaries.length ? (
               prioritizedPartnerSummaries.map((item, index) => (
                 <article
@@ -211,7 +306,7 @@ export default async function DashboardPage() {
                 </article>
               ))
             ) : (
-              <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-5 py-10 text-center text-sm text-white/42 lg:col-span-2 2xl:col-span-3">
+              <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-5 py-10 text-center text-sm text-white/42 lg:col-span-2">
                 표시할 하청/업체 현황이 없습니다.
               </div>
             )}
