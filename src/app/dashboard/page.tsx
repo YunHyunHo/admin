@@ -3,7 +3,10 @@ import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin-shell";
 import { getSessionUser } from "@/lib/auth";
 import { formatKoreanWon } from "@/lib/charge-utils";
-import { getDashboardSummaryForUser } from "@/lib/dashboard-summary-repository";
+import {
+  getDashboardPartnerSummariesForUser,
+  getDashboardSummaryForUser,
+} from "@/lib/dashboard-summary-repository";
 import { getTransactionLedgerRows } from "@/lib/transaction-ledger-repository";
 
 export default async function DashboardPage() {
@@ -17,9 +20,10 @@ export default async function DashboardPage() {
     redirect("/dashboard/org/top-distributors");
   }
 
-  const [summary, recentTransactions] = await Promise.all([
+  const [summary, recentTransactions, partnerSummaries] = await Promise.all([
     getDashboardSummaryForUser(user),
     getTransactionLedgerRows([], user),
+    getDashboardPartnerSummariesForUser(user),
   ]);
 
   const topMetrics = [
@@ -86,6 +90,61 @@ export default async function DashboardPage() {
             <p className="text-sm text-white/44">상태</p>
             <p className="mt-3 text-xl font-semibold text-emerald-200">정상</p>
           </article>
+        </section>
+
+        <section className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.28)] sm:p-6">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-cyan-300/55">
+              Subcontract Overview
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">
+              하청 / 업체 현황
+            </h2>
+            <p className="mt-2 text-sm text-white/45">
+              하위 총판과 직통 업체 기준으로 충전, 수수료, 환전, 보유 현황을 확인합니다.
+            </p>
+          </div>
+
+          <div className="mt-5 grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+            {partnerSummaries.length ? (
+              partnerSummaries.map((item) => (
+                <article
+                  key={item.id}
+                  className="overflow-hidden rounded-2xl border border-white/8 bg-white/[0.035]"
+                >
+                  <div className="border-b border-white/8 bg-white/[0.045] px-5 py-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="text-lg font-semibold text-white">{item.name}</h3>
+                      <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs font-medium text-white/70">
+                        {item.type === "DOMAIN" ? "업체" : "하위 총판"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-4 divide-x divide-white/8">
+                    {[
+                      ["충전", formatKoreanWon(item.chargeTotal)],
+                      ["수수료", formatKoreanWon(item.feeTotal)],
+                      ["환전", formatKoreanWon(item.exchangeTotal)],
+                      ["보유", formatKoreanWon(item.balanceTotal)],
+                    ].map(([label, value]) => (
+                      <div key={`${item.id}-${label}`} className="px-4 py-4 text-center">
+                        <p className="text-xs font-medium tracking-[0.18em] text-white/40">
+                          {label}
+                        </p>
+                        <p className="mt-3 text-lg font-semibold tracking-[-0.04em] text-white">
+                          {value}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+              ))
+            ) : (
+              <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-5 py-10 text-center text-sm text-white/42 lg:col-span-2 2xl:col-span-3">
+                표시할 하청/업체 현황이 없습니다.
+              </div>
+            )}
+          </div>
         </section>
 
         <section className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.28)] sm:p-6">

@@ -26,8 +26,8 @@ export default async function DomainsPage() {
     <AdminShell
       user={user}
       activeItem="domains"
-      badge="Domains"
-      helperText="도메인과 도메인 유저를 한 화면에서 확인하는 통합 관리 화면입니다."
+      badge="Balance Management"
+      helperText="도메인별 보유금 현황과 연결 상태를 함께 관리하는 화면입니다."
     >
       <DomainManagementBoard
         initialRows={domainData.rows}

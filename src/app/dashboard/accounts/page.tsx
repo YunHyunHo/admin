@@ -22,8 +22,8 @@ export default async function AccountsPage() {
     <AdminShell
       user={user}
       activeItem="accounts"
-      badge="Accounts"
-      helperText="충전 입금 확인에 사용할 계좌를 생성하고 관리하는 화면입니다."
+      badge="Account Link"
+      helperText="충전 입금 확인에 사용할 계좌를 연동하고 관리하는 화면입니다."
     >
       <AccountsBoard
         initialAccounts={isDatabaseBacked ? accountData.accounts : undefined}

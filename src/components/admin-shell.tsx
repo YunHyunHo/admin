@@ -47,7 +47,7 @@ const sideMenuGroups = [
     title: "계좌",
     items: [
       {
-        title: "계좌관리",
+        title: "계좌연동",
         href: "/dashboard/accounts",
         key: "accounts",
       },
@@ -57,7 +57,7 @@ const sideMenuGroups = [
     title: "도메인",
     items: [
       {
-        title: "도메인",
+        title: "보유금 관리",
         href: "/dashboard/domains",
         key: "domains",
       },
