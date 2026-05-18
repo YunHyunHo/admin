@@ -5,9 +5,39 @@ import { getSessionUser } from "@/lib/auth";
 import { formatKoreanWon } from "@/lib/charge-utils";
 import {
   getDashboardPartnerSummariesForUser,
+  type DashboardPartnerSummary,
   getDashboardSummaryForUser,
 } from "@/lib/dashboard-summary-repository";
 import { getTransactionLedgerRows } from "@/lib/transaction-ledger-repository";
+
+function sortPartnerSummaries(
+  items: DashboardPartnerSummary[],
+): DashboardPartnerSummary[] {
+  return [...items].sort((left, right) => {
+    const leftHasActivity = Number(
+      left.balanceTotal > 0 ||
+        left.chargeTotal > 0 ||
+        left.exchangeTotal > 0 ||
+        left.feeTotal > 0,
+    );
+    const rightHasActivity = Number(
+      right.balanceTotal > 0 ||
+        right.chargeTotal > 0 ||
+        right.exchangeTotal > 0 ||
+        right.feeTotal > 0,
+    );
+
+    return (
+      rightHasActivity - leftHasActivity ||
+      right.balanceTotal - left.balanceTotal ||
+      right.chargeTotal - left.chargeTotal ||
+      right.exchangeTotal - left.exchangeTotal ||
+      right.feeTotal - left.feeTotal ||
+      (left.type === right.type ? 0 : left.type === "DISTRIBUTOR" ? -1 : 1) ||
+      left.name.localeCompare(right.name, "ko")
+    );
+  });
+}
 
 export default async function DashboardPage() {
   const user = await getSessionUser();
@@ -25,20 +55,23 @@ export default async function DashboardPage() {
     getTransactionLedgerRows([], user),
     getDashboardPartnerSummariesForUser(user),
   ]);
+  const prioritizedPartnerSummaries = sortPartnerSummaries(partnerSummaries);
 
-  const domainCount = partnerSummaries.filter((item) => item.type === "DOMAIN").length;
-  const subcontractCount = partnerSummaries.filter(
+  const domainCount = prioritizedPartnerSummaries.filter(
+    (item) => item.type === "DOMAIN",
+  ).length;
+  const subcontractCount = prioritizedPartnerSummaries.filter(
     (item) => item.type === "DISTRIBUTOR",
   ).length;
-  const exchangeTotal = partnerSummaries.reduce(
+  const exchangeTotal = prioritizedPartnerSummaries.reduce(
     (sum, item) => sum + item.exchangeTotal,
     0,
   );
-  const commissionTotal = partnerSummaries.reduce(
+  const commissionTotal = prioritizedPartnerSummaries.reduce(
     (sum, item) => sum + item.feeTotal,
     0,
   );
-  const balanceTotal = partnerSummaries.reduce(
+  const balanceTotal = prioritizedPartnerSummaries.reduce(
     (sum, item) => sum + item.balanceTotal,
     0,
   );
@@ -126,18 +159,36 @@ export default async function DashboardPage() {
           </div>
 
           <div className="mt-5 grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
-            {partnerSummaries.length ? (
-              partnerSummaries.map((item) => (
+            {prioritizedPartnerSummaries.length ? (
+              prioritizedPartnerSummaries.map((item, index) => (
                 <article
                   key={item.id}
                   className="overflow-hidden rounded-2xl border border-white/8 bg-white/[0.035]"
                 >
                   <div className="border-b border-white/8 bg-white/[0.045] px-5 py-4">
                     <div className="flex items-center justify-between gap-3">
-                      <h3 className="text-lg font-semibold text-white">{item.name}</h3>
-                      <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs font-medium text-white/70">
-                        {item.type === "DOMAIN" ? "업체" : "하위 총판"}
-                      </span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-full border border-cyan-400/15 bg-cyan-400/10 px-2.5 py-1 text-[11px] font-medium text-cyan-100">
+                            {index + 1}
+                          </span>
+                          <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs font-medium text-white/70">
+                            {item.type === "DOMAIN" ? "업체" : "총판"}
+                          </span>
+                        </div>
+                        <h3 className="mt-3 truncate text-lg font-semibold text-white">
+                          {item.name}
+                        </h3>
+                      </div>
+                      {item.balanceTotal > 0 ? (
+                        <span className="rounded-full border border-emerald-400/15 bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-100">
+                          운영중
+                        </span>
+                      ) : (
+                        <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs font-medium text-white/55">
+                          대기
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="grid grid-cols-4 divide-x divide-white/8">
