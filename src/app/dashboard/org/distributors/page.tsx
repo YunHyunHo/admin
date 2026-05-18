@@ -27,7 +27,7 @@ export default async function DistributorsPage() {
       user={user}
       activeItem="org-distributors"
       badge="Organization"
-      helperText="어드민 리스트에서 생성한 하부계정이 총판 목록에 표시됩니다."
+      helperText="마스터 계정에서 총판을 생성하고 상위총판에 연결합니다."
     >
       <DistributorsBoard adminAccounts={adminAccounts} />
     </AdminShell>

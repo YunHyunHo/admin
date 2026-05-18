@@ -27,7 +27,7 @@ export default async function TopDistributorsPage() {
       user={user}
       activeItem="org-top-distributors"
       badge="Organization"
-      helperText="마스터 계정은 상위총판으로만 표시되고, 상위총판 계정은 별도로 생성하지 않습니다."
+      helperText="마스터 계정에서 상위총판 계정을 별도로 생성하고 관리합니다."
     >
       <TopDistributorsBoard adminAccounts={adminAccounts} />
     </AdminShell>

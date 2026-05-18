@@ -25,6 +25,7 @@ type CreateAdminPayload = {
   nickname?: string;
   role?: AdminRole;
   managedCompanies?: string[];
+  parentAdminId?: string;
 };
 
 type PatchAdminPayload = {
@@ -50,6 +51,7 @@ function toPublicList(accounts: AdminAccountRecord[]) {
 function isAdminRole(value: string | undefined): value is AdminRole {
   return (
     value === "MASTER" ||
+    value === "TOP_DISTRIBUTOR" ||
     value === "ADMIN" ||
     value === "VIEWER" ||
     value === "DOMAIN_ADMIN"
@@ -66,6 +68,7 @@ export async function GET() {
 
     return NextResponse.json({
       accounts: await getPublicAdminAccounts(user),
+      detailedAccounts: isWritableRole(user.role) ? await getAllAdminAccounts(user) : [],
       managedCompanies: await getManagedCompanyOptions(),
     });
   } catch (error) {
@@ -97,6 +100,7 @@ export async function POST(request: Request) {
     const password = payload.password ?? "";
     const nickname = payload.nickname?.trim() ?? "";
     const role = payload.role;
+    const parentAdminId = payload.parentAdminId?.trim() ?? "";
     const managedCompanyOptions = await getManagedCompanyOptions();
     const managedCompanies =
       payload.managedCompanies?.filter((company) =>
@@ -131,6 +135,13 @@ export async function POST(request: Request) {
       );
     }
 
+    if (role === "ADMIN" && !parentAdminId && hasDatabaseUrl()) {
+      return NextResponse.json(
+        { message: "총판에 연결할 상위총판을 선택해주세요." },
+        { status: 400 },
+      );
+    }
+
     const issuedAccounts = await getIssuedAdminAccountsFromCookie(user);
     const allAccounts = await getAllAdminAccounts();
 
@@ -150,10 +161,12 @@ export async function POST(request: Request) {
         managedCompanies,
         createdBy: user.loginId,
         createdById: user.id,
+        parentAdminId: parentAdminId || undefined,
       });
 
       return NextResponse.json({
         accounts: await getPublicAdminAccounts(user),
+        detailedAccounts: await getAllAdminAccounts(user),
         managedCompanies: managedCompanyOptions,
         message: `${loginId} 계정이 생성되었습니다.`,
       });
@@ -168,11 +181,13 @@ export async function POST(request: Request) {
         managedCompanies,
         createdBy: user.loginId,
         createdById: user.id,
+        parentAdminId: parentAdminId || undefined,
       }),
       ...issuedAccounts,
     ];
     const response = NextResponse.json({
       accounts: toPublicList([allAccounts[0], ...nextAccounts]),
+      detailedAccounts: [allAccounts[0], ...nextAccounts],
       managedCompanies: managedCompanyOptions,
       message: `${loginId} 계정이 생성되었습니다.`,
     });
@@ -238,6 +253,7 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({
       accounts: await getPublicAdminAccounts(user),
+      detailedAccounts: await getAllAdminAccounts(user),
       managedCompanies: await getManagedCompanyOptions(),
       message:
         payload.action === "delete"

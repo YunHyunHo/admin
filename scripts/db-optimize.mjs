@@ -45,6 +45,7 @@ function getDatabaseUrl() {
 }
 
 const indexStatements = [
+  "alter type admin_role add value if not exists 'TOP_DISTRIBUTOR'",
   "alter table admins add column if not exists password_ciphertext text",
   "alter table exchange_requests alter column domain_id drop not null",
   "create index if not exists idx_admins_created_by_status on admins (created_by, status)",
@@ -62,6 +63,15 @@ const indexStatements = [
   "create index if not exists idx_commission_records_status_created on commission_records (status, created_at desc)",
   "create index if not exists idx_commission_records_domain_created on commission_records (domain_id, created_at desc)",
   "create index if not exists idx_distributor_withdrawals_distributor_requested on distributor_withdrawals (distributor_id, requested_at desc)",
+  `
+    update distributors d
+    set level = case when a.role = 'TOP_DISTRIBUTOR' then 'TOP_DISTRIBUTOR' else 'DISTRIBUTOR' end,
+        updated_at = now()
+    from admins a
+    where d.admin_id = a.id
+      and a.role in ('TOP_DISTRIBUTOR', 'ADMIN')
+      and d.level is distinct from case when a.role = 'TOP_DISTRIBUTOR' then 'TOP_DISTRIBUTOR' else 'DISTRIBUTOR' end
+  `,
 ];
 
 async function main() {

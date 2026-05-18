@@ -103,17 +103,6 @@ const sideMenuGroups = [
       },
     ],
   },
-  {
-    title: "어드민",
-    masterOnly: true,
-    items: [
-      {
-        title: "어드민 리스트",
-        href: "/dashboard/admins",
-        key: "admins",
-      },
-    ],
-  },
 ];
 
 const masterOnlyMenuKeys = new Set([
@@ -121,7 +110,6 @@ const masterOnlyMenuKeys = new Set([
   "org-distributors",
   "fee-rate-settings",
   "domains",
-  "admins",
 ]);
 
 type AdminShellProps = {
@@ -139,6 +127,12 @@ export function AdminShell({
   helperText = "원하는 데이터와 형태를 정하면 이 화면에 바로 붙일 수 있어요.",
   children,
 }: AdminShellProps) {
+  const userRoleLabel =
+    user.role === "MASTER"
+      ? "마스터"
+      : user.role === "TOP_DISTRIBUTOR"
+        ? "상위총판"
+        : "총판";
   const visibleMenuGroups = sideMenuGroups
     .filter((group) => {
       if (user.role === "MASTER" && group.distributorOnly) {
@@ -168,7 +162,7 @@ export function AdminShell({
                 </div>
                 <div>
                   <p className="text-[1.05rem] font-semibold tracking-[-0.02em] text-white">
-                    총관리자[{user.companyName}]
+                    {userRoleLabel}[{user.companyName}]
                   </p>
                   <p className="mt-1 text-xs font-medium text-white/45">
                     version 03.10

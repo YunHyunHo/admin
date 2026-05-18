@@ -8,7 +8,12 @@ import type { SessionUser } from "@/lib/auth";
 
 const ADMIN_ACCOUNTS_COOKIE = "vendor_admin_issued_accounts";
 
-export type AdminRole = "MASTER" | "ADMIN" | "VIEWER" | "DOMAIN_ADMIN";
+export type AdminRole =
+  | "MASTER"
+  | "TOP_DISTRIBUTOR"
+  | "ADMIN"
+  | "VIEWER"
+  | "DOMAIN_ADMIN";
 export type AdminStatus = "ACTIVE" | "SUSPENDED";
 
 export type AdminAccountRecord = {
@@ -24,6 +29,8 @@ export type AdminAccountRecord = {
   apiLabel: string;
   managedCompanies: string[];
   createdBy: string | null;
+  parentAdminId?: string | null;
+  parentDistributorName?: string | null;
   lastLoginAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -46,6 +53,8 @@ type DbAdminRow = {
   created_at: Date | string;
   updated_at: Date | string;
   managed_companies: string[] | null;
+  parent_admin_id: string | null;
+  parent_distributor_name: string | null;
 };
 
 const hiddenPasswordMessage = "저장된 비밀번호를 확인할 수 없습니다.";
@@ -200,6 +209,8 @@ function toAdminAccountRecord(
       row.role === "DOMAIN_ADMIN" ? `${managedCompanies[0]} 연동 API` : "권한 범위 API",
     managedCompanies,
     createdBy: row.created_by,
+    parentAdminId: row.parent_admin_id,
+    parentDistributorName: row.parent_distributor_name,
     lastLoginAt: formatStamp(row.last_login_at),
     createdAt: formatStamp(row.created_at) ?? getNowStamp(),
     updatedAt: formatStamp(row.updated_at) ?? getNowStamp(),
@@ -210,13 +221,15 @@ function filterAccountsForUser(
   accounts: AdminAccountRecord[],
   user?: Pick<SessionUser, "id" | "role"> | null,
 ) {
-  if (!user || user.role !== "MASTER") {
+  if (!user) {
     return accounts;
   }
 
-  return accounts.filter(
-    (account) => account.id === user.id || account.createdBy === user.id,
-  );
+  if (user.role !== "MASTER") {
+    return accounts.filter((account) => account.id === user.id);
+  }
+
+  return accounts.filter((account) => account.id === user.id || account.createdBy === user.id);
 }
 
 async function getDbAdminAccounts(user?: Pick<SessionUser, "id" | "role"> | null) {
@@ -235,11 +248,16 @@ async function getDbAdminAccounts(user?: Pick<SessionUser, "id" | "role"> | null
         a.last_login_at,
         a.created_at,
         a.updated_at,
+        max(parent_admin.id::text) as parent_admin_id,
+        max(parent_dist.name) as parent_distributor_name,
         coalesce(
           array_remove(array_agg(c.company_name order by c.company_name), null),
           array[]::text[]
         ) as managed_companies
       from admins a
+      left join distributors dist on dist.admin_id = a.id
+      left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
+      left join admins parent_admin on parent_admin.id = parent_dist.admin_id
       left join admin_company_mappings acm on acm.admin_id = a.id
       left join companies c on c.id = acm.company_id
       where a.status <> 'DELETED'
@@ -296,7 +314,10 @@ export async function getIssuedAdminAccountsFromCookie(
 
   const cookieStore = await cookies();
 
-  return decodeAccounts(cookieStore.get(ADMIN_ACCOUNTS_COOKIE)?.value);
+  return filterAccountsForUser(
+    decodeAccounts(cookieStore.get(ADMIN_ACCOUNTS_COOKIE)?.value),
+    user,
+  );
 }
 
 export async function getAllAdminAccounts(user?: Pick<SessionUser, "id" | "role"> | null) {
@@ -354,6 +375,8 @@ export function createIssuedAdminAccount(input: {
   managedCompanies: string[];
   createdBy: string;
   createdById?: string | null;
+  parentAdminId?: string | null;
+  parentDistributorName?: string | null;
 }): AdminAccountRecord {
   const normalizedCompanies = normalizeManagedCompanies(input.managedCompanies);
   const companyName =
@@ -378,6 +401,8 @@ export function createIssuedAdminAccount(input: {
         : "권한 범위 API",
     managedCompanies: normalizedCompanies,
     createdBy: input.role === "MASTER" ? null : input.createdBy,
+    parentAdminId: input.parentAdminId ?? null,
+    parentDistributorName: input.parentDistributorName ?? null,
     lastLoginAt: null,
     createdAt: now,
     updatedAt: now,
@@ -392,6 +417,7 @@ export async function createPersistedAdminAccount(input: {
   managedCompanies: string[];
   createdBy: string;
   createdById?: string | null;
+  parentAdminId?: string | null;
 }) {
   if (!hasDatabaseUrl()) {
     return createIssuedAdminAccount(input);
@@ -465,36 +491,74 @@ export async function createPersistedAdminAccount(input: {
   );
 
   if (primaryCompanyId && input.role !== "MASTER") {
+    let parentDistributorId: string | null = null;
+
+    if (input.role === "ADMIN" && input.parentAdminId) {
+      const parentResult = await query<{ distributor_id: string }>(
+        `
+          select dist.id::text as distributor_id
+          from distributors dist
+          join admins a on a.id = dist.admin_id
+          where a.id = $1::uuid
+            and a.role = 'TOP_DISTRIBUTOR'
+            and a.created_by = $2::uuid
+          limit 1
+        `,
+        [input.parentAdminId, input.createdById ?? null],
+      );
+
+      parentDistributorId = parentResult.rows[0]?.distributor_id ?? null;
+
+      if (!parentDistributorId) {
+        throw new Error("연결할 상위총판을 찾지 못했습니다.");
+      }
+    }
+
     await query(
       `
         update distributors
         set
           company_id = $1::uuid,
+          parent_distributor_id = $4::uuid,
           name = $3,
+          level = $5,
           status = 'ACTIVE',
           updated_at = now()
         where admin_id = $2::uuid
       `,
-      [primaryCompanyId, adminId, input.nickname],
+      [
+        primaryCompanyId,
+        adminId,
+        input.nickname,
+        parentDistributorId,
+        input.role === "TOP_DISTRIBUTOR" ? "TOP_DISTRIBUTOR" : "DISTRIBUTOR",
+      ],
     );
     await query(
       `
         insert into distributors (
           company_id,
           admin_id,
+          parent_distributor_id,
           name,
           level,
           current_balance,
           status
         )
-        select $1::uuid, $2::uuid, $3, 'DISTRIBUTOR', 0, 'ACTIVE'
+        select $1::uuid, $2::uuid, $3::uuid, $4, $5, 0, 'ACTIVE'
         where not exists (
           select 1
           from distributors
           where admin_id = $2::uuid
         )
       `,
-      [primaryCompanyId, adminId, input.nickname],
+      [
+        primaryCompanyId,
+        adminId,
+        parentDistributorId,
+        input.nickname,
+        input.role === "TOP_DISTRIBUTOR" ? "TOP_DISTRIBUTOR" : "DISTRIBUTOR",
+      ],
     );
   }
 
@@ -518,6 +582,21 @@ export async function updatePersistedAdminAccount(input: {
   }
 
   if (input.action === "delete") {
+    if (targetAccount.role === "TOP_DISTRIBUTOR") {
+      await query(
+        `
+          update distributors
+          set parent_distributor_id = null, updated_at = now()
+          where parent_distributor_id in (
+            select id
+            from distributors
+            where admin_id = $1::uuid
+          )
+        `,
+        [input.id],
+      );
+    }
+
     await query(
       `
         update admins

@@ -8,7 +8,7 @@ import {
   rejectDomainExchange,
 } from "@/lib/domain-exchanges-repository";
 import { hasDatabaseUrl } from "@/lib/db";
-import { canManageMasterResources } from "@/lib/permissions";
+import { canManageMasterResources, canUseDistributorMenus } from "@/lib/permissions";
 
 export const runtime = "nodejs";
 
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
 
-  if (user.role !== "ADMIN") {
+  if (!canUseDistributorMenus(user)) {
     return NextResponse.json(
       { message: "환전 요청을 생성할 권한이 없습니다." },
       { status: 403 },

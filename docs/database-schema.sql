@@ -5,6 +5,7 @@ create extension if not exists pgcrypto;
 
 create type admin_role as enum (
   'MASTER',
+  'TOP_DISTRIBUTOR',
   'ADMIN',
   'VIEWER',
   'DOMAIN_ADMIN'

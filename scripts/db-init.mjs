@@ -170,7 +170,13 @@ async function seedBaseData(client) {
         current_balance,
         status
       )
-      select $1, a.id, a.name, 'DISTRIBUTOR', 0, 'ACTIVE'
+      select
+        $1,
+        a.id,
+        a.name,
+        case when a.role = 'TOP_DISTRIBUTOR' then 'TOP_DISTRIBUTOR' else 'DISTRIBUTOR' end,
+        0,
+        'ACTIVE'
       from admins a
       where a.role <> 'MASTER' and a.status = 'ACTIVE'
         and not exists (
