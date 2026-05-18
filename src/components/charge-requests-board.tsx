@@ -40,6 +40,7 @@ const chargeNoticeSoundPath = "/sounds/notice.mp3";
 
 function getCurrentTimeLabel() {
   return new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",

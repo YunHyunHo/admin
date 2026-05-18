@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
 import { hasDatabaseUrl, query } from "@/lib/db";
+import { formatKoreanDateTime, getKoreanNowStamp } from "@/lib/korean-time";
 import { hashPassword } from "@/lib/password";
 import type { SessionUser } from "@/lib/auth";
 
@@ -108,14 +109,7 @@ export function normalizeManagedCompanies(
 }
 
 export function getNowStamp() {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const date = String(now.getDate()).padStart(2, "0");
-  const hours = String(now.getHours()).padStart(2, "0");
-  const minutes = String(now.getMinutes()).padStart(2, "0");
-  const seconds = String(now.getSeconds()).padStart(2, "0");
-
-  return `${month}-${date} ${hours}:${minutes}:${seconds}`;
+  return getKoreanNowStamp();
 }
 
 function formatStamp(value: Date | string | null) {
@@ -123,19 +117,7 @@ function formatStamp(value: Date | string | null) {
     return null;
   }
 
-  const date = value instanceof Date ? value : new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return String(value);
-  }
-
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  const seconds = String(date.getSeconds()).padStart(2, "0");
-
-  return `${month}-${day} ${hours}:${minutes}:${seconds}`;
+  return formatKoreanDateTime(value);
 }
 
 export function getMasterAccount(): AdminAccountRecord {
