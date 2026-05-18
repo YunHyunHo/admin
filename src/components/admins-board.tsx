@@ -13,6 +13,8 @@ type AdminRow = {
   status: "ACTIVE" | "SUSPENDED";
   managedCompanies: string[];
   companyName: string;
+  parentAdminId?: string | null;
+  parentDistributorName?: string | null;
   lastLoginAt: string | null;
 };
 
@@ -62,6 +64,7 @@ export function AdminsBoard({
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([
     managedCompanies[0],
   ]);
+  const [selectedTopDistributorId, setSelectedTopDistributorId] = useState("");
   const [nickname, setNickname] = useState("");
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
@@ -84,6 +87,16 @@ export function AdminsBoard({
         admin.loginId.toLowerCase().includes(keyword),
     );
   }, [admins, query]);
+  const topDistributorOptions = useMemo(
+    () =>
+      admins
+        .filter((admin) => admin.role === "TOP_DISTRIBUTOR")
+        .map((admin) => ({
+          id: admin.id,
+          name: admin.nickname,
+        })),
+    [admins],
+  );
   const pageCount = Math.max(1, Math.ceil(filteredAdmins.length / rowsPerPage));
   const visibleAdmins = filteredAdmins.slice(
     (page - 1) * rowsPerPage,
@@ -149,11 +162,18 @@ export function AdminsBoard({
     setIsCreating(true);
 
     try {
+      const selectedTopDistributor = topDistributorOptions.find(
+        (option) => option.id === selectedTopDistributorId,
+      );
       const data = await requestAdminAccount("POST", {
         role: accountType,
         nickname,
         loginId,
         password,
+        parentAdminId:
+          accountType === "ADMIN" ? selectedTopDistributorId : undefined,
+        parentDistributorName:
+          accountType === "ADMIN" ? selectedTopDistributor?.name : undefined,
         managedCompanies:
           accountType === "DOMAIN_ADMIN"
             ? selectedCompanies.slice(0, 1)
@@ -163,6 +183,7 @@ export function AdminsBoard({
       setLoginId("");
       setPassword("");
       setAccountType("ADMIN");
+      setSelectedTopDistributorId("");
       setSelectedCompanies([managedCompanies[0]]);
       setIsCreateModalOpen(false);
       setMessage(
@@ -281,6 +302,7 @@ export function AdminsBoard({
                   "닉네임",
                   "아이디",
                   "분류",
+                  "상위총판",
                   "업체",
                   "상태",
                   "최근 로그인",
@@ -313,6 +335,9 @@ export function AdminsBoard({
                   </td>
                   <td className="border border-white/18 px-4 py-4 text-center">
                     {getRoleLabel(admin.role)}
+                  </td>
+                  <td className="border border-white/18 px-4 py-4 text-center">
+                    {admin.parentDistributorName ?? "-"}
                   </td>
                   <td className="border border-white/18 px-4 py-4 text-center">
                     {admin.managedCompanies.join(", ")}
@@ -426,6 +451,20 @@ export function AdminsBoard({
                 placeholder="비밀번호 [6글자 이상, 영어 + 숫자]"
                 className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
               />
+              {accountType === "ADMIN" ? (
+                <select
+                  value={selectedTopDistributorId}
+                  onChange={(event) => setSelectedTopDistributorId(event.target.value)}
+                  className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none"
+                >
+                  <option value="">상위총판 선택</option>
+                  {topDistributorOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
               <select
                 value={selectedCompanies[0] ?? ""}
                 onChange={(event) => setSelectedCompanies([event.target.value])}
@@ -448,7 +487,11 @@ export function AdminsBoard({
               <button
                 type="button"
                 onClick={handleCreateAdmin}
-                disabled={isCreating}
+                disabled={
+                  isCreating ||
+                  (accountType === "ADMIN" &&
+                    (!topDistributorOptions.length || !selectedTopDistributorId))
+                }
                 className="rounded bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 {isCreating ? "생성 중" : "생성"}

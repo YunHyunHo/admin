@@ -26,6 +26,7 @@ type CreateAdminPayload = {
   role?: AdminRole;
   managedCompanies?: string[];
   parentAdminId?: string;
+  parentDistributorName?: string;
 };
 
 type PatchAdminPayload = {
@@ -101,6 +102,7 @@ export async function POST(request: Request) {
     const nickname = payload.nickname?.trim() ?? "";
     const role = payload.role;
     const parentAdminId = payload.parentAdminId?.trim() ?? "";
+    const parentDistributorName = payload.parentDistributorName?.trim() ?? "";
     const managedCompanyOptions = await getManagedCompanyOptions();
     const managedCompanies =
       payload.managedCompanies?.filter((company) =>
@@ -182,6 +184,7 @@ export async function POST(request: Request) {
         createdBy: user.loginId,
         createdById: user.id,
         parentAdminId: parentAdminId || undefined,
+        parentDistributorName: parentDistributorName || undefined,
       }),
       ...issuedAccounts,
     ];
