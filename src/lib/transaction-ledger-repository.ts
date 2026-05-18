@@ -10,7 +10,7 @@ type TransactionLedgerDbRow = {
   id: string;
   request_type: "CHARGE" | "EXCHANGE";
   user_uid: string;
-  master_name: string | null;
+  top_distributor_name: string | null;
   distributor_name: string | null;
   domain_name: string | null;
   bank_name: string | null;
@@ -53,7 +53,7 @@ function toLedgerRow(row: TransactionLedgerDbRow): LedgerRow {
     transactionType: row.request_type === "CHARGE" ? "충전" : "환전",
     branch: distributorName,
     userId: row.request_type === "EXCHANGE" ? "업체 환전" : row.user_uid,
-    topDistributor: row.master_name ?? "마스터 관리자",
+    topDistributor: row.top_distributor_name ?? distributorName,
     distributor: distributorName,
     domain: row.domain_name ?? "-",
     companyName: row.domain_name ?? distributorName,
@@ -90,7 +90,7 @@ export async function getTransactionLedgerRows(
           cr.id::text,
           'CHARGE'::text as request_type,
           cr.user_uid,
-          owner_master.name as master_name,
+          coalesce(parent_dist.name, dist.name) as top_distributor_name,
           dist.name as distributor_name,
           dom.domain_name,
           cr.bank_name,
@@ -122,9 +122,9 @@ export async function getTransactionLedgerRows(
         from charge_requests cr
         left join domains dom on dom.id = cr.domain_id
         left join distributors dist on dist.id = cr.distributor_id
+        left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
         left join commission_records co on co.charge_request_id = cr.id
         left join admins dist_admin on dist_admin.id = dist.admin_id
-        left join admins owner_master on owner_master.id = dist_admin.created_by
         where 1 = 1
           ${scopedSql}
 
@@ -134,7 +134,7 @@ export async function getTransactionLedgerRows(
           er.id::text,
           'EXCHANGE'::text as request_type,
           er.user_uid,
-          owner_master.name as master_name,
+          coalesce(parent_dist.name, dist.name) as top_distributor_name,
           dist.name as distributor_name,
           dom.domain_name,
           er.bank_name,
@@ -149,8 +149,8 @@ export async function getTransactionLedgerRows(
         from exchange_requests er
         join domains dom on dom.id = er.domain_id
         left join distributors dist on dist.id = er.distributor_id
+        left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
         left join admins dist_admin on dist_admin.id = dist.admin_id
-        left join admins owner_master on owner_master.id = dist_admin.created_by
         where 1 = 1
           ${scopedSql}
       ) ledger

@@ -46,10 +46,6 @@ export default async function DashboardPage() {
     redirect("/");
   }
 
-  if (user.role === "MASTER") {
-    redirect("/dashboard/org/top-distributors");
-  }
-
   const [summary, recentTransactions, partnerSummaries] = await Promise.all([
     getDashboardSummaryForUser(user),
     getTransactionLedgerRows([], user),

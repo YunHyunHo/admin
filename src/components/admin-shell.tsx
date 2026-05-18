@@ -8,7 +8,6 @@ import { ThemeToggle } from "@/components/theme-toggle";
 const sideMenuGroups = [
   {
     title: "대시보드",
-    distributorOnly: true,
     items: [
       {
         title: "대시보드",
@@ -141,10 +140,6 @@ export function AdminShell({
         : "총판";
   const visibleMenuGroups = sideMenuGroups
     .filter((group) => {
-      if (user.role === "MASTER" && group.distributorOnly) {
-        return false;
-      }
-
       return user.role === "MASTER" || !group.masterOnly;
     })
     .map((group) => ({
