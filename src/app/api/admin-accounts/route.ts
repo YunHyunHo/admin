@@ -31,7 +31,7 @@ type CreateAdminPayload = {
 
 type PatchAdminPayload = {
   id?: string;
-  action?: "toggle-status" | "delete" | "set-companies";
+  action?: "toggle-status" | "delete" | "hard-delete" | "set-companies";
   managedCompanies?: string[];
 };
 
@@ -290,6 +290,8 @@ export async function PATCH(request: Request) {
       message:
         payload.action === "delete"
           ? `${targetAccount.loginId} 계정이 삭제되었습니다.`
+          : payload.action === "hard-delete"
+            ? `${targetAccount.loginId} 계정이 완전 삭제되었습니다.`
           : payload.action === "toggle-status"
             ? targetAccount.status === "ACTIVE"
               ? `${targetAccount.loginId} 계정을 사용중지했습니다.`
@@ -304,6 +306,11 @@ export async function PATCH(request: Request) {
   if (payload.action === "delete") {
     nextAccounts = issuedAccounts.filter((account) => account.id !== payload.id);
     message = `${targetAccount.loginId} 계정이 삭제되었습니다.`;
+  }
+
+  if (payload.action === "hard-delete") {
+    nextAccounts = issuedAccounts.filter((account) => account.id !== payload.id);
+    message = `${targetAccount.loginId} 계정이 완전 삭제되었습니다.`;
   }
 
   if (payload.action === "toggle-status") {

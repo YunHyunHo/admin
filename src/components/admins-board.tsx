@@ -262,6 +262,35 @@ export function AdminsBoard({
     }
   }
 
+  async function handleHardDeleteAdmin(admin: AdminRow) {
+    if (!canManageAdmins) {
+      setMessage("마스터 계정만 하부계정을 완전 삭제할 수 있습니다.");
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `${admin.loginId} 계정을 완전 삭제할까요?\n연결된 업체/총판 데이터와 기록이 삭제되며 복구할 수 없습니다.`,
+      )
+    ) {
+      return;
+    }
+
+    setProcessingAdminId(admin.id);
+
+    try {
+      const data = await requestAdminAccount("PATCH", {
+        id: admin.id,
+        action: "hard-delete",
+      });
+      setMessage(data.message ?? `${admin.loginId} 계정이 완전 삭제되었습니다.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "완전 삭제에 실패했습니다.");
+    } finally {
+      setProcessingAdminId(null);
+    }
+  }
+
   return (
     <section className="relative rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,_rgba(18,18,18,0.95)_0%,_rgba(14,14,16,0.98)_100%)] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.34)] sm:p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -385,6 +414,18 @@ export function AdminsBoard({
                       className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 transition hover:bg-white/80 disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/34"
                     >
                       {processingAdminId === admin.id ? "처리중" : "삭제"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleHardDeleteAdmin(admin)}
+                      disabled={
+                        admin.role === "MASTER" ||
+                        !canManageAdmins ||
+                        processingAdminId === admin.id
+                      }
+                      className="ml-2 rounded-lg bg-rose-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-rose-600 disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/34"
+                    >
+                      {processingAdminId === admin.id ? "처리중" : "완전 삭제"}
                     </button>
                   </td>
                 </tr>

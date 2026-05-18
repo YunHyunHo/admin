@@ -170,6 +170,30 @@ export function TopDistributorsBoard({
     }
   }
 
+  async function handleHardDelete(row: TopDistributorRow) {
+    if (
+      !window.confirm(
+        `${row.loginId} 상위총판 계정을 완전 삭제할까요?\n연결된 계정 데이터가 함께 삭제될 수 있으며 복구할 수 없습니다.`,
+      )
+    ) {
+      return;
+    }
+
+    setProcessingId(row.id);
+
+    try {
+      const data = await requestAccount("PATCH", {
+        id: row.id,
+        action: "hard-delete",
+      });
+      setMessage(data.message ?? `${row.loginId} 계정이 완전 삭제되었습니다.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "완전 삭제에 실패했습니다.");
+    } finally {
+      setProcessingId(null);
+    }
+  }
+
   return (
     <section className="rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
       <div className="flex flex-col gap-4 border-b border-white/8 px-5 py-6 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
@@ -290,6 +314,14 @@ export function TopDistributorsBoard({
                       className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 transition hover:bg-white/80 disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/34"
                     >
                       {processingId === row.id ? "처리중" : "삭제"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleHardDelete(row)}
+                      disabled={processingId === row.id}
+                      className="ml-2 rounded-lg bg-rose-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-rose-600 disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/34"
+                    >
+                      {processingId === row.id ? "처리중" : "완전 삭제"}
                     </button>
                   </td>
                 </tr>

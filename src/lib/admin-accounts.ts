@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
-import { hasDatabaseUrl, query } from "@/lib/db";
+import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
 import { formatKoreanDateTime, getKoreanNowStamp } from "@/lib/korean-time";
 import { hashPassword } from "@/lib/password";
 import type { SessionUser } from "@/lib/auth";
@@ -567,7 +567,7 @@ export async function createPersistedAdminAccount(input: {
 
 export async function updatePersistedAdminAccount(input: {
   id: string;
-  action: "toggle-status" | "delete" | "set-companies";
+  action: "toggle-status" | "delete" | "hard-delete" | "set-companies";
   managedCompanies?: string[];
 }) {
   if (!hasDatabaseUrl()) {
@@ -613,6 +613,142 @@ export async function updatePersistedAdminAccount(input: {
       `,
       [input.id],
     );
+  }
+
+  if (input.action === "hard-delete") {
+    await withTransaction(async (client) => {
+      const distributorRows = await client.query<{ id: string }>(
+        `
+          select id::text
+          from distributors
+          where admin_id = $1::uuid
+        `,
+        [input.id],
+      );
+      const distributorIds = distributorRows.rows.map((row) => row.id);
+
+      const domainRows = distributorIds.length
+        ? await client.query<{ id: string }>(
+            `
+              select id::text
+              from domains
+              where distributor_id = any($1::uuid[])
+            `,
+            [distributorIds],
+          )
+        : { rows: [] as { id: string }[] };
+      const domainIds = domainRows.rows.map((row) => row.id);
+
+      const chargeRows =
+        distributorIds.length || domainIds.length
+          ? await client.query<{ id: string }>(
+              `
+                select id::text
+                from charge_requests
+                where
+                  (${distributorIds.length ? "distributor_id = any($1::uuid[])" : "false"})
+                  or (${domainIds.length ? "domain_id = any($2::uuid[])" : "false"})
+              `,
+              [distributorIds, domainIds],
+            )
+          : { rows: [] as { id: string }[] };
+      const chargeIds = chargeRows.rows.map((row) => row.id);
+
+      if (distributorIds.length) {
+        await client.query(
+          `
+            update distributors
+            set parent_distributor_id = null, updated_at = now()
+            where parent_distributor_id = any($1::uuid[])
+          `,
+          [distributorIds],
+        );
+      }
+
+      await client.query(`delete from admin_audit_logs where admin_id = $1::uuid`, [input.id]);
+      await client.query(
+        `delete from admin_domain_mappings where admin_id = $1::uuid`,
+        [input.id],
+      );
+      await client.query(
+        `delete from admin_company_mappings where admin_id = $1::uuid`,
+        [input.id],
+      );
+
+      if (chargeIds.length || distributorIds.length || domainIds.length) {
+        await client.query(
+          `
+            delete from commission_records
+            where
+              (${chargeIds.length ? "charge_request_id = any($1::uuid[])" : "false"})
+              or (${distributorIds.length ? "distributor_id = any($2::uuid[])" : "false"})
+              or (${domainIds.length ? "domain_id = any($3::uuid[])" : "false"})
+          `,
+          [chargeIds, distributorIds, domainIds],
+        );
+      }
+
+      if (distributorIds.length) {
+        await client.query(
+          `delete from distributor_balance_transactions where distributor_id = any($1::uuid[])`,
+          [distributorIds],
+        );
+        await client.query(
+          `delete from distributor_withdrawals where distributor_id = any($1::uuid[])`,
+          [distributorIds],
+        );
+        await client.query(
+          `delete from distributor_settlements where distributor_id = any($1::uuid[])`,
+          [distributorIds],
+        );
+        await client.query(`delete from bank_accounts where distributor_id = any($1::uuid[])`, [
+          distributorIds,
+        ]);
+      }
+
+      if (domainIds.length) {
+        await client.query(
+          `delete from domain_settlements where domain_id = any($1::uuid[])`,
+          [domainIds],
+        );
+        await client.query(
+          `delete from exchange_requests where domain_id = any($1::uuid[])`,
+          [domainIds],
+        );
+      }
+
+      if (chargeIds.length) {
+        await client.query(`delete from charge_requests where id = any($1::uuid[])`, [chargeIds]);
+      }
+
+      if (domainIds.length || distributorIds.length || input.id) {
+        await client.query(
+          `
+            delete from fee_rates
+            where created_by = $1::uuid
+              or (${distributorIds.length ? "distributor_id = any($2::uuid[])" : "false"})
+              or (${domainIds.length ? "domain_id = any($3::uuid[])" : "false"})
+          `,
+          [input.id, distributorIds, domainIds],
+        );
+      }
+
+      if (domainIds.length) {
+        await client.query(`delete from domains where id = any($1::uuid[])`, [domainIds]);
+      }
+
+      if (distributorIds.length) {
+        await client.query(`delete from distributors where id = any($1::uuid[])`, [distributorIds]);
+      }
+
+      await client.query(
+        `
+          delete from admins
+          where id = $1::uuid and role <> 'MASTER'
+        `,
+        [input.id],
+      );
+    });
   }
 
   if (input.action === "toggle-status") {
