@@ -234,6 +234,7 @@ export function DomainExchangesBoard({
   const [page, setPage] = useState(1);
   const [message, setMessage] = useState("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [domainId, setDomainId] = useState(defaultDomainId ?? "");
   const [amount, setAmount] = useState("");
   const [bankName, setBankName] = useState("");
@@ -246,6 +247,10 @@ export function DomainExchangesBoard({
   );
 
   async function createExchange() {
+    if (isSubmitting) {
+      return;
+    }
+
     const numericAmount = Number(amount.replaceAll(",", ""));
 
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
@@ -258,39 +263,45 @@ export function DomainExchangesBoard({
       return;
     }
 
-    const response = await fetch("/api/domain-exchanges", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        domainId,
-        amount: numericAmount,
-        bankName,
-        accountHolder,
-        accountNumber,
-      }),
-    });
-    const data = (await response.json()) as {
-      rows?: DomainExchangeRow[];
-      message?: string;
-    };
+    setIsSubmitting(true);
 
-    if (!response.ok) {
-      setMessage(data.message ?? "환전신청 생성 중 오류가 발생했습니다.");
-      return;
+    try {
+      const response = await fetch("/api/domain-exchanges", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          domainId,
+          amount: numericAmount,
+          bankName,
+          accountHolder,
+          accountNumber,
+        }),
+      });
+      const data = (await response.json()) as {
+        rows?: DomainExchangeRow[];
+        message?: string;
+      };
+
+      if (!response.ok) {
+        setMessage(data.message ?? "환전신청 생성 중 오류가 발생했습니다.");
+        return;
+      }
+
+      if (data.rows) {
+        setRows(data.rows.map(normalizeExchangeRow));
+      }
+
+      setPage(1);
+      setDomainId(defaultDomainId ?? "");
+      setAmount("");
+      setBankName("");
+      setAccountHolder("");
+      setAccountNumber("");
+      setMessage(data.message ?? "환전신청이 생성되었습니다.");
+      setIsCreateModalOpen(false);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    if (data.rows) {
-      setRows(data.rows.map(normalizeExchangeRow));
-    }
-
-    setPage(1);
-    setDomainId(defaultDomainId ?? "");
-    setAmount("");
-    setBankName("");
-    setAccountHolder("");
-    setAccountNumber("");
-    setMessage(data.message ?? "환전신청이 생성되었습니다.");
-    setIsCreateModalOpen(false);
   }
 
   async function persistExchangePatch(id: string, action: "approve" | "reject") {
@@ -600,9 +611,10 @@ export function DomainExchangesBoard({
               <button
                 type="button"
                 onClick={createExchange}
-                className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
+                disabled={isSubmitting}
+                className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
-                신청
+                {isSubmitting ? "신청 중" : "신청"}
               </button>
               <button
                 type="button"

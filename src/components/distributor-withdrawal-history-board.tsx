@@ -238,6 +238,7 @@ export function DistributorWithdrawalHistoryBoard({
   const [page, setPage] = useState(1);
   const [message, setMessage] = useState("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [amount, setAmount] = useState("");
   const [bankName, setBankName] = useState("");
   const [accountHolder, setAccountHolder] = useState("");
@@ -249,6 +250,10 @@ export function DistributorWithdrawalHistoryBoard({
   );
 
   async function createWithdrawal() {
+    if (isSubmitting) {
+      return;
+    }
+
     const numericAmount = Number(amount.replaceAll(",", ""));
 
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
@@ -261,37 +266,43 @@ export function DistributorWithdrawalHistoryBoard({
       return;
     }
 
-    const response = await fetch("/api/distributor-withdrawals", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        amount: numericAmount,
-        bankName,
-        accountHolder,
-        accountNumber,
-      }),
-    });
-    const data = (await response.json()) as {
-      rows?: WithdrawalRow[];
-      message?: string;
-    };
+    setIsSubmitting(true);
 
-    if (!response.ok) {
-      setMessage(data.message ?? "총판 환전 신청 중 오류가 발생했습니다.");
-      return;
+    try {
+      const response = await fetch("/api/distributor-withdrawals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: numericAmount,
+          bankName,
+          accountHolder,
+          accountNumber,
+        }),
+      });
+      const data = (await response.json()) as {
+        rows?: WithdrawalRow[];
+        message?: string;
+      };
+
+      if (!response.ok) {
+        setMessage(data.message ?? "총판 환전 신청 중 오류가 발생했습니다.");
+        return;
+      }
+
+      if (data.rows) {
+        setRows(data.rows);
+      }
+
+      setPage(1);
+      setAmount("");
+      setBankName("");
+      setAccountHolder("");
+      setAccountNumber("");
+      setMessage(data.message ?? "총판 환전 신청이 생성되었습니다.");
+      setIsCreateModalOpen(false);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    if (data.rows) {
-      setRows(data.rows);
-    }
-
-    setPage(1);
-    setAmount("");
-    setBankName("");
-    setAccountHolder("");
-    setAccountNumber("");
-    setMessage(data.message ?? "총판 환전 신청이 생성되었습니다.");
-    setIsCreateModalOpen(false);
   }
 
   async function processWithdrawal(id: string, action: "approve" | "reject") {
@@ -546,9 +557,10 @@ export function DistributorWithdrawalHistoryBoard({
               <button
                 type="button"
                 onClick={() => void createWithdrawal()}
-                className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
+                disabled={isSubmitting}
+                className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
-                신청
+                {isSubmitting ? "신청 중" : "신청"}
               </button>
               <button
                 type="button"

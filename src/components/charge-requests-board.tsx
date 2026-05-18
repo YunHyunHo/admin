@@ -139,6 +139,7 @@ export function ChargeRequestsBoard({
   const [createAmount, setCreateAmount] = useState("");
   const [createBankName, setCreateBankName] = useState("");
   const [createAccountNumber, setCreateAccountNumber] = useState("");
+  const [isCreatingRequest, setIsCreatingRequest] = useState(false);
   const [message, setMessage] = useState(
     isDatabaseBacked
       ? "Neon DB와 연결된 충전신청 데이터를 표시합니다."
@@ -294,6 +295,10 @@ export function ChargeRequestsBoard({
   }
 
   async function createChargeRequest() {
+    if (isCreatingRequest) {
+      return;
+    }
+
     const amount = Number(createAmount.replaceAll(",", ""));
     const depositorName = createDepositorName.trim();
     const domainId = createDomainId.trim();
@@ -306,6 +311,7 @@ export function ChargeRequestsBoard({
     }
 
     setIsLoading(true);
+    setIsCreatingRequest(true);
     setMessage("테스트 충전신청을 생성하는 중입니다.");
 
     try {
@@ -331,6 +337,7 @@ export function ChargeRequestsBoard({
       setMessage(error instanceof Error ? error.message : "충전신청 생성에 실패했습니다.");
     } finally {
       setIsLoading(false);
+      setIsCreatingRequest(false);
     }
   }
 
@@ -772,10 +779,10 @@ export function ChargeRequestsBoard({
               <button
                 type="button"
                 onClick={() => void createChargeRequest()}
-                disabled={isLoading || !createDepositorName || !createAmount}
+                disabled={isCreatingRequest}
                 className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
-                생성
+                {isCreatingRequest ? "생성 중" : "생성"}
               </button>
               <button
                 type="button"
