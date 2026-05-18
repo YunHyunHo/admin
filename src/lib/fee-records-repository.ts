@@ -76,9 +76,9 @@ export async function getFeeRecordsForUser(
     `
       select
         cr.id::text,
-        owner_master.name as top_agent,
-        dist.name as sub_agent,
-        coalesce(dist.name, c.company_name) as acquisition_branch,
+        coalesce(parent_dist.name, dist.name) as top_agent,
+        case when parent_dist.id is null then '-' else dist.name end as sub_agent,
+        coalesce(case when parent_dist.id is null then dist.name else dist.name end, c.company_name) as acquisition_branch,
         coalesce(d.domain_name, '-') as domain,
         cr.user_uid as uid,
         co.charge_amount::text as amount,
@@ -92,8 +92,8 @@ export async function getFeeRecordsForUser(
       join companies c on c.id = co.company_id
       left join domains d on d.id = co.domain_id
       left join distributors dist on dist.id = co.distributor_id
+      left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
       left join admins dist_admin on dist_admin.id = dist.admin_id
-      left join admins owner_master on owner_master.id = dist_admin.created_by
       where
         co.status in ('APPROVED', 'COMPLETED')
         and co.created_at >= $1::date

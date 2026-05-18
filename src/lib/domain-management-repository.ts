@@ -16,7 +16,7 @@ type DomainDbRow = {
   company_name: string;
   distributor_name: string | null;
   distributor_login_id: string | null;
-  master_name: string | null;
+  top_distributor_name: string | null;
   current_balance: string | null;
   bank_name: string | null;
   account_number: string | null;
@@ -35,13 +35,13 @@ function formatStamp(value: Date | string | null) {
 }
 
 function toDomainRow(row: DomainDbRow): DomainRow {
-  const distributorName = row.distributor_name ?? "하부계정 없음";
-  const topDistributor = row.master_name ?? "마스터 관리자";
+  const topDistributor = row.top_distributor_name ?? "-";
+  const distributorName = row.distributor_name ?? "-";
 
   return {
     id: row.id,
     distributorId: row.distributor_id ?? undefined,
-    headquarters: distributorName,
+    headquarters: distributorName === "-" ? topDistributor : distributorName,
     topDistributor,
     distributor: distributorName,
     loginId: row.distributor_login_id ?? "-",
@@ -76,9 +76,9 @@ export async function getDomainManagementRows(
         dom.distributor_id::text,
         dom.domain_name,
         c.company_name,
-        dist.name as distributor_name,
+        case when parent_dist.id is null then '-' else dist.name end as distributor_name,
         dist_admin.login_id as distributor_login_id,
-        owner_master.name as master_name,
+        coalesce(parent_dist.name, dist.name) as top_distributor_name,
         dist.current_balance::text as current_balance,
         ba.bank_name,
         ba.account_number,
@@ -88,8 +88,8 @@ export async function getDomainManagementRows(
       from domains dom
       join companies c on c.id = dom.company_id
       left join distributors dist on dist.id = dom.distributor_id
+      left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
       left join admins dist_admin on dist_admin.id = dist.admin_id
-      left join admins owner_master on owner_master.id = dist_admin.created_by
       left join lateral (
         select bank_name, account_number, account_holder
         from bank_accounts ba

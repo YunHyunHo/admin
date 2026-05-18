@@ -13,7 +13,7 @@ type ExchangeRequestDbRow = {
   id: string;
   distributor_name: string | null;
   distributor_login_id: string | null;
-  master_name: string | null;
+  top_distributor_name: string | null;
   domain_name: string | null;
   bank_name: string | null;
   account_holder: string | null;
@@ -48,12 +48,13 @@ function toStatus(status: ExchangeRequestDbRow["status"]): DomainExchangeRow["st
 }
 
 function toExchangeRow(row: ExchangeRequestDbRow): DomainExchangeRow {
-  const distributorName = row.distributor_name ?? "하부계정 없음";
+  const topDistributorName = row.top_distributor_name ?? "-";
+  const distributorName = row.distributor_name ?? "-";
 
   return {
     id: row.id,
-    branch: distributorName,
-    topDistributor: row.master_name ?? "마스터 관리자",
+    branch: distributorName === "-" ? topDistributorName : distributorName,
+    topDistributor: topDistributorName,
     distributor: distributorName,
     loginId: row.distributor_login_id ?? "-",
     domain: row.domain_name ?? "-",
@@ -82,9 +83,9 @@ export async function getDomainExchangeRows(
     `
       select
         er.id::text,
-        dist.name as distributor_name,
+        case when parent_dist.id is null then '-' else dist.name end as distributor_name,
         dist_admin.login_id as distributor_login_id,
-        owner_master.name as master_name,
+        coalesce(parent_dist.name, dist.name) as top_distributor_name,
         dom.domain_name,
         er.bank_name,
         er.account_holder,
@@ -96,8 +97,8 @@ export async function getDomainExchangeRows(
       from exchange_requests er
       left join domains dom on dom.id = er.domain_id
       left join distributors dist on dist.id = er.distributor_id
+      left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
       left join admins dist_admin on dist_admin.id = dist.admin_id
-      left join admins owner_master on owner_master.id = dist_admin.created_by
       where 1 = 1
         ${scope.sql}
       order by er.requested_at desc

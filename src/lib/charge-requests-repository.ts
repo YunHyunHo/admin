@@ -34,7 +34,7 @@ type ChargeRequestRow = {
   processed_at: Date | string | null;
   company_name: string;
   domain_name: string | null;
-  master_name: string | null;
+  top_distributor_name: string | null;
   distributor_name: string | null;
 };
 
@@ -73,12 +73,16 @@ function formatStamp(value: Date | string | null) {
 }
 
 function toPendingRequest(row: ChargeRequestRow): PendingRequest {
+  const topDistributorName = row.top_distributor_name ?? "-";
+  const distributorName = row.distributor_name ?? "-";
+  const branchName = distributorName === "-" ? topDistributorName : distributorName;
+
   return {
     id: row.id,
-    branch: row.distributor_name ?? "-",
+    branch: branchName,
     userId: row.user_uid,
-    topAgent: row.master_name ?? "마스터 관리자",
-    subAgent: row.distributor_name ?? "-",
+    topAgent: topDistributorName,
+    subAgent: distributorName,
     domain: row.domain_name ?? "-",
     bankName: row.bank_name ?? "-",
     accountNumber: row.account_number ?? "-",
@@ -130,14 +134,14 @@ async function getDbChargeRequests(user: SessionUser) {
         cr.processed_at,
         c.company_name,
         d.domain_name,
-        owner_master.name as master_name,
-        dist.name as distributor_name
+        coalesce(parent_dist.name, dist.name) as top_distributor_name,
+        case when parent_dist.id is null then '-' else dist.name end as distributor_name
       from charge_requests cr
       join companies c on c.id = cr.company_id
       left join domains d on d.id = cr.domain_id
       left join distributors dist on dist.id = cr.distributor_id
+      left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
       left join admins dist_admin on dist_admin.id = dist.admin_id
-      left join admins owner_master on owner_master.id = dist_admin.created_by
       where 1 = 1
         ${scope.sql}
       order by cr.requested_at desc, cr.created_at desc
@@ -479,13 +483,17 @@ export async function processDbChargeRequest(input: {
           (select company_name from companies where id = charge_requests.company_id) as company_name,
           (select domain_name from domains where id = charge_requests.domain_id) as domain_name,
           (
-            select owner_master.name
+            select coalesce(parent_dist.name, dist.name)
             from distributors dist
-            join admins dist_admin on dist_admin.id = dist.admin_id
-            left join admins owner_master on owner_master.id = dist_admin.created_by
+            left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
             where dist.id = charge_requests.distributor_id
-          ) as master_name,
-          (select name from distributors where id = charge_requests.distributor_id) as distributor_name
+          ) as top_distributor_name,
+          (
+            select case when parent_dist.id is null then '-' else dist.name end
+            from distributors dist
+            left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
+            where dist.id = charge_requests.distributor_id
+          ) as distributor_name
       `,
       [input.id, nextStatus, input.processedBy],
     );

@@ -22,7 +22,7 @@ export type DistributorWithdrawalRow = {
 
 type WithdrawalDbRow = {
   id: string;
-  master_name: string | null;
+  top_distributor_name: string | null;
   distributor_name: string;
   current_balance: string;
   bank_name: string;
@@ -36,7 +36,7 @@ type WithdrawalDbRow = {
 
 type BalanceDbRow = {
   id: string;
-  master_name: string | null;
+  top_distributor_name: string | null;
   name: string;
   current_balance: string;
 };
@@ -76,12 +76,15 @@ function toStatus(status: WithdrawalDbRow["status"]): DistributorWithdrawalRow["
 }
 
 function toWithdrawalRow(row: WithdrawalDbRow): DistributorWithdrawalRow {
+  const topDistributorName = row.top_distributor_name ?? "-";
+  const distributorName = row.distributor_name === "-" ? topDistributorName : row.distributor_name;
+
   return {
     id: row.id,
-    topDistributor: row.master_name ?? "마스터 관리자",
-    withdrawalBranch: row.distributor_name,
+    topDistributor: topDistributorName,
+    withdrawalBranch: distributorName,
     currentBalance: Number(row.current_balance),
-    requester: row.distributor_name,
+    requester: distributorName,
     bankName: row.bank_name,
     accountHolder: row.account_holder,
     accountNumber: row.account_number,
@@ -107,8 +110,8 @@ export async function getDistributorWithdrawalRows(
     `
       select
         dw.id::text,
-        master.name as master_name,
-        d.name as distributor_name,
+        coalesce(parent_dist.name, d.name) as top_distributor_name,
+        case when parent_dist.id is null then '-' else d.name end as distributor_name,
         d.current_balance::text,
         dw.bank_name,
         dw.account_holder,
@@ -119,8 +122,8 @@ export async function getDistributorWithdrawalRows(
         dw.status::text as status
       from distributor_withdrawals dw
       join distributors d on d.id = dw.distributor_id
+      left join distributors parent_dist on parent_dist.id = d.parent_distributor_id
       left join admins dist_admin on dist_admin.id = d.admin_id
-      left join admins master on master.id = dist_admin.created_by
       where 1 = 1
         ${scope.sql}
       order by dw.requested_at desc
@@ -137,12 +140,12 @@ export async function getDistributorWithdrawalRows(
     `
       select
         d.id::text,
-        master.name as master_name,
+        coalesce(parent_dist.name, d.name) as top_distributor_name,
         d.name,
         d.current_balance::text
       from distributors d
+      left join distributors parent_dist on parent_dist.id = d.parent_distributor_id
       left join admins dist_admin on dist_admin.id = d.admin_id
-      left join admins master on master.id = dist_admin.created_by
       where d.status = 'ACTIVE'
         ${scope.sql}
       order by d.created_at desc
@@ -153,7 +156,7 @@ export async function getDistributorWithdrawalRows(
 
   return balances.rows.map((row) => ({
     id: row.id,
-    topDistributor: row.master_name ?? "마스터 관리자",
+    topDistributor: row.top_distributor_name ?? "-",
     withdrawalBranch: row.name,
     currentBalance: Number(row.current_balance),
     requester: row.name,
