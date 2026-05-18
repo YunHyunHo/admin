@@ -19,9 +19,11 @@ export type DomainRow = {
   loginId: string;
   companyName: string;
   url: string;
+  balance: number;
   bankName: string;
   accountNumber: string;
   accountHolder: string;
+  accountLinked: boolean;
   depositEnabled: boolean;
   createdAt: string;
   users: DomainUserRow[];

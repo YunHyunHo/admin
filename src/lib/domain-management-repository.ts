@@ -17,6 +17,7 @@ type DomainDbRow = {
   distributor_name: string | null;
   distributor_login_id: string | null;
   master_name: string | null;
+  current_balance: string | null;
   bank_name: string | null;
   account_number: string | null;
   account_holder: string | null;
@@ -46,9 +47,11 @@ function toDomainRow(row: DomainDbRow): DomainRow {
     loginId: row.distributor_login_id ?? "-",
     companyName: row.company_name,
     url: row.domain_name,
+    balance: Number(row.current_balance ?? 0),
     bankName: row.bank_name ?? "-",
     accountNumber: row.account_number ?? "-",
     accountHolder: row.account_holder ?? "-",
+    accountLinked: Boolean(row.bank_name || row.account_number || row.account_holder),
     depositEnabled: row.status === "ACTIVE",
     createdAt: formatStamp(row.created_at),
     users: [],
@@ -76,6 +79,7 @@ export async function getDomainManagementRows(
         dist.name as distributor_name,
         dist_admin.login_id as distributor_login_id,
         owner_master.name as master_name,
+        dist.current_balance::text as current_balance,
         ba.bank_name,
         ba.account_number,
         ba.account_holder,

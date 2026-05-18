@@ -16,9 +16,11 @@ export const fallbackDomainRows: DomainRow[] = [
     loginId: "onepay_admin",
     companyName: "원페이",
     url: "onepay.laylow.me",
+    balance: 0,
     bankName: "국민은행",
     accountNumber: "100-0001-0001",
     accountHolder: "원페이",
+    accountLinked: true,
     depositEnabled: true,
     createdAt: "05-02 10:00:00",
     users: [
@@ -49,6 +51,10 @@ export const fallbackDomainRows: DomainRow[] = [
 ];
 
 const rowsPerPage = 10;
+
+function formatKoreanWon(value: number) {
+  return `${value.toLocaleString("ko-KR")} 원`;
+}
 
 type DomainManagementBoardProps = {
   initialRows?: DomainRow[];
@@ -249,13 +255,13 @@ export function DomainManagementBoard({
       <div className="flex flex-col gap-3 border-b border-white/8 px-5 py-6 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-xs uppercase tracking-[0.26em] text-cyan-300/55">
-            Domain Workspace
+            Balance Management
           </p>
           <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">
-            도메인 리스트
+            보유금 관리
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-white/52">
-            도메인과 도메인 유저를 한 화면에서 관리하도록 합쳤습니다. 각 행의 유저 보기 버튼으로 연결 유저를 팝업에서 확인할 수 있습니다.
+            도메인별 보유금과 계좌연동 상태를 함께 관리합니다. 각 행의 유저 보기 버튼으로 연결 유저를 팝업에서 확인할 수 있습니다.
           </p>
         </div>
         <button
@@ -287,7 +293,9 @@ export function DomainManagementBoard({
                   "로그인ID",
                   "업체명",
                   "URL",
-                  "출금은행 정보",
+                  "보유금",
+                  "계좌연동",
+                  "연동 계좌",
                   "충전거래 허용",
                   "유저",
                   "생성일",
@@ -319,6 +327,20 @@ export function DomainManagementBoard({
                     {row.companyName}
                   </td>
                   <td className="px-4 py-5 text-center">{row.url}</td>
+                  <td className="px-4 py-5 text-right font-semibold text-white">
+                    {formatKoreanWon(row.balance)}
+                  </td>
+                  <td className="px-4 py-5 text-center">
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                        row.accountLinked
+                          ? "bg-emerald-400/12 text-emerald-200"
+                          : "bg-white/8 text-white/48"
+                      }`}
+                    >
+                      {row.accountLinked ? "연동완료" : "미연동"}
+                    </span>
+                  </td>
                   <td className="px-4 py-5">
                     <div className="rounded-2xl border border-white/8 bg-white/[0.035] px-3 py-3 text-xs leading-5 text-white/68">
                       <p>{row.bankName}</p>
