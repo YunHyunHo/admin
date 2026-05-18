@@ -199,6 +199,9 @@ type DomainExchangesBoardProps = {
   title?: string;
   description?: string;
   domainOptions?: DomainExchangeOption[];
+  defaultDomainId?: string | null;
+  currentBalance?: number;
+  hasConnectedDomain?: boolean;
   canCreateExchanges?: boolean;
   canProcessExchanges?: boolean;
 };
@@ -221,6 +224,9 @@ export function DomainExchangesBoard({
   title = "도메인 환전",
   description = "하부계정은 환전을 신청하고, 마스터는 신청 내역을 승인 또는 거절합니다.",
   domainOptions = [],
+  defaultDomainId = null,
+  currentBalance = 0,
+  hasConnectedDomain = false,
   canCreateExchanges = false,
   canProcessExchanges = true,
 }: DomainExchangesBoardProps) {
@@ -228,7 +234,7 @@ export function DomainExchangesBoard({
   const [page, setPage] = useState(1);
   const [message, setMessage] = useState("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [domainId, setDomainId] = useState("");
+  const [domainId, setDomainId] = useState(defaultDomainId ?? "");
   const [amount, setAmount] = useState("");
   const [bankName, setBankName] = useState("");
   const [accountHolder, setAccountHolder] = useState("");
@@ -247,8 +253,8 @@ export function DomainExchangesBoard({
       return;
     }
 
-    if (!domainId) {
-      setMessage("도메인을 선택해주세요.");
+    if (numericAmount > currentBalance) {
+      setMessage("보유 수수료보다 큰 금액은 신청할 수 없습니다.");
       return;
     }
 
@@ -278,7 +284,7 @@ export function DomainExchangesBoard({
     }
 
     setPage(1);
-    setDomainId("");
+    setDomainId(defaultDomainId ?? "");
     setAmount("");
     setBankName("");
     setAccountHolder("");
@@ -361,7 +367,10 @@ export function DomainExchangesBoard({
           <div className="mb-5 flex justify-end">
             <button
               type="button"
-              onClick={() => setIsCreateModalOpen(true)}
+              onClick={() => {
+                setDomainId(defaultDomainId ?? "");
+                setIsCreateModalOpen(true);
+              }}
               className="rounded-2xl bg-fuchsia-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-fuchsia-400"
             >
               환전신청
@@ -521,6 +530,14 @@ export function DomainExchangesBoard({
             </h3>
 
             <div className="mt-7 space-y-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                <p>보유 수수료: <strong>{currentBalance.toLocaleString("ko-KR")} 원</strong></p>
+                <p className="mt-1">
+                  {hasConnectedDomain
+                    ? "연결된 도메인이 있으면 자동으로 적용됩니다. 필요하면 다른 도메인으로 바꿀 수 있어요."
+                    : "연결된 도메인이 없어도 환전신청은 가능합니다."}
+                </p>
+              </div>
               <label className="block">
                 <span className="sr-only">도메인 선택</span>
                 <select
@@ -528,7 +545,7 @@ export function DomainExchangesBoard({
                   onChange={(event) => setDomainId(event.target.value)}
                   className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-slate-500"
                 >
-                  <option value="">도메인 선택</option>
+                  <option value="">{hasConnectedDomain ? "자동 연결 도메인 사용" : "도메인 미연결 상태로 신청"}</option>
                   {domainOptions.map((domain) => (
                     <option key={domain.id} value={domain.id}>
                       {domain.name}

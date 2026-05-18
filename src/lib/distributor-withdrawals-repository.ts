@@ -171,7 +171,6 @@ export async function getDistributorWithdrawalRows(
 }
 
 export async function createDistributorWithdrawal(input: CreateDistributorWithdrawalInput) {
-  const scope = getScopedDistributorCondition(input.user, "dist", "dist_admin");
   const distributor = await query<DistributorScopeRow>(
     `
       select
@@ -179,13 +178,12 @@ export async function createDistributorWithdrawal(input: CreateDistributorWithdr
         dist.id::text as distributor_id,
         dist.current_balance::text
       from distributors dist
-      left join admins dist_admin on dist_admin.id = dist.admin_id
       where dist.status = 'ACTIVE'
-        ${scope.sql}
+        and dist.admin_id = $1::uuid
       order by dist.created_at desc
       limit 1
     `,
-    scope.values,
+    [input.user.id],
   );
   const distributorScope = distributor.rows[0];
 

@@ -7,6 +7,7 @@ import {
 } from "@/components/domain-exchanges-board";
 import { getSessionUser } from "@/lib/auth";
 import {
+  getDomainExchangeCreateContext,
   getDomainExchangeOptions,
   getDomainExchangeRows,
 } from "@/lib/domain-exchanges-repository";
@@ -19,9 +20,18 @@ export default async function DomainExchangesPage() {
     redirect("/");
   }
 
-  const exchangeRows = await getDomainExchangeRows(fallbackDomainExchanges, user);
-  const domainOptions = await getDomainExchangeOptions(user);
   const isMaster = canManageMasterResources(user);
+  const [exchangeRows, domainOptions, createContext] = await Promise.all([
+    getDomainExchangeRows(fallbackDomainExchanges, user),
+    getDomainExchangeOptions(user),
+    isMaster
+      ? Promise.resolve({
+          defaultDomainId: null,
+          currentBalance: 0,
+          hasConnectedDomain: false,
+        })
+      : getDomainExchangeCreateContext(user),
+  ]);
 
   return (
     <AdminShell
@@ -33,6 +43,9 @@ export default async function DomainExchangesPage() {
       <DomainExchangesBoard
         initialRows={exchangeRows}
         domainOptions={domainOptions}
+        defaultDomainId={createContext.defaultDomainId}
+        currentBalance={createContext.currentBalance}
+        hasConnectedDomain={createContext.hasConnectedDomain}
         canCreateExchanges={!isMaster}
         canProcessExchanges={isMaster}
       />

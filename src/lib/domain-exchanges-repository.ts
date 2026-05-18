@@ -32,7 +32,13 @@ type CreateDomainExchangeInput = {
   accountHolder?: string;
   accountNumber?: string;
   rawPayload?: unknown;
-  domainId: string;
+  domainId?: string | null;
+};
+
+export type DomainExchangeCreateContext = {
+  defaultDomainId: string | null;
+  currentBalance: number;
+  hasConnectedDomain: boolean;
 };
 
 function formatStamp(value: Date | string | null) {
@@ -115,47 +121,133 @@ export async function getDomainExchangeOptions(user: SessionUser) {
     return [] satisfies DomainExchangeOption[];
   }
 
-  const scope = getScopedDistributorCondition(user);
   const result = await query<DomainExchangeOption>(
     `
       select dom.id::text, dom.domain_name as name
       from domains dom
       join distributors dist on dist.id = dom.distributor_id
-      left join admins dist_admin on dist_admin.id = dist.admin_id
       where dom.status <> 'DELETED'
-        ${scope.sql}
+        and dist.admin_id = $1::uuid
       order by dom.domain_name asc
     `,
-    scope.values,
+    [user.id],
   );
 
   return result.rows;
 }
 
-async function findExchangeScope(domainId: string, user: SessionUser) {
-  const scope = getScopedDistributorCondition(user);
-
+export async function getDomainExchangeCreateContext(user: SessionUser) {
   const result = await query<{
+    distributor_id: string;
+    current_balance: string;
+    company_id: string;
+    domain_id: string | null;
+  }>(
+    `
+      select
+        dist.id::text as distributor_id,
+        dist.current_balance::text,
+        dist.company_id::text,
+        (
+          select dom.id::text
+          from domains dom
+          where dom.distributor_id = dist.id
+            and dom.status <> 'DELETED'
+          order by dom.created_at desc
+          limit 1
+        ) as domain_id
+      from distributors dist
+      where dist.admin_id = $1::uuid
+        and dist.status = 'ACTIVE'
+      order by dist.created_at desc
+      limit 1
+    `,
+    [user.id],
+  );
+  const scopeRow = result.rows[0];
+
+  if (!scopeRow) {
+    throw new Error("환전신청을 연결할 계정을 찾을 수 없습니다.");
+  }
+
+  return {
+    defaultDomainId: scopeRow.domain_id,
+    currentBalance: Number(scopeRow.current_balance),
+    hasConnectedDomain: Boolean(scopeRow.domain_id),
+  } satisfies DomainExchangeCreateContext;
+}
+
+async function findExchangeScope(domainId: string | null | undefined, user: SessionUser) {
+  const distributorResult = await query<{
+    distributor_id: string;
+    current_balance: string;
+    company_id: string;
+  }>(
+    `
+      select
+        dist.id::text as distributor_id,
+        dist.current_balance::text,
+        dist.company_id::text
+      from distributors dist
+      where dist.admin_id = $1::uuid
+        and dist.status = 'ACTIVE'
+      order by dist.created_at desc
+      limit 1
+    `,
+    [user.id],
+  );
+  const distributorScope = distributorResult.rows[0];
+
+  if (!distributorScope) {
+    throw new Error("환전신청을 연결할 계정을 찾을 수 없습니다.");
+  }
+
+  if (!domainId) {
+    const ownDomainResult = await query<{
+      domain_id: string | null;
+    }>(
+      `
+        select dom.id::text as domain_id
+        from domains dom
+        where dom.distributor_id = $1::uuid
+          and dom.status <> 'DELETED'
+        order by dom.created_at desc
+        limit 1
+      `,
+      [distributorScope.distributor_id],
+    );
+
+    return {
+      company_id: distributorScope.company_id,
+      domain_id: ownDomainResult.rows[0]?.domain_id ?? null,
+      distributor_id: distributorScope.distributor_id,
+      current_balance: distributorScope.current_balance,
+    };
+  }
+
+  const domainResult = await query<{
     company_id: string;
     domain_id: string | null;
     distributor_id: string | null;
+    current_balance: string;
   }>(
     `
       select
         dom.company_id::text,
         dom.id::text as domain_id,
-        dom.distributor_id::text
+        dom.distributor_id::text,
+        dist.current_balance::text
       from domains dom
       join distributors dist on dist.id = dom.distributor_id
-      left join admins dist_admin on dist_admin.id = dist.admin_id
-      where dom.id = $2::uuid and dom.status <> 'DELETED'
-        ${scope.sql}
+      where dom.id = $1::uuid
+        and dom.status <> 'DELETED'
+        and dist.admin_id = $2::uuid
       order by dom.created_at desc
       limit 1
     `,
-    [...scope.values, domainId],
+    [domainId, user.id],
   );
-  const domainScope = result.rows[0];
+  const domainScope = domainResult.rows[0];
 
   if (!domainScope) {
     throw new Error("환전신청을 연결할 도메인을 찾을 수 없습니다.");
@@ -168,6 +260,11 @@ export async function createDomainExchange(
   input: CreateDomainExchangeInput & { user: SessionUser },
 ) {
   const scope = await findExchangeScope(input.domainId, input.user);
+
+  if (input.amount > Number(scope.current_balance)) {
+    throw new Error("보유 수수료보다 큰 금액은 신청할 수 없습니다.");
+  }
+
   const result = await query<{ id: string }>(
     `
       insert into exchange_requests (

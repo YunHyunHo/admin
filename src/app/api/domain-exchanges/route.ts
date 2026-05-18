@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/auth";
 import {
   approveDomainExchange,
   createDomainExchange,
+  getDomainExchangeCreateContext,
   getDomainExchangeRows,
   rejectDomainExchange,
 } from "@/lib/domain-exchanges-repository";
@@ -42,7 +43,16 @@ export async function GET() {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
 
-  return NextResponse.json({ rows: await getDomainExchangeRows([], user) });
+  return NextResponse.json({
+    rows: await getDomainExchangeRows([], user),
+    createContext: canUseDistributorMenus(user)
+      ? await getDomainExchangeCreateContext(user)
+      : {
+          defaultDomainId: null,
+          currentBalance: 0,
+          hasConnectedDomain: false,
+        },
+  });
 }
 
 export async function POST(request: Request) {
@@ -69,10 +79,9 @@ export async function POST(request: Request) {
   const payload = (await request.json()) as CreateDomainExchangePayload;
   const domainId = payload.domainId?.trim();
   const amount = Number(payload.amount);
-
-  if (!domainId || !isUuid(domainId)) {
+  if (domainId && !isUuid(domainId)) {
     return NextResponse.json(
-      { message: "도메인을 선택해주세요." },
+      { message: "도메인 정보를 확인해주세요." },
       { status: 400 },
     );
   }
@@ -92,7 +101,7 @@ export async function POST(request: Request) {
       bankName: payload.bankName,
       accountHolder: payload.accountHolder,
       accountNumber: payload.accountNumber,
-      domainId,
+      domainId: domainId ?? null,
       rawPayload: payload,
       user,
     });
