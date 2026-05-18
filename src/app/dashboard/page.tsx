@@ -26,70 +26,90 @@ export default async function DashboardPage() {
     getDashboardPartnerSummariesForUser(user),
   ]);
 
-  const topMetrics = [
-    { label: "도메인", value: summary.domainName },
-    { label: "대기 건수", value: `${summary.pendingCount}건` },
-    { label: "승인 건수", value: `${summary.approvedCount}건` },
-    { label: "거절 건수", value: `${summary.rejectedCount}건` },
-    { label: "대기 금액", value: formatKoreanWon(summary.pendingChargeTotal) },
-    { label: "승인 충전", value: formatKoreanWon(summary.approvedChargeTotal) },
-    { label: "보유 수수료", value: formatKoreanWon(summary.feeTotal) },
-    { label: "요율", value: `${summary.feeRate}%` },
+  const domainCount = partnerSummaries.filter((item) => item.type === "DOMAIN").length;
+  const subcontractCount = partnerSummaries.filter(
+    (item) => item.type === "DISTRIBUTOR",
+  ).length;
+  const exchangeTotal = partnerSummaries.reduce(
+    (sum, item) => sum + item.exchangeTotal,
+    0,
+  );
+  const commissionTotal = partnerSummaries.reduce(
+    (sum, item) => sum + item.feeTotal,
+    0,
+  );
+  const balanceTotal = partnerSummaries.reduce(
+    (sum, item) => sum + item.balanceTotal,
+    0,
+  );
+  const summaryColumns = [
+    { label: "총판", value: `${subcontractCount}` },
+    { label: "업체", value: `${domainCount}` },
+    { label: "대기", value: `${summary.pendingCount}` },
+    { label: "승인", value: `${summary.approvedCount}` },
+    { label: "거절", value: `${summary.rejectedCount}` },
+    { label: "충전", value: formatKoreanWon(summary.approvedChargeTotal) },
+    { label: "수수료", value: formatKoreanWon(commissionTotal) },
+    { label: "환전", value: formatKoreanWon(exchangeTotal) },
+    { label: "보유", value: formatKoreanWon(balanceTotal) },
   ];
 
   return (
     <AdminShell user={user} activeItem="dashboard-home" helperText="">
       <div className="space-y-5">
-        <section className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.28)] sm:p-6">
-          <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-cyan-300/55">
-              Dashboard
-            </p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">
-              운영 요약
-            </h2>
+        <section className="overflow-hidden rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]">
+          <div className="border-b border-white/8 px-5 py-5 sm:px-6">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.24em] text-cyan-300/55">
+                  Dashboard
+                </p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">
+                  운영 요약
+                </h2>
+              </div>
+              <div className="flex flex-wrap gap-2 text-sm text-white/60">
+                <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5">
+                  로그인 {user.username}
+                </span>
+                <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5">
+                  기준 업체 {user.companyName}
+                </span>
+                <span className="rounded-full border border-emerald-400/15 bg-emerald-400/10 px-3 py-1.5 text-emerald-100">
+                  상태 정상
+                </span>
+              </div>
+            </div>
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
-            {topMetrics.map((metric) => (
-              <article
-                key={`${metric.label}-${metric.value}`}
-                className="rounded-2xl border border-white/8 bg-white/[0.035] px-5 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
-              >
-                <p className="text-[0.72rem] font-medium uppercase tracking-[0.18em] text-white/38">
-                  {metric.label}
-                </p>
-                <p className="mt-3 text-[1.9rem] font-semibold tracking-[-0.05em] text-white/94">
-                  {metric.value}
-                </p>
-              </article>
-            ))}
+          <div className="overflow-x-auto">
+            <table className="min-w-full border-collapse text-center">
+              <thead className="bg-white/[0.04] text-white">
+                <tr>
+                  {summaryColumns.map((column) => (
+                    <th
+                      key={column.label}
+                      className="border-b border-r border-white/8 px-4 py-4 text-lg font-semibold last:border-r-0"
+                    >
+                      {column.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="text-white/94">
+                  {summaryColumns.map((column) => (
+                    <td
+                      key={`${column.label}-${column.value}`}
+                      className="border-r border-white/8 px-4 py-5 text-2xl font-semibold tracking-[-0.04em] last:border-r-0"
+                    >
+                      {column.value}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
           </div>
-        </section>
-
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <article className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-            <p className="text-sm text-white/44">로그인 계정</p>
-            <p className="mt-3 text-xl font-semibold text-white">
-              {user.username}
-            </p>
-          </article>
-          <article className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-            <p className="text-sm text-white/44">업체</p>
-            <p className="mt-3 text-xl font-semibold text-white">
-              {user.companyName}
-            </p>
-          </article>
-          <article className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-            <p className="text-sm text-white/44">승인 충전</p>
-            <p className="mt-3 text-xl font-semibold text-white">
-              {formatKoreanWon(summary.approvedChargeTotal)}
-            </p>
-          </article>
-          <article className="rounded-2xl border border-white/8 bg-white/[0.03] p-5">
-            <p className="text-sm text-white/44">상태</p>
-            <p className="mt-3 text-xl font-semibold text-emerald-200">정상</p>
-          </article>
         </section>
 
         <section className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.28)] sm:p-6">
