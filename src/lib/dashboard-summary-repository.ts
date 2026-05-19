@@ -128,8 +128,29 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
     return [] satisfies DashboardPartnerSummary[];
   }
 
-  const scope = getScopedDistributorCondition(user);
-  const scopeSql = scope.sql.replaceAll("$1", "$3");
+  const dashboardScope =
+    user.role === "MASTER"
+      ? {
+          sql: "and dist_admin.created_by = $3::uuid",
+          values: [user.id],
+        }
+      : user.role === "TOP_DISTRIBUTOR"
+        ? {
+            sql: `
+              and (
+                dist.admin_id = $3::uuid
+                or dist.parent_distributor_id in (
+                  select parent_dist.id
+                  from distributors parent_dist
+                  where parent_dist.admin_id = $3::uuid
+                    and parent_dist.status = 'ACTIVE'
+                )
+              )
+            `,
+            values: [user.id],
+          }
+        : getScopedDistributorCondition(user);
+  const scopeSql = dashboardScope.sql.replaceAll("$1", "$3");
   const { startDate, endDateExclusive } = getCurrentKoreanMonthRange();
   const result = await query<DashboardPartnerSummaryRow>(
     `
@@ -256,7 +277,7 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
       join exchange_totals on exchange_totals.entity_id = entity.entity_id
       order by entity.entity_name asc
     `,
-    [startDate, endDateExclusive, ...scope.values],
+    [startDate, endDateExclusive, ...dashboardScope.values],
   );
 
   return result.rows.map((row) => ({

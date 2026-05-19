@@ -74,7 +74,7 @@ export default async function DashboardPage() {
               하청 / 업체 현황
             </h2>
             <p className="mt-2 text-sm text-white/45">
-              계정별 충전, 수수료, 환전, 보유 현황을 확인합니다.
+              권한 범위에 맞는 계정별 충전, 수수료, 환전, 보유 현황을 확인합니다.
             </p>
           </div>
           <div className="mt-4 flex flex-wrap gap-2 text-sm text-white/60">
