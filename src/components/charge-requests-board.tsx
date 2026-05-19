@@ -144,7 +144,7 @@ export function ChargeRequestsBoard({
   const [createModalMessage, setCreateModalMessage] = useState("");
   const [message, setMessage] = useState(
     isDatabaseBacked
-      ? "Neon DB와 연결된 충전신청 데이터를 표시합니다."
+      ? "연결된 충전신청 데이터를 표시합니다."
       : "로컬 테스트 데이터로 충전신청을 표시합니다.",
   );
   const [lastSyncedAt, setLastSyncedAt] = useState("");
@@ -413,35 +413,6 @@ export function ChargeRequestsBoard({
   return (
     <div className="space-y-5">
       <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="space-y-5">
-          <section className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,_rgba(18,24,33,0.96)_0%,_rgba(12,16,23,0.96)_100%)] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.28)]">
-            <p className="text-xs uppercase tracking-[0.24em] text-white/36">
-              Menu Path
-            </p>
-            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-white">
-              충전신청
-            </h2>
-            <p className="mt-3 text-sm leading-6 text-white/58">
-              업체별 충전신청을 확인하고 승인 또는 거절 상태로 처리합니다.
-            </p>
-          </section>
-
-          <section className="rounded-[28px] border border-white/8 bg-white/[0.03] p-5">
-            <p className="text-sm font-medium text-white/88">상태 흐름</p>
-            <div className="mt-4 space-y-3 text-sm text-white/58">
-              <div className="rounded-2xl border border-white/8 bg-black/16 px-4 py-3">
-                대기: `pending`
-              </div>
-              <div className="rounded-2xl border border-emerald-400/14 bg-emerald-500/8 px-4 py-3 text-emerald-100/85">
-                승인: `approved`
-              </div>
-              <div className="rounded-2xl border border-rose-400/14 bg-rose-500/8 px-4 py-3 text-rose-100/85">
-                거절: `rejected`
-              </div>
-            </div>
-          </section>
-        </aside>
-
         <div className="space-y-5">
           <SectionCard title="충전신청" count={filteredPendingRequests.length}>
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
