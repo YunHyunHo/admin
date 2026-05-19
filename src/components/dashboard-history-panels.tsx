@@ -14,8 +14,6 @@ function getPartnerTypeLabel(type: DashboardPartnerSummary["type"]) {
       return "상위총판";
     case "DISTRIBUTOR":
       return "총판";
-    case "DOMAIN":
-      return "업체";
     default:
       return type;
   }

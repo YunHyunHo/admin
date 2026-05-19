@@ -51,12 +51,10 @@ export default async function DashboardPage() {
   ]);
   const prioritizedPartnerSummaries = sortPartnerSummaries(partnerSummaries);
 
-  const domainCount = prioritizedPartnerSummaries.filter(
-    (item) => item.type === "DOMAIN",
+  const linkedApiCount = prioritizedPartnerSummaries.filter(
+    (item) => item.hasActiveDomain,
   ).length;
-  const subcontractCount = prioritizedPartnerSummaries.filter(
-    (item) => item.type === "DISTRIBUTOR",
-  ).length;
+  const partnerCount = prioritizedPartnerSummaries.length;
   const activePartnerCount = prioritizedPartnerSummaries.filter(
     (item) =>
       item.balanceTotal > 0 ||
@@ -76,15 +74,15 @@ export default async function DashboardPage() {
               하청 / 업체 현황
             </h2>
             <p className="mt-2 text-sm text-white/45">
-              하위 총판과 직통 업체 기준으로 충전, 수수료, 환전, 보유 현황을 확인합니다.
+              계정별 충전, 수수료, 환전, 보유 현황을 확인합니다.
             </p>
           </div>
           <div className="mt-4 flex flex-wrap gap-2 text-sm text-white/60">
             <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5">
-              직속 총판 {subcontractCount}
+              계정 {partnerCount}
             </span>
             <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5">
-              직통 업체 {domainCount}
+              API 연동 {linkedApiCount}
             </span>
             <span className="rounded-full border border-emerald-400/15 bg-emerald-400/10 px-3 py-1.5 text-emerald-100">
               운영중 {activePartnerCount}

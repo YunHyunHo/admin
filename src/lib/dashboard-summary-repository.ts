@@ -26,7 +26,8 @@ type DashboardPartnerSummaryRow = {
   entity_id: string;
   entity_name: string;
   entity_login_id: string | null;
-  entity_type: "DOMAIN" | "DISTRIBUTOR" | "TOP_DISTRIBUTOR";
+  entity_type: "DISTRIBUTOR" | "TOP_DISTRIBUTOR";
+  has_active_domain: boolean;
   charge_total: string;
   fee_total: string;
   exchange_total: string;
@@ -37,7 +38,8 @@ export type DashboardPartnerSummary = {
   id: string;
   name: string;
   loginId: string;
-  type: "DOMAIN" | "DISTRIBUTOR" | "TOP_DISTRIBUTOR";
+  type: "DISTRIBUTOR" | "TOP_DISTRIBUTOR";
+  hasActiveDomain: boolean;
   chargeTotal: number;
   feeTotal: number;
   exchangeTotal: number;
@@ -145,19 +147,6 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
       ),
       scoped_entities as (
         select
-          concat('domain:', dom.id::text) as entity_id,
-          dom.domain_name as entity_name,
-          dist.login_id as entity_login_id,
-          'DOMAIN'::text as entity_type,
-          dist.id as distributor_id,
-          dist.current_balance
-        from domains dom
-        join scoped_distributors dist on dist.id = dom.distributor_id
-        where dom.status <> 'DELETED'
-
-        union all
-
-        select
           concat('distributor:', dist.id::text) as entity_id,
           dist.name as entity_name,
           dist.login_id as entity_login_id,
@@ -165,6 +154,12 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
             when dist_admin.role = 'TOP_DISTRIBUTOR' then 'TOP_DISTRIBUTOR'::text
             else 'DISTRIBUTOR'::text
           end as entity_type,
+          exists (
+            select 1
+            from domains dom
+            where dom.distributor_id = dist.id
+              and dom.status <> 'DELETED'
+          ) as has_active_domain,
           dist.id as distributor_id,
           dist.current_balance
         from scoped_distributors dist
@@ -176,19 +171,13 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
           coalesce(sum(cr.amount), 0)::text as charge_total
         from scoped_entities entity
         left join charge_requests cr on (
-          (entity.entity_type = 'DOMAIN' and cr.domain_id::text = replace(entity.entity_id, 'domain:', ''))
-          or (
-            entity.entity_type in ('DISTRIBUTOR', 'TOP_DISTRIBUTOR')
-            and (
-              cr.distributor_id = entity.distributor_id
-              or exists (
-                select 1
-                from domains dom
-                where dom.id = cr.domain_id
-                  and dom.distributor_id = entity.distributor_id
-                  and dom.status <> 'DELETED'
-              )
-            )
+          cr.distributor_id = entity.distributor_id
+          or exists (
+            select 1
+            from domains dom
+            where dom.id = cr.domain_id
+              and dom.distributor_id = entity.distributor_id
+              and dom.status <> 'DELETED'
           )
         )
           and cr.status in ('APPROVED', 'COMPLETED')
@@ -203,19 +192,13 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
           coalesce(sum(co.saved_commission), 0)::text as fee_total
         from scoped_entities entity
         left join commission_records co on (
-          (entity.entity_type = 'DOMAIN' and co.domain_id::text = replace(entity.entity_id, 'domain:', ''))
-          or (
-            entity.entity_type in ('DISTRIBUTOR', 'TOP_DISTRIBUTOR')
-            and (
-              co.distributor_id = entity.distributor_id
-              or exists (
-                select 1
-                from domains dom
-                where dom.id = co.domain_id
-                  and dom.distributor_id = entity.distributor_id
-                  and dom.status <> 'DELETED'
-              )
-            )
+          co.distributor_id = entity.distributor_id
+          or exists (
+            select 1
+            from domains dom
+            where dom.id = co.domain_id
+              and dom.distributor_id = entity.distributor_id
+              and dom.status <> 'DELETED'
           )
         )
           and co.status in ('APPROVED', 'COMPLETED')
@@ -230,10 +213,12 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
         from scoped_entities entity
         left join (
           select
-            concat('domain:', er.domain_id::text) as entity_id,
+            concat('distributor:', dom.distributor_id::text) as entity_id,
             er.amount
           from exchange_requests er
+          join domains dom on dom.id = er.domain_id
           where er.domain_id is not null
+            and dom.status <> 'DELETED'
             and er.status in ('APPROVED', 'COMPLETED')
             and er.processed_at is not null
             and (er.processed_at at time zone 'Asia/Seoul') >= $1::date
@@ -250,19 +235,8 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
             and (dw.processed_at at time zone 'Asia/Seoul') >= $1::date
             and (dw.processed_at at time zone 'Asia/Seoul') < $2::date
         ) summary on (
-          (entity.entity_type = 'DOMAIN' and summary.entity_id = entity.entity_id)
-          or (
-            entity.entity_type in ('DISTRIBUTOR', 'TOP_DISTRIBUTOR')
-            and (
-              summary.entity_id = concat('distributor-summary:', entity.distributor_id::text)
-              or summary.entity_id in (
-                select concat('domain:', dom.id::text)
-                from domains dom
-                where dom.distributor_id = entity.distributor_id
-                  and dom.status <> 'DELETED'
-              )
-            )
-          )
+          summary.entity_id = entity.entity_id
+          or summary.entity_id = concat('distributor-summary:', entity.distributor_id::text)
         )
         group by entity.entity_id
       )
@@ -271,6 +245,7 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
         entity.entity_name,
         entity.entity_login_id,
         entity.entity_type,
+        entity.has_active_domain,
         charge_totals.charge_total,
         fee_totals.fee_total,
         exchange_totals.exchange_total,
@@ -289,6 +264,7 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
     name: row.entity_name,
     loginId: row.entity_login_id ?? "-",
     type: row.entity_type,
+    hasActiveDomain: row.has_active_domain,
     chargeTotal: Number(row.charge_total),
     feeTotal: Number(row.fee_total),
     exchangeTotal: Number(row.exchange_total),
