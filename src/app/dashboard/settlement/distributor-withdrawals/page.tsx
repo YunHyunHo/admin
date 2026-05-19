@@ -9,6 +9,7 @@ import { getSessionUser } from "@/lib/auth";
 import { getDistributorWithdrawalRows } from "@/lib/distributor-withdrawals-repository";
 import { canManageMasterResources } from "@/lib/permissions";
 
+
 export default async function DistributorWithdrawalsPage() {
   const user = await getSessionUser();
 

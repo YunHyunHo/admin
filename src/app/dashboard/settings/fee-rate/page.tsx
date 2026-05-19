@@ -6,6 +6,7 @@ import { getSessionUser } from "@/lib/auth";
 import { getFeeRateSettingsForUser } from "@/lib/fee-rates-repository";
 import { canManageMasterResources } from "@/lib/permissions";
 
+
 export default async function FeeRateSettingsPage() {
   const user = await getSessionUser();
 

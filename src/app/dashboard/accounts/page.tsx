@@ -7,6 +7,7 @@ import { getBankAccountBoardData } from "@/lib/bank-accounts-repository";
 import { hasDatabaseUrl } from "@/lib/db";
 import { canManageMasterResources } from "@/lib/permissions";
 
+
 export default async function AccountsPage() {
   const user = await getSessionUser();
 

@@ -214,7 +214,6 @@ export function AdminShell({
                           <Link
                             key={menu.key}
                             href={menu.href}
-                            prefetch={false}
                             className={`block rounded-2xl px-4 py-3 text-[0.94rem] font-medium ring-1 transition ${
                               menu.key === activeItem
                                 ? "bg-cyan-500/14 text-cyan-100 ring-cyan-400/18"

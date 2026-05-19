@@ -9,6 +9,7 @@ import { getSessionUser } from "@/lib/auth";
 import { getDomainExchangeRows } from "@/lib/domain-exchanges-repository";
 import { canProcessRequests } from "@/lib/permissions";
 
+
 export default async function ExchangesPage() {
   const user = await getSessionUser();
 

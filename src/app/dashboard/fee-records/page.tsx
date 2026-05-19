@@ -6,6 +6,7 @@ import { getSessionUser } from "@/lib/auth";
 import { getDefaultReportDateRange } from "@/lib/mock-report-service";
 import { getFeeRecordsForUser } from "@/lib/fee-records-repository";
 
+
 export default async function FeeRecordsPage() {
   const user = await getSessionUser();
 

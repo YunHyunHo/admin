@@ -9,6 +9,7 @@ import { getSessionUser } from "@/lib/auth";
 import { getDomainBoardData } from "@/lib/domain-management-repository";
 import { canManageMasterResources } from "@/lib/permissions";
 
+
 export default async function DomainsPage() {
   const user = await getSessionUser();
 

@@ -8,6 +8,7 @@ import { hasDatabaseUrl } from "@/lib/db";
 import { getDomainExchangeOptions } from "@/lib/domain-exchanges-repository";
 import { canProcessRequests } from "@/lib/permissions";
 
+
 export default async function ChargesPage() {
   const user = await getSessionUser();
 

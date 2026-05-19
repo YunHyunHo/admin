@@ -8,6 +8,7 @@ import {
 import { getSessionUser } from "@/lib/auth";
 import { getTransactionLedgerRows } from "@/lib/transaction-ledger-repository";
 
+
 export default async function TransactionPage() {
   const user = await getSessionUser();
 

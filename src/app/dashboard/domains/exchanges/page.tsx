@@ -13,6 +13,7 @@ import {
 } from "@/lib/domain-exchanges-repository";
 import { canManageMasterResources } from "@/lib/permissions";
 
+
 export default async function DomainExchangesPage() {
   const user = await getSessionUser();
 

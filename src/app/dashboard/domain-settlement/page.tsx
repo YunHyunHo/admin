@@ -6,6 +6,7 @@ import { getSessionUser } from "@/lib/auth";
 import { getDefaultReportDateRange } from "@/lib/mock-report-service";
 import { getDomainSettlementForUser } from "@/lib/settlement-repository";
 
+
 export default async function DomainSettlementPage() {
   const user = await getSessionUser();
 
