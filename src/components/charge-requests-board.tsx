@@ -412,7 +412,7 @@ export function ChargeRequestsBoard({
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
+      <div className="grid gap-5">
         <div className="space-y-5">
           <SectionCard title="충전신청" count={filteredPendingRequests.length}>
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
