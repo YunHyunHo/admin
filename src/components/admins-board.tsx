@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { ModalFeedback } from "@/components/modal-feedback";
 import type { AdminRole, PublicAdminAccount } from "@/lib/admin-accounts";
 
 type AdminRow = {
@@ -70,6 +71,7 @@ export function AdminsBoard({
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [createModalMessage, setCreateModalMessage] = useState("");
   const [processingAdminId, setProcessingAdminId] = useState<string | null>(
     null,
   );
@@ -168,11 +170,22 @@ export function AdminsBoard({
 
   async function handleCreateAdmin() {
     if (!canManageAdmins) {
-      setMessage("마스터 계정만 하부계정을 생성할 수 있습니다.");
+      setCreateModalMessage("마스터 계정만 하부계정을 생성할 수 있습니다.");
+      return;
+    }
+
+    if (accountType === "ADMIN" && !selectedTopDistributorId) {
+      setCreateModalMessage("총판 계정은 상위총판을 선택해주세요.");
+      return;
+    }
+
+    if (accountType === "DOMAIN_ADMIN" && !selectedDomainOwnerId) {
+      setCreateModalMessage("업체 계정은 상위총판 또는 총판 소속을 선택해주세요.");
       return;
     }
 
     setIsCreating(true);
+    setCreateModalMessage("");
 
     try {
       const selectedTopDistributor = topDistributorOptions.find(
@@ -205,7 +218,9 @@ export function AdminsBoard({
           `${loginId} 계정이 생성되었습니다. 이 아이디와 비밀번호를 전달하면 됩니다.`,
       );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "계정 생성에 실패했습니다.");
+      setCreateModalMessage(
+        error instanceof Error ? error.message : "계정 생성에 실패했습니다.",
+      );
     } finally {
       setIsCreating(false);
     }
@@ -470,6 +485,7 @@ export function AdminsBoard({
             </h3>
 
             <div className="mt-9 space-y-6">
+              <ModalFeedback message={createModalMessage} />
               <select
                 value={accountType}
                 onChange={(event) => {
@@ -582,9 +598,7 @@ export function AdminsBoard({
                 onClick={handleCreateAdmin}
                 disabled={
                   isCreating ||
-                  (accountType === "ADMIN" &&
-                    (!topDistributorOptions.length || !selectedTopDistributorId)) ||
-                  (accountType === "DOMAIN_ADMIN" && !selectedDomainOwnerId)
+                  (accountType === "ADMIN" && !topDistributorOptions.length)
                 }
                 className="rounded bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
@@ -592,7 +606,10 @@ export function AdminsBoard({
               </button>
               <button
                 type="button"
-                onClick={() => setIsCreateModalOpen(false)}
+                onClick={() => {
+                  setCreateModalMessage("");
+                  setIsCreateModalOpen(false);
+                }}
                 className="rounded bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
               >
                 취소

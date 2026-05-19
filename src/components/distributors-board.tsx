@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { ModalFeedback } from "@/components/modal-feedback";
 import type { AdminAccountRecord } from "@/lib/admin-accounts";
 
 type DistributorRow = {
@@ -63,6 +64,7 @@ export function DistributorsBoard({
   const [password, setPassword] = useState("");
   const [parentAdminId, setParentAdminId] = useState("");
   const [message, setMessage] = useState("");
+  const [createModalMessage, setCreateModalMessage] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
 
@@ -111,7 +113,18 @@ export function DistributorsBoard({
   }
 
   async function handleCreate() {
+    if (!nickname.trim() || !loginId.trim() || !password.trim()) {
+      setCreateModalMessage("닉네임, 아이디, 비밀번호를 모두 입력해주세요.");
+      return;
+    }
+
+    if (!parentAdminId) {
+      setCreateModalMessage("상위총판을 선택해주세요.");
+      return;
+    }
+
     setIsCreating(true);
+    setCreateModalMessage("");
 
     try {
       const data = await requestAccount("POST", {
@@ -128,7 +141,9 @@ export function DistributorsBoard({
       setIsCreateModalOpen(false);
       setMessage(data.message ?? `${loginId} 총판 계정이 생성되었습니다.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "총판 계정 생성에 실패했습니다.");
+      setCreateModalMessage(
+        error instanceof Error ? error.message : "총판 계정 생성에 실패했습니다.",
+      );
     } finally {
       setIsCreating(false);
     }
@@ -216,7 +231,10 @@ export function DistributorsBoard({
 
         <button
           type="button"
-          onClick={() => setIsCreateModalOpen(true)}
+          onClick={() => {
+            setCreateModalMessage("");
+            setIsCreateModalOpen(true);
+          }}
           className="rounded-2xl bg-fuchsia-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-fuchsia-400"
         >
           총판 생성
@@ -354,6 +372,7 @@ export function DistributorsBoard({
             <h3 className="text-2xl font-semibold tracking-[-0.04em]">총판 생성</h3>
 
             <div className="mt-9 space-y-6">
+              <ModalFeedback message={createModalMessage} />
               <select
                 value={parentAdminId}
                 onChange={(event) => setParentAdminId(event.target.value)}
@@ -403,7 +422,10 @@ export function DistributorsBoard({
               </button>
               <button
                 type="button"
-                onClick={() => setIsCreateModalOpen(false)}
+                onClick={() => {
+                  setCreateModalMessage("");
+                  setIsCreateModalOpen(false);
+                }}
                 className="rounded bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
               >
                 취소

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { ModalFeedback } from "@/components/modal-feedback";
 import type {
   DomainDistributorOption,
   DomainRow,
@@ -90,6 +91,7 @@ export function DomainManagementBoard({
   const [distributorId, setDistributorId] = useState("");
   const [distributorName, setDistributorName] = useState("");
   const [isSavingDomain, setIsSavingDomain] = useState(false);
+  const [domainModalMessage, setDomainModalMessage] = useState("");
 
   const domainPageCount = Math.max(
     1,
@@ -107,6 +109,7 @@ export function DomainManagementBoard({
   );
 
   function openCreateModal() {
+    setDomainModalMessage("");
     setEditingDomain(null);
     setDomainName("");
     setDistributorId("");
@@ -115,6 +118,7 @@ export function DomainManagementBoard({
   }
 
   function openEditModal(row: DomainRow) {
+    setDomainModalMessage("");
     setEditingDomain(row);
     setDomainName(row.url);
     setDistributorId(row.distributorId ?? "");
@@ -124,6 +128,7 @@ export function DomainManagementBoard({
 
   function closeDomainModal() {
     setIsDomainModalOpen(false);
+    setDomainModalMessage("");
     setEditingDomain(null);
     setDomainName("");
     setDistributorId("");
@@ -152,7 +157,7 @@ export function DomainManagementBoard({
     }
 
     if (!domainName.trim() || (!distributorId && !distributorName)) {
-      setMessage("도메인명과 하부계정을 입력해주세요.");
+      setDomainModalMessage("도메인명과 하부계정을 입력해주세요.");
       return;
     }
 
@@ -160,6 +165,7 @@ export function DomainManagementBoard({
       (option) => option.id === distributorId,
     );
     setIsSavingDomain(true);
+    setDomainModalMessage("");
 
     try {
       const response = await fetch("/api/domains", {
@@ -187,7 +193,7 @@ export function DomainManagementBoard({
       };
 
       if (!response.ok) {
-        setMessage(data.message ?? "도메인 저장 중 오류가 발생했습니다.");
+        setDomainModalMessage(data.message ?? "도메인 저장 중 오류가 발생했습니다.");
         return;
       }
 
@@ -454,6 +460,7 @@ export function DomainManagementBoard({
             </h3>
 
             <div className="mt-7 space-y-4">
+              <ModalFeedback message={domainModalMessage} />
               <label className="block">
                 <span className="sr-only">하부계정 선택</span>
                 {distributorOptions.length ? (
@@ -501,11 +508,7 @@ export function DomainManagementBoard({
               <button
                 type="button"
                 onClick={saveDomain}
-                disabled={
-                  isSavingDomain ||
-                  !domainName ||
-                  (!distributorId && !distributorName)
-                }
+                disabled={isSavingDomain}
                 className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 {isSavingDomain ? "저장 중" : "저장"}

@@ -7,6 +7,7 @@ import type {
   AccountBranchOption,
   AccountRow,
 } from "@/lib/bank-accounts-types";
+import { ModalFeedback } from "@/components/modal-feedback";
 
 const bankOptions = [
   "국민은행",
@@ -151,6 +152,7 @@ export function AccountsBoard({
   const [page, setPage] = useState(1);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [createModalMessage, setCreateModalMessage] = useState("");
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(
     null,
   );
@@ -294,10 +296,12 @@ export function AccountsBoard({
     }
 
     if (!branchId || !bankName || !holder || !accountNumber) {
+      setCreateModalMessage("본사명, 은행, 예금주, 계좌번호를 모두 입력해주세요.");
       return;
     }
 
     setIsCreating(true);
+    setCreateModalMessage("");
 
     try {
       const response = await fetch("/api/bank-accounts", {
@@ -317,7 +321,7 @@ export function AccountsBoard({
       };
 
       if (!response.ok) {
-        setMessage(data.message ?? "계좌 생성 중 오류가 발생했습니다.");
+        setCreateModalMessage(data.message ?? "계좌 생성 중 오류가 발생했습니다.");
         return;
       }
 
@@ -372,7 +376,10 @@ export function AccountsBoard({
         {canCreateAccounts ? (
           <button
             type="button"
-            onClick={() => setIsCreateModalOpen(true)}
+            onClick={() => {
+              setCreateModalMessage("");
+              setIsCreateModalOpen(true);
+            }}
             disabled={selectableBranches.length === 0}
             className="rounded-2xl bg-fuchsia-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-fuchsia-400 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/40"
           >
@@ -538,6 +545,7 @@ export function AccountsBoard({
             </h3>
 
             <div className="mt-7 space-y-4">
+              <ModalFeedback message={createModalMessage} />
               <label className="block">
                 <span className="sr-only">본사명 선택</span>
                 <select
@@ -602,20 +610,17 @@ export function AccountsBoard({
               <button
                 type="button"
                 onClick={handleCreate}
-                disabled={
-                  isCreating ||
-                  !branchId ||
-                  !bankName ||
-                  !holder ||
-                  !accountNumber
-                }
+                disabled={isCreating}
                 className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 {isCreating ? "생성 중" : "생성"}
               </button>
               <button
                 type="button"
-                onClick={() => setIsCreateModalOpen(false)}
+                onClick={() => {
+                  setCreateModalMessage("");
+                  setIsCreateModalOpen(false);
+                }}
                 className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
               >
                 취소

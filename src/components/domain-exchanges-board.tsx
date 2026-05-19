@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { ModalFeedback } from "@/components/modal-feedback";
 import { getKoreanNowStamp } from "@/lib/korean-time";
 import type {
   DomainExchangeOption,
@@ -235,6 +236,7 @@ export function DomainExchangesBoard({
   const [message, setMessage] = useState("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createModalMessage, setCreateModalMessage] = useState("");
   const [domainId, setDomainId] = useState(defaultDomainId ?? "");
   const [amount, setAmount] = useState("");
   const [bankName, setBankName] = useState("");
@@ -254,16 +256,22 @@ export function DomainExchangesBoard({
     const numericAmount = Number(amount.replaceAll(",", ""));
 
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-      setMessage("환전금액을 확인해주세요.");
+      setCreateModalMessage("환전금액을 확인해주세요.");
       return;
     }
 
     if (numericAmount > currentBalance) {
-      setMessage("보유 수수료보다 큰 금액은 신청할 수 없습니다.");
+      setCreateModalMessage("보유 수수료보다 큰 금액은 신청할 수 없습니다.");
+      return;
+    }
+
+    if (!bankName.trim() || !accountHolder.trim() || !accountNumber.trim()) {
+      setCreateModalMessage("출금은행, 예금주, 계좌번호를 모두 입력해주세요.");
       return;
     }
 
     setIsSubmitting(true);
+    setCreateModalMessage("");
 
     try {
       const response = await fetch("/api/domain-exchanges", {
@@ -283,7 +291,7 @@ export function DomainExchangesBoard({
       };
 
       if (!response.ok) {
-        setMessage(data.message ?? "환전신청 생성 중 오류가 발생했습니다.");
+        setCreateModalMessage(data.message ?? "환전신청 생성 중 오류가 발생했습니다.");
         return;
       }
 
@@ -380,6 +388,7 @@ export function DomainExchangesBoard({
               type="button"
               onClick={() => {
                 setDomainId(defaultDomainId ?? "");
+                setCreateModalMessage("");
                 setIsCreateModalOpen(true);
               }}
               className="rounded-2xl bg-fuchsia-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-fuchsia-400"
@@ -541,6 +550,7 @@ export function DomainExchangesBoard({
             </h3>
 
             <div className="mt-7 space-y-4">
+              <ModalFeedback message={createModalMessage} />
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
                 <p>보유 수수료: <strong>{currentBalance.toLocaleString("ko-KR")} 원</strong></p>
                 <p className="mt-1">
@@ -618,7 +628,10 @@ export function DomainExchangesBoard({
               </button>
               <button
                 type="button"
-                onClick={() => setIsCreateModalOpen(false)}
+                onClick={() => {
+                  setCreateModalMessage("");
+                  setIsCreateModalOpen(false);
+                }}
                 className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
               >
                 취소

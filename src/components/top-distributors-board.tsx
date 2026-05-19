@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { ModalFeedback } from "@/components/modal-feedback";
 import type { AdminAccountRecord } from "@/lib/admin-accounts";
 
 type TopDistributorRow = {
@@ -63,6 +64,7 @@ export function TopDistributorsBoard({
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [createModalMessage, setCreateModalMessage] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
 
@@ -104,7 +106,13 @@ export function TopDistributorsBoard({
   }
 
   async function handleCreate() {
+    if (!nickname.trim() || !loginId.trim() || !password.trim()) {
+      setCreateModalMessage("닉네임, 아이디, 비밀번호를 모두 입력해주세요.");
+      return;
+    }
+
     setIsCreating(true);
+    setCreateModalMessage("");
 
     try {
       const data = await requestAccount("POST", {
@@ -119,7 +127,7 @@ export function TopDistributorsBoard({
       setIsCreateModalOpen(false);
       setMessage(data.message ?? `${loginId} 상위총판 계정이 생성되었습니다.`);
     } catch (error) {
-      setMessage(
+      setCreateModalMessage(
         error instanceof Error ? error.message : "상위총판 계정 생성에 실패했습니다.",
       );
     } finally {
@@ -209,7 +217,10 @@ export function TopDistributorsBoard({
 
         <button
           type="button"
-          onClick={() => setIsCreateModalOpen(true)}
+          onClick={() => {
+            setCreateModalMessage("");
+            setIsCreateModalOpen(true);
+          }}
           className="rounded-2xl bg-fuchsia-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-fuchsia-400"
         >
           상위총판 생성
@@ -358,6 +369,7 @@ export function TopDistributorsBoard({
             </h3>
 
             <div className="mt-9 space-y-6">
+              <ModalFeedback message={createModalMessage} />
               <div className="flex h-14 items-center rounded border border-slate-300 bg-slate-50 px-5 text-sm font-semibold text-slate-600">
                 상위총판 계정
               </div>
@@ -393,7 +405,10 @@ export function TopDistributorsBoard({
               </button>
               <button
                 type="button"
-                onClick={() => setIsCreateModalOpen(false)}
+                onClick={() => {
+                  setCreateModalMessage("");
+                  setIsCreateModalOpen(false);
+                }}
                 className="rounded bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
               >
                 취소

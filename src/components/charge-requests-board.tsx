@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ModalFeedback } from "@/components/modal-feedback";
 import type {
   PendingRequest,
   ProcessedRequest,
@@ -140,6 +141,7 @@ export function ChargeRequestsBoard({
   const [createBankName, setCreateBankName] = useState("");
   const [createAccountNumber, setCreateAccountNumber] = useState("");
   const [isCreatingRequest, setIsCreatingRequest] = useState(false);
+  const [createModalMessage, setCreateModalMessage] = useState("");
   const [message, setMessage] = useState(
     isDatabaseBacked
       ? "Neon DB와 연결된 충전신청 데이터를 표시합니다."
@@ -306,12 +308,13 @@ export function ChargeRequestsBoard({
       domainOptions.find((domain) => domain.id === domainId)?.name ?? "";
 
     if (!depositorName || !Number.isFinite(amount) || amount <= 0) {
-      setMessage("입금자명과 신청금액을 확인해주세요.");
+      setCreateModalMessage("입금자명과 신청금액을 확인해주세요.");
       return;
     }
 
     setIsLoading(true);
     setIsCreatingRequest(true);
+    setCreateModalMessage("");
     setMessage("테스트 충전신청을 생성하는 중입니다.");
 
     try {
@@ -334,7 +337,9 @@ export function ChargeRequestsBoard({
       setIsCreateModalOpen(false);
       setMessage("테스트 충전신청이 생성되었습니다.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "충전신청 생성에 실패했습니다.");
+      setCreateModalMessage(
+        error instanceof Error ? error.message : "충전신청 생성에 실패했습니다.",
+      );
     } finally {
       setIsLoading(false);
       setIsCreatingRequest(false);
@@ -470,7 +475,10 @@ export function ChargeRequestsBoard({
                 {isDatabaseBacked && canProcessCharges ? (
                   <button
                     type="button"
-                    onClick={() => setIsCreateModalOpen(true)}
+                    onClick={() => {
+                      setCreateModalMessage("");
+                      setIsCreateModalOpen(true);
+                    }}
                     disabled={isLoading}
                     className="rounded-2xl bg-fuchsia-500 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                   >
@@ -717,6 +725,7 @@ export function ChargeRequestsBoard({
             </h3>
 
             <div className="mt-7 space-y-4">
+              <ModalFeedback message={createModalMessage} />
               <label className="block">
                 <span className="sr-only">도메인 선택</span>
                 <select
@@ -786,7 +795,10 @@ export function ChargeRequestsBoard({
               </button>
               <button
                 type="button"
-                onClick={() => setIsCreateModalOpen(false)}
+                onClick={() => {
+                  setCreateModalMessage("");
+                  setIsCreateModalOpen(false);
+                }}
                 className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
               >
                 취소

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { ModalFeedback } from "@/components/modal-feedback";
 import type { DistributorWithdrawalRow } from "@/lib/distributor-withdrawals-repository";
 
 type WithdrawalRow = DistributorWithdrawalRow;
@@ -239,6 +240,7 @@ export function DistributorWithdrawalHistoryBoard({
   const [message, setMessage] = useState("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createModalMessage, setCreateModalMessage] = useState("");
   const [amount, setAmount] = useState("");
   const [bankName, setBankName] = useState("");
   const [accountHolder, setAccountHolder] = useState("");
@@ -257,16 +259,17 @@ export function DistributorWithdrawalHistoryBoard({
     const numericAmount = Number(amount.replaceAll(",", ""));
 
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-      setMessage("환전금액을 확인해주세요.");
+      setCreateModalMessage("환전금액을 확인해주세요.");
       return;
     }
 
     if (!bankName.trim() || !accountHolder.trim() || !accountNumber.trim()) {
-      setMessage("출금은행, 예금주, 계좌번호를 모두 입력해주세요.");
+      setCreateModalMessage("출금은행, 예금주, 계좌번호를 모두 입력해주세요.");
       return;
     }
 
     setIsSubmitting(true);
+    setCreateModalMessage("");
 
     try {
       const response = await fetch("/api/distributor-withdrawals", {
@@ -285,7 +288,7 @@ export function DistributorWithdrawalHistoryBoard({
       };
 
       if (!response.ok) {
-        setMessage(data.message ?? "총판 환전 신청 중 오류가 발생했습니다.");
+        setCreateModalMessage(data.message ?? "총판 환전 신청 중 오류가 발생했습니다.");
         return;
       }
 
@@ -340,11 +343,14 @@ export function DistributorWithdrawalHistoryBoard({
           총판 환전내역
         </h2>
         {canCreateWithdrawals ? (
-          <button
-            type="button"
-            onClick={() => setIsCreateModalOpen(true)}
-            className="rounded-2xl bg-fuchsia-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-fuchsia-400"
-          >
+            <button
+              type="button"
+              onClick={() => {
+                setCreateModalMessage("");
+                setIsCreateModalOpen(true);
+              }}
+              className="rounded-2xl bg-fuchsia-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-fuchsia-400"
+            >
             환전신청
           </button>
         ) : null}
@@ -511,6 +517,7 @@ export function DistributorWithdrawalHistoryBoard({
             </h3>
 
             <div className="mt-7 space-y-4">
+              <ModalFeedback message={createModalMessage} />
               <label className="block">
                 <span className="sr-only">환전금액</span>
                 <input
@@ -564,7 +571,10 @@ export function DistributorWithdrawalHistoryBoard({
               </button>
               <button
                 type="button"
-                onClick={() => setIsCreateModalOpen(false)}
+                onClick={() => {
+                  setCreateModalMessage("");
+                  setIsCreateModalOpen(false);
+                }}
                 className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
               >
                 취소
