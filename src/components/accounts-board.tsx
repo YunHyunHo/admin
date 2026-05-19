@@ -150,6 +150,7 @@ export function AccountsBoard({
   const [accounts, setAccounts] = useState(initialAccounts);
   const [page, setPage] = useState(1);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(
     null,
   );
@@ -288,59 +289,69 @@ export function AccountsBoard({
   }
 
   async function handleCreate() {
+    if (isCreating) {
+      return;
+    }
+
     if (!branchId || !bankName || !holder || !accountNumber) {
       return;
     }
 
-    const response = await fetch("/api/bank-accounts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        distributorId: branchId,
-        bankName,
-        holder,
-        accountNumber,
-      }),
-    });
-    const data = (await response.json()) as {
-      accounts?: AccountRow[];
-      account?: AccountRow;
-      message?: string;
-    };
+    setIsCreating(true);
 
-    if (!response.ok) {
-      setMessage(data.message ?? "계좌 생성 중 오류가 발생했습니다.");
-      return;
-    }
-
-    if (data.accounts) {
-      setAccounts(data.accounts);
-    } else if (data.account) {
-      setAccounts((current) => [data.account!, ...current]);
-    } else {
-      const nextAccount: AccountRow = {
-        id: `ACC-${Date.now().toString().slice(-6)}`,
-        branchName,
-        creator: "총관리자",
-        bankName,
-        holder,
-        accountNumber,
-        createdAt: getNowStamp(),
-        isActive: true,
-        linkedDomains: [],
+    try {
+      const response = await fetch("/api/bank-accounts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          distributorId: branchId,
+          bankName,
+          holder,
+          accountNumber,
+        }),
+      });
+      const data = (await response.json()) as {
+        accounts?: AccountRow[];
+        account?: AccountRow;
+        message?: string;
       };
 
-      setAccounts((current) => [nextAccount, ...current]);
-    }
+      if (!response.ok) {
+        setMessage(data.message ?? "계좌 생성 중 오류가 발생했습니다.");
+        return;
+      }
 
-    setPage(1);
-    setBranchName("");
-    setBranchId("");
-    setBankName("");
-    setHolder("");
-    setAccountNumber("");
-    setMessage(data.message ?? "계좌가 생성되었습니다.");
-    setIsCreateModalOpen(false);
+      if (data.accounts) {
+        setAccounts(data.accounts);
+      } else if (data.account) {
+        setAccounts((current) => [data.account!, ...current]);
+      } else {
+        const nextAccount: AccountRow = {
+          id: `ACC-${Date.now().toString().slice(-6)}`,
+          branchName,
+          creator: "총관리자",
+          bankName,
+          holder,
+          accountNumber,
+          createdAt: getNowStamp(),
+          isActive: true,
+          linkedDomains: [],
+        };
+
+        setAccounts((current) => [nextAccount, ...current]);
+      }
+
+      setPage(1);
+      setBranchName("");
+      setBranchId("");
+      setBankName("");
+      setHolder("");
+      setAccountNumber("");
+      setMessage(data.message ?? "계좌가 생성되었습니다.");
+      setIsCreateModalOpen(false);
+    } finally {
+      setIsCreating(false);
+    }
   }
 
   return (
@@ -591,10 +602,16 @@ export function AccountsBoard({
               <button
                 type="button"
                 onClick={handleCreate}
-                disabled={!branchId || !bankName || !holder || !accountNumber}
+                disabled={
+                  isCreating ||
+                  !branchId ||
+                  !bankName ||
+                  !holder ||
+                  !accountNumber
+                }
                 className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
-                생성
+                {isCreating ? "생성 중" : "생성"}
               </button>
               <button
                 type="button"

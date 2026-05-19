@@ -89,6 +89,7 @@ export function DomainManagementBoard({
   const [domainName, setDomainName] = useState("");
   const [distributorId, setDistributorId] = useState("");
   const [distributorName, setDistributorName] = useState("");
+  const [isSavingDomain, setIsSavingDomain] = useState(false);
 
   const domainPageCount = Math.max(
     1,
@@ -146,6 +147,10 @@ export function DomainManagementBoard({
   }
 
   async function saveDomain() {
+    if (isSavingDomain) {
+      return;
+    }
+
     if (!domainName.trim() || (!distributorId && !distributorName)) {
       setMessage("도메인명과 하부계정을 입력해주세요.");
       return;
@@ -154,54 +159,60 @@ export function DomainManagementBoard({
     const selectedDistributor = distributorOptions.find(
       (option) => option.id === distributorId,
     );
-    const response = await fetch("/api/domains", {
-      method: editingDomain ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(
-        editingDomain
-          ? {
-              id: editingDomain.id,
-              action: "update",
-              domainName,
-              distributorId,
-            }
-          : {
-              domainName,
-              distributorId,
-              distributorName: selectedDistributor?.name ?? distributorName,
-            },
-      ),
-    });
-    const data = (await response.json()) as {
-      rows?: DomainRow[];
-      row?: DomainRow;
-      message?: string;
-    };
+    setIsSavingDomain(true);
 
-    if (!response.ok) {
-      setMessage(data.message ?? "도메인 저장 중 오류가 발생했습니다.");
-      return;
-    }
-
-    if (!data.rows && editingDomain) {
-      setDomainRows((current) =>
-        current.map((row) =>
-          row.id === editingDomain.id
+    try {
+      const response = await fetch("/api/domains", {
+        method: editingDomain ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          editingDomain
             ? {
-                ...row,
-                url: domainName,
-                companyName: domainName,
-                distributor: selectedDistributor?.name ?? distributorName,
-                headquarters: selectedDistributor?.name ?? distributorName,
-                distributorId: distributorId || row.distributorId,
+                id: editingDomain.id,
+                action: "update",
+                domainName,
+                distributorId,
               }
-            : row,
+            : {
+                domainName,
+                distributorId,
+                distributorName: selectedDistributor?.name ?? distributorName,
+              },
         ),
-      );
-    }
+      });
+      const data = (await response.json()) as {
+        rows?: DomainRow[];
+        row?: DomainRow;
+        message?: string;
+      };
 
-    applyDomainResponse(data);
-    closeDomainModal();
+      if (!response.ok) {
+        setMessage(data.message ?? "도메인 저장 중 오류가 발생했습니다.");
+        return;
+      }
+
+      if (!data.rows && editingDomain) {
+        setDomainRows((current) =>
+          current.map((row) =>
+            row.id === editingDomain.id
+              ? {
+                  ...row,
+                  url: domainName,
+                  companyName: domainName,
+                  distributor: selectedDistributor?.name ?? distributorName,
+                  headquarters: selectedDistributor?.name ?? distributorName,
+                  distributorId: distributorId || row.distributorId,
+                }
+              : row,
+          ),
+        );
+      }
+
+      applyDomainResponse(data);
+      closeDomainModal();
+    } finally {
+      setIsSavingDomain(false);
+    }
   }
 
   async function toggleDomainStatus(row: DomainRow) {
@@ -490,10 +501,14 @@ export function DomainManagementBoard({
               <button
                 type="button"
                 onClick={saveDomain}
-                disabled={!domainName || (!distributorId && !distributorName)}
+                disabled={
+                  isSavingDomain ||
+                  !domainName ||
+                  (!distributorId && !distributorName)
+                }
                 className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
-                저장
+                {isSavingDomain ? "저장 중" : "저장"}
               </button>
               <button
                 type="button"
