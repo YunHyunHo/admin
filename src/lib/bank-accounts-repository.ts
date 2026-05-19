@@ -84,7 +84,8 @@ export async function getBankAccountBoardData(user?: SessionUser) {
         left join distributors d on d.id = ba.distributor_id
         left join admins dist_admin on dist_admin.id = d.admin_id
         left join admins owner_master on owner_master.id = dist_admin.created_by
-        left join domains dom on dom.company_id = ba.company_id
+        left join domains dom on dom.distributor_id = ba.distributor_id
+          and dom.status <> 'DELETED'
         where 1 = 1
           ${scope.sql.replaceAll("dist.", "d.")}
         group by ba.id, d.name, owner_master.name
