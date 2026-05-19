@@ -37,7 +37,7 @@ function toStatus(status: TransactionLedgerDbRow["status"]): TransactionStatus {
 }
 
 function toBankInfo(row: TransactionLedgerDbRow) {
-  const parts = [row.bank_name, row.account_number, row.account_holder].filter(Boolean);
+  const parts = [row.bank_name, row.account_number].filter(Boolean);
 
   return parts.length ? parts.join(" / ") : "-";
 }
