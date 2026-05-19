@@ -164,12 +164,6 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
           dist.current_balance
         from scoped_distributors dist
         left join admins dist_admin on dist_admin.id = dist.admin_id
-        where not exists (
-          select 1
-          from domains dom
-          where dom.distributor_id = dist.id
-            and dom.status <> 'DELETED'
-        )
       ),
       charge_totals as (
         select
@@ -178,7 +172,19 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
         from scoped_entities entity
         left join charge_requests cr on (
           (entity.entity_type = 'DOMAIN' and cr.domain_id::text = replace(entity.entity_id, 'domain:', ''))
-          or (entity.entity_type in ('DISTRIBUTOR', 'TOP_DISTRIBUTOR') and cr.distributor_id = entity.distributor_id and cr.domain_id is null)
+          or (
+            entity.entity_type in ('DISTRIBUTOR', 'TOP_DISTRIBUTOR')
+            and (
+              cr.distributor_id = entity.distributor_id
+              or exists (
+                select 1
+                from domains dom
+                where dom.id = cr.domain_id
+                  and dom.distributor_id = entity.distributor_id
+                  and dom.status <> 'DELETED'
+              )
+            )
+          )
         )
           and cr.status in ('APPROVED', 'COMPLETED')
           and cr.processed_at is not null
@@ -193,7 +199,19 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
         from scoped_entities entity
         left join commission_records co on (
           (entity.entity_type = 'DOMAIN' and co.domain_id::text = replace(entity.entity_id, 'domain:', ''))
-          or (entity.entity_type in ('DISTRIBUTOR', 'TOP_DISTRIBUTOR') and co.distributor_id = entity.distributor_id and co.domain_id is null)
+          or (
+            entity.entity_type in ('DISTRIBUTOR', 'TOP_DISTRIBUTOR')
+            and (
+              co.distributor_id = entity.distributor_id
+              or exists (
+                select 1
+                from domains dom
+                where dom.id = co.domain_id
+                  and dom.distributor_id = entity.distributor_id
+                  and dom.status <> 'DELETED'
+              )
+            )
+          )
         )
           and co.status in ('APPROVED', 'COMPLETED')
           and (co.created_at at time zone 'Asia/Seoul') >= $1::date
@@ -219,14 +237,28 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
           union all
 
           select
-            concat('distributor:', dw.distributor_id::text) as entity_id,
+            concat('distributor-summary:', dw.distributor_id::text) as entity_id,
             dw.request_amount as amount
           from distributor_withdrawals dw
           where dw.status in ('APPROVED', 'COMPLETED')
             and dw.processed_at is not null
             and (dw.processed_at at time zone 'Asia/Seoul') >= $1::date
             and (dw.processed_at at time zone 'Asia/Seoul') < $2::date
-        ) summary on summary.entity_id = entity.entity_id
+        ) summary on (
+          (entity.entity_type = 'DOMAIN' and summary.entity_id = entity.entity_id)
+          or (
+            entity.entity_type in ('DISTRIBUTOR', 'TOP_DISTRIBUTOR')
+            and (
+              summary.entity_id = concat('distributor-summary:', entity.distributor_id::text)
+              or summary.entity_id in (
+                select concat('domain:', dom.id::text)
+                from domains dom
+                where dom.distributor_id = entity.distributor_id
+                  and dom.status <> 'DELETED'
+              )
+            )
+          )
+        )
         group by entity.entity_id
       )
       select
