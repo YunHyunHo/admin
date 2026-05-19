@@ -26,6 +26,7 @@ async function getCommissionAggregates(
   endDate: string,
 ) {
   const scope = getScopedDistributorCondition(user);
+  const scopeSql = scope.sql.replaceAll("$1", "$3");
   const result = await query<SettlementAggregateRow>(
     `
       select
@@ -49,7 +50,7 @@ async function getCommissionAggregates(
           co.status in ('APPROVED', 'COMPLETED')
           and co.created_at >= $1::date
           and co.created_at < ($2::date + interval '1 day')
-          ${scope.sql.replace("$1", "$3")}
+          ${scopeSql}
 
         union all
 
@@ -68,7 +69,7 @@ async function getCommissionAggregates(
           and er.processed_at is not null
           and er.processed_at >= $1::date
           and er.processed_at < ($2::date + interval '1 day')
-          ${scope.sql.replace("$1", "$3")}
+          ${scopeSql}
       ) daily
       group by date, domain_name
       order by date asc
