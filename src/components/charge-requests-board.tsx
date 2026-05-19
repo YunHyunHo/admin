@@ -388,19 +388,21 @@ export function ChargeRequestsBoard({
     rejectedPage * rowsPerPage,
   );
 
-  async function moveRequest(targetId: string, nextStatus: "승인" | "승인거절") {
+  async function moveRequest(row: PendingRequest, nextStatus: "승인" | "승인거절") {
+    const targetId = row.id;
+    const subjectLabel = row.depositor?.trim() || targetId;
     const actionLabel = nextStatus === "승인" ? "승인" : "거절";
 
-    if (!window.confirm(`${targetId} 요청을 ${actionLabel}할까요?`)) {
+    if (!window.confirm(`${subjectLabel} 요청을 ${actionLabel}할까요?`)) {
       return;
     }
 
     setProcessingId(targetId);
-    setMessage(`${targetId} 요청을 ${actionLabel} 처리 중입니다.`);
+    setMessage(`${subjectLabel} 요청을 ${actionLabel} 처리 중입니다.`);
 
     try {
       applyServerData(await requestChargeData({ id: targetId, status: nextStatus }));
-      setMessage(`${targetId} 요청이 ${actionLabel} 처리되었습니다.`);
+      setMessage(`${subjectLabel} 요청이 ${actionLabel} 처리되었습니다.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "처리에 실패했습니다.");
     } finally {
@@ -564,7 +566,7 @@ export function ChargeRequestsBoard({
                             <div className="flex gap-2">
                               <button
                                 type="button"
-                                onClick={() => moveRequest(row.id, "승인")}
+                                onClick={() => moveRequest(row, "승인")}
                                 disabled={processingId === row.id}
                                 className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
                               >
@@ -572,7 +574,7 @@ export function ChargeRequestsBoard({
                               </button>
                               <button
                                 type="button"
-                                onClick={() => moveRequest(row.id, "승인거절")}
+                                onClick={() => moveRequest(row, "승인거절")}
                                 disabled={processingId === row.id}
                                 className="rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                               >
