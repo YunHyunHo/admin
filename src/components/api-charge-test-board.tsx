@@ -2,14 +2,10 @@
 
 import { useMemo, useState } from "react";
 
-import type {
-  IntegrationChargeDistributorOption,
-  IntegrationChargeDomainOption,
-} from "@/lib/charge-requests-repository";
+import type { IntegrationChargeDomainOption } from "@/lib/charge-requests-repository";
 
 type ApiChargeTestBoardProps = {
   domainOptions: IntegrationChargeDomainOption[];
-  distributorOptions: IntegrationChargeDistributorOption[];
 };
 
 type IntegrationResponse = {
@@ -23,16 +19,8 @@ function makeExternalId() {
   return `TEST-${Date.now().toString(36).toUpperCase()}`;
 }
 
-export function ApiChargeTestBoard({
-  distributorOptions,
-  domainOptions,
-}: ApiChargeTestBoardProps) {
-  const initialTarget = domainOptions[0]
-    ? `domain:${domainOptions[0].id}`
-    : distributorOptions[0]
-      ? `distributor:${distributorOptions[0].id}`
-      : "";
-  const [targetValue, setTargetValue] = useState(initialTarget);
+export function ApiChargeTestBoard({ domainOptions }: ApiChargeTestBoardProps) {
+  const [selectedDomainId, setSelectedDomainId] = useState(domainOptions[0]?.id ?? "");
   const [externalId, setExternalId] = useState(makeExternalId);
   const [depositorName, setDepositorName] = useState("테스트입금자");
   const [amount, setAmount] = useState("100000");
@@ -43,27 +31,15 @@ export function ApiChargeTestBoard({
   const [lastResponse, setLastResponse] = useState<IntegrationResponse | null>(null);
 
   const selectedDomain = useMemo(
-    () =>
-      targetValue.startsWith("domain:")
-        ? domainOptions.find((domain) => domain.id === targetValue.replace("domain:", ""))
-        : undefined,
-    [domainOptions, targetValue],
-  );
-  const selectedDistributor = useMemo(
-    () =>
-      targetValue.startsWith("distributor:")
-        ? distributorOptions.find(
-            (distributor) => distributor.id === targetValue.replace("distributor:", ""),
-          )
-        : undefined,
-    [distributorOptions, targetValue],
+    () => domainOptions.find((domain) => domain.id === selectedDomainId),
+    [domainOptions, selectedDomainId],
   );
 
   async function submitChargeRequest() {
     const numericAmount = Number(amount.replaceAll(",", ""));
 
-    if (!targetValue) {
-      setMessage("먼저 연동 도메인 또는 하부계정을 선택해주세요.");
+    if (!selectedDomain?.name) {
+      setMessage("먼저 연동 도메인을 선택해주세요.");
       return;
     }
 
@@ -82,9 +58,7 @@ export function ApiChargeTestBoard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           externalId,
-          domainId: selectedDomain?.id,
           domainName: selectedDomain?.name,
-          distributorId: selectedDistributor?.id,
           depositorName,
           amount: numericAmount,
           bankName,
@@ -129,32 +103,19 @@ export function ApiChargeTestBoard({
             <div className="grid gap-4 md:grid-cols-2">
               <label className="block md:col-span-2">
                 <span className="mb-2 block text-sm font-semibold text-white/78">
-                  연동 대상
+                  연동 도메인
                 </span>
                 <select
-                  value={targetValue}
-                  onChange={(event) => setTargetValue(event.target.value)}
+                  value={selectedDomainId}
+                  onChange={(event) => setSelectedDomainId(event.target.value)}
                   className="h-12 w-full rounded-xl border border-white/12 bg-black/45 px-4 text-sm text-white outline-none focus:border-cyan-300/50"
                 >
-                  <option value="">연동 대상 선택</option>
-                  {domainOptions.length ? (
-                    <optgroup label="연결 도메인">
-                      {domainOptions.map((domain) => (
-                        <option key={domain.id} value={`domain:${domain.id}`}>
-                          {domain.name} / {domain.distributorName}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ) : null}
-                  {distributorOptions.length ? (
-                    <optgroup label="하부계정 테스트">
-                      {distributorOptions.map((distributor) => (
-                        <option key={distributor.id} value={`distributor:${distributor.id}`}>
-                          {distributor.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ) : null}
+                  <option value="">연동 도메인 선택</option>
+                  {domainOptions.map((domain) => (
+                    <option key={domain.id} value={domain.id}>
+                      {domain.name} / {domain.distributorName}
+                    </option>
+                  ))}
                 </select>
               </label>
 
@@ -219,7 +180,7 @@ export function ApiChargeTestBoard({
               <button
                 type="button"
                 onClick={() => void submitChargeRequest()}
-                disabled={isSending || !targetValue}
+                disabled={isSending || !selectedDomainId}
                 className="rounded-2xl bg-fuchsia-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-fuchsia-400 disabled:cursor-not-allowed disabled:opacity-45"
               >
                 API로 충전신청 보내기
