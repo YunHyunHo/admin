@@ -25,6 +25,7 @@ type FeeRateRow = {
 type DashboardPartnerSummaryRow = {
   entity_id: string;
   entity_name: string;
+  entity_login_id: string | null;
   entity_type: "DOMAIN" | "DISTRIBUTOR" | "TOP_DISTRIBUTOR";
   charge_total: string;
   fee_total: string;
@@ -35,6 +36,7 @@ type DashboardPartnerSummaryRow = {
 export type DashboardPartnerSummary = {
   id: string;
   name: string;
+  loginId: string;
   type: "DOMAIN" | "DISTRIBUTOR" | "TOP_DISTRIBUTOR";
   chargeTotal: number;
   feeTotal: number;
@@ -134,7 +136,8 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
           dist.id,
           dist.name,
           dist.current_balance,
-          dist.admin_id
+          dist.admin_id,
+          dist_admin.login_id
         from distributors dist
         left join admins dist_admin on dist_admin.id = dist.admin_id
         where dist.status = 'ACTIVE'
@@ -144,6 +147,7 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
         select
           concat('domain:', dom.id::text) as entity_id,
           dom.domain_name as entity_name,
+          dist.login_id as entity_login_id,
           'DOMAIN'::text as entity_type,
           dist.id as distributor_id,
           dist.current_balance
@@ -156,6 +160,7 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
         select
           concat('distributor:', dist.id::text) as entity_id,
           dist.name as entity_name,
+          dist.login_id as entity_login_id,
           case
             when dist_admin.role = 'TOP_DISTRIBUTOR' then 'TOP_DISTRIBUTOR'::text
             else 'DISTRIBUTOR'::text
@@ -264,6 +269,7 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
       select
         entity.entity_id,
         entity.entity_name,
+        entity.entity_login_id,
         entity.entity_type,
         charge_totals.charge_total,
         fee_totals.fee_total,
@@ -281,6 +287,7 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
   return result.rows.map((row) => ({
     id: row.entity_id,
     name: row.entity_name,
+    loginId: row.entity_login_id ?? "-",
     type: row.entity_type,
     chargeTotal: Number(row.charge_total),
     feeTotal: Number(row.fee_total),
