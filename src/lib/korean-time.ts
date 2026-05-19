@@ -103,4 +103,27 @@ export function getKoreanRelativeIsoDate(daysOffset: number) {
   return getKoreanIsoDate(date);
 }
 
+export function getCurrentKoreanMonthRange(value: DateInput = new Date()) {
+  const parts = getKoreanDateParts(value);
+
+  if (!parts) {
+    return {
+      startDate: "0000-00-01",
+      endDateExclusive: "0000-01-01",
+    };
+  }
+
+  const year = Number(parts.year);
+  const month = Number(parts.month);
+  const nextMonthYear = month === 12 ? year + 1 : year;
+  const nextMonth = month === 12 ? 1 : month + 1;
+
+  return {
+    startDate: `${parts.year}-${parts.month}-01`,
+    endDateExclusive: `${String(nextMonthYear).padStart(4, "0")}-${String(
+      nextMonth,
+    ).padStart(2, "0")}-01`,
+  };
+}
+
 export { KOREA_TIME_ZONE };

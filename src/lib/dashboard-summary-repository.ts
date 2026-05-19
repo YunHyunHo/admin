@@ -2,6 +2,7 @@ import { getDashboardSummary } from "@/lib/mock-report-service";
 import { getAdminSettingsFromCookie } from "@/lib/settings-cookie";
 import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
 import { hasDatabaseUrl, query } from "@/lib/db";
+import { getCurrentKoreanMonthRange } from "@/lib/korean-time";
 import { getScopedDistributorCondition } from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
 
@@ -124,6 +125,8 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
   }
 
   const scope = getScopedDistributorCondition(user);
+  const scopeSql = scope.sql.replaceAll("$1", "$3");
+  const { startDate, endDateExclusive } = getCurrentKoreanMonthRange();
   const result = await query<DashboardPartnerSummaryRow>(
     `
       with scoped_distributors as (
@@ -135,7 +138,7 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
         from distributors dist
         left join admins dist_admin on dist_admin.id = dist.admin_id
         where dist.status = 'ACTIVE'
-          ${scope.sql}
+          ${scopeSql}
       ),
       scoped_entities as (
         select
@@ -178,6 +181,9 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
           or (entity.entity_type in ('DISTRIBUTOR', 'TOP_DISTRIBUTOR') and cr.distributor_id = entity.distributor_id and cr.domain_id is null)
         )
           and cr.status in ('APPROVED', 'COMPLETED')
+          and cr.processed_at is not null
+          and (cr.processed_at at time zone 'Asia/Seoul') >= $1::date
+          and (cr.processed_at at time zone 'Asia/Seoul') < $2::date
         group by entity.entity_id
       ),
       fee_totals as (
@@ -190,18 +196,37 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
           or (entity.entity_type in ('DISTRIBUTOR', 'TOP_DISTRIBUTOR') and co.distributor_id = entity.distributor_id and co.domain_id is null)
         )
           and co.status in ('APPROVED', 'COMPLETED')
+          and (co.created_at at time zone 'Asia/Seoul') >= $1::date
+          and (co.created_at at time zone 'Asia/Seoul') < $2::date
         group by entity.entity_id
       ),
       exchange_totals as (
         select
           entity.entity_id,
-          coalesce(sum(er.amount), 0)::text as exchange_total
+          coalesce(sum(summary.amount), 0)::text as exchange_total
         from scoped_entities entity
-        left join exchange_requests er on (
-          (entity.entity_type = 'DOMAIN' and er.domain_id::text = replace(entity.entity_id, 'domain:', ''))
-          or (entity.entity_type in ('DISTRIBUTOR', 'TOP_DISTRIBUTOR') and er.distributor_id = entity.distributor_id and er.domain_id is null)
-        )
-          and er.status in ('APPROVED', 'COMPLETED')
+        left join (
+          select
+            concat('domain:', er.domain_id::text) as entity_id,
+            er.amount
+          from exchange_requests er
+          where er.domain_id is not null
+            and er.status in ('APPROVED', 'COMPLETED')
+            and er.processed_at is not null
+            and (er.processed_at at time zone 'Asia/Seoul') >= $1::date
+            and (er.processed_at at time zone 'Asia/Seoul') < $2::date
+
+          union all
+
+          select
+            concat('distributor:', dw.distributor_id::text) as entity_id,
+            dw.request_amount as amount
+          from distributor_withdrawals dw
+          where dw.status in ('APPROVED', 'COMPLETED')
+            and dw.processed_at is not null
+            and (dw.processed_at at time zone 'Asia/Seoul') >= $1::date
+            and (dw.processed_at at time zone 'Asia/Seoul') < $2::date
+        ) summary on summary.entity_id = entity.entity_id
         group by entity.entity_id
       )
       select
@@ -218,7 +243,7 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
       join exchange_totals on exchange_totals.entity_id = entity.entity_id
       order by entity.entity_name asc
     `,
-    scope.values,
+    [startDate, endDateExclusive, ...scope.values],
   );
 
   return result.rows.map((row) => ({
