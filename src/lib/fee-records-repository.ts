@@ -71,6 +71,7 @@ export async function getFeeRecordsForUser(
     return getFeeRecords(user.companyName, startDate, endDate, state, settings);
   }
   const scope = getScopedDistributorCondition(user);
+  const scopeSql = scope.sql.replaceAll("$1", "$3");
 
   const result = await query<FeeRecordDbRow>(
     `
@@ -98,7 +99,7 @@ export async function getFeeRecordsForUser(
         co.status in ('APPROVED', 'COMPLETED')
         and co.created_at >= $1::date
         and co.created_at < ($2::date + interval '1 day')
-        ${scope.sql.replace("$1", "$3")}
+        ${scopeSql}
       order by co.created_at desc
       limit ${DEFAULT_ROW_LIMIT}
     `,
