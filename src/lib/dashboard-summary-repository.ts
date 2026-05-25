@@ -2,7 +2,7 @@ import { getDashboardSummary } from "@/lib/mock-report-service";
 import { getAdminSettingsFromCookie } from "@/lib/settings-cookie";
 import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
 import { hasDatabaseUrl, query } from "@/lib/db";
-import { getCurrentKoreanMonthRange } from "@/lib/korean-time";
+import { getCurrentKoreanDayRange } from "@/lib/korean-time";
 import { getScopedDistributorCondition } from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
 
@@ -151,7 +151,7 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
           }
         : getScopedDistributorCondition(user);
   const scopeSql = dashboardScope.sql.replaceAll("$1", "$3");
-  const { startDate, endDateExclusive } = getCurrentKoreanMonthRange();
+  const { startDate, endDateExclusive } = getCurrentKoreanDayRange();
   const result = await query<DashboardPartnerSummaryRow>(
     `
       with scoped_distributors as (

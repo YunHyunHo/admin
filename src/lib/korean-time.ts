@@ -126,4 +126,23 @@ export function getCurrentKoreanMonthRange(value: DateInput = new Date()) {
   };
 }
 
+export function getCurrentKoreanDayRange(value: DateInput = new Date()) {
+  const startDate = getKoreanIsoDate(value);
+
+  if (startDate === "0000-00-00") {
+    return {
+      startDate: "0000-00-00",
+      endDateExclusive: "0000-00-01",
+    };
+  }
+
+  const nextDate = new Date(`${startDate}T00:00:00+09:00`);
+  nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+
+  return {
+    startDate,
+    endDateExclusive: getKoreanIsoDate(nextDate),
+  };
+}
+
 export { KOREA_TIME_ZONE };
