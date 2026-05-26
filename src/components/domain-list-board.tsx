@@ -220,33 +220,42 @@ export function DomainListBoard({
   }
 
   return (
-    <section className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,_rgba(18,18,18,0.95)_0%,_rgba(14,14,16,0.98)_100%)] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.34)] sm:p-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-2xl font-semibold tracking-[-0.04em] text-white">
-          도메인 리스트
-        </h2>
+    <section className="rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
+      <div className="flex flex-col gap-3 border-b border-white/8 px-5 py-6 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-[0.26em] text-cyan-300/55">
+            Domain Management
+          </p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">
+            도메인 리스트
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-white/52">
+            도메인 운영 계정, 출금 계좌, 보유금, 충전거래 허용 상태를 한 화면에서 관리합니다.
+          </p>
+        </div>
         <button
           type="button"
           onClick={() => {
             setCreateModalMessage("");
             setIsCreateModalOpen(true);
           }}
-          className="h-12 rounded-xl bg-fuchsia-600 px-5 text-sm font-semibold text-white transition hover:bg-fuchsia-500"
+          className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
         >
           도메인 추가
         </button>
       </div>
 
-      {message ? (
-        <p className="mt-4 rounded-2xl border border-cyan-300/16 bg-cyan-400/8 px-4 py-3 text-sm text-cyan-50/86">
-          {message}
-        </p>
-      ) : null}
+      <div className="p-5 sm:p-6">
+        {message ? (
+          <div className="mb-4 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-100">
+            {message}
+          </div>
+        ) : null}
 
-      <div className="mt-4 overflow-hidden border border-white/24 bg-black/10">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1500px] border-collapse text-sm">
-            <thead className="bg-black/72 text-white">
+        <div className="overflow-hidden rounded-[26px] border border-white/8 bg-black/18">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1500px] border-collapse text-sm">
+              <thead className="bg-black/48 text-white/72">
               <tr>
                 {[
                   "본사",
@@ -265,7 +274,7 @@ export function DomainListBoard({
                 ].map((head) => (
                   <th
                     key={head}
-                    className="border border-white/24 px-4 py-4 text-center text-sm font-semibold text-white/90"
+                    className="border-b border-white/8 px-4 py-4 text-center text-sm font-semibold"
                   >
                     {head}
                   </th>
@@ -276,24 +285,24 @@ export function DomainListBoard({
               {visibleRows.map((row) => (
                 <tr
                   key={row.id}
-                  className="border-b border-white/16 bg-white/[0.035] text-white/88 last:border-b-0"
+                  className="border-b border-white/8 text-white/76 last:border-b-0"
                 >
-                  <td className="border border-white/18 px-4 py-4 text-center">
+                  <td className="px-4 py-5 text-center">
                     {row.headquarters}
                   </td>
-                  <td className="border border-white/18 px-4 py-4 text-center">
+                  <td className="px-4 py-5 text-center">
                     {row.topDistributor}
                   </td>
-                  <td className="border border-white/18 px-4 py-4 text-center">
+                  <td className="px-4 py-5 text-center">
                     {row.distributor}
                   </td>
-                  <td className="border border-white/18 px-4 py-4 text-center">
+                  <td className="px-4 py-5 text-center">
                     {row.agency}
                   </td>
-                  <td className="border border-white/18 px-4 py-4 text-center">
+                  <td className="px-4 py-5 text-center">
                     {row.loginId}
                   </td>
-                  <td className="border border-white/18 px-4 py-4 text-center">
+                  <td className="px-4 py-5 text-center">
                     <button
                       type="button"
                       onClick={() =>
@@ -302,56 +311,57 @@ export function DomainListBoard({
                           [row.id]: !current[row.id],
                         }))
                       }
-                      className="rounded-lg bg-teal-400 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-teal-300"
+                      className="rounded-xl bg-cyan-500/18 px-3 py-2 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-500/28"
                     >
                       {revealedPasswords[row.id] ? row.visiblePassword : "비밀번호 확인"}
                     </button>
                   </td>
-                  <td className="border border-white/18 px-4 py-4 text-center font-semibold">
+                  <td className="px-4 py-5 text-center font-semibold text-white">
                     {row.companyName}
                   </td>
-                  <td className="border border-white/18 px-4 py-4 text-center">
+                  <td className="px-4 py-5 text-center">
                     {row.url}
                   </td>
-                  <td className="border border-white/18 px-4 py-4">
-                    <div className="space-y-1 text-center text-sm">
+                  <td className="px-4 py-5">
+                    <div className="rounded-2xl border border-white/8 bg-white/[0.035] px-3 py-3 text-center text-xs leading-5 text-white/68">
                       <div>{row.bankName}</div>
                       <div>{row.accountHolder}</div>
                       <div>{row.accountNumber}</div>
                     </div>
                   </td>
-                  <td className="border border-white/18 px-4 py-4 text-center font-semibold">
+                  <td className="px-4 py-5 text-center font-semibold text-white">
                     {formatKoreanWon(row.balance)}
                   </td>
-                  <td className="border border-white/18 px-4 py-4 text-center">
-                    <button
-                      type="button"
-                      onClick={() => handleToggle(row)}
-                      disabled={processingId === row.id}
-                      className={`h-8 w-16 rounded-full px-1 transition ${
-                        row.depositEnabled ? "bg-white/90" : "bg-white/20"
+                  <td className="px-4 py-5 text-center">
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                        row.depositEnabled
+                          ? "bg-emerald-400/12 text-emerald-200"
+                          : "bg-white/8 text-white/48"
                       }`}
                     >
-                      <span
-                        className={`block h-6 w-6 rounded-full bg-white shadow transition ${
-                          row.depositEnabled
-                            ? "translate-x-8 bg-cyan-400"
-                            : "translate-x-0 bg-white/80"
-                        }`}
-                      />
-                    </button>
+                      {row.depositEnabled ? "허용" : "중지"}
+                    </span>
                   </td>
-                  <td className="border border-white/18 px-4 py-4 text-center">
+                  <td className="px-4 py-5 text-center text-white/60">
                     {row.createdAt}
                   </td>
-                  <td className="border border-white/18 px-4 py-4 text-center">
+                  <td className="px-4 py-5 text-center">
                     <div className="flex flex-col items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleToggle(row)}
+                        disabled={processingId === row.id}
+                        className="rounded-xl bg-white/8 px-3 py-2 text-xs font-semibold text-white/70 transition hover:bg-white/12 disabled:cursor-not-allowed disabled:bg-white/6 disabled:text-white/34"
+                      >
+                        {processingId === row.id ? "처리중" : row.depositEnabled ? "중지" : "허용"}
+                      </button>
                       <button
                         type="button"
                         onClick={() => {
                           window.location.href = "/dashboard/accounts";
                         }}
-                        className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-600"
+                        className="rounded-xl bg-cyan-500/18 px-3 py-2 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-500/28"
                       >
                         계좌관리
                       </button>
@@ -359,7 +369,7 @@ export function DomainListBoard({
                         type="button"
                         onClick={() => handleDelete(row)}
                         disabled={processingId === row.id}
-                        className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/34"
+                        className="rounded-xl bg-red-500/18 px-3 py-2 text-xs font-semibold text-red-100 transition hover:bg-red-500/28 disabled:cursor-not-allowed disabled:bg-white/6 disabled:text-white/34"
                       >
                         {processingId === row.id ? "처리중" : "삭제"}
                       </button>
@@ -368,34 +378,35 @@ export function DomainListBoard({
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
-
-        {rows.length > rowsPerPage ? (
-          <div className="flex items-center justify-center gap-2 border-t border-white/18 px-4 py-5">
-            {Array.from({ length: pageCount }, (_, index) => index + 1).map(
-              (pageNumber) => (
-                <button
-                  key={pageNumber}
-                  type="button"
-                  onClick={() => setPage(pageNumber)}
-                  className={`h-10 min-w-10 rounded-xl px-3 text-lg font-semibold ${
-                    page === pageNumber
-                      ? "bg-white text-slate-950"
-                      : "bg-black text-white"
-                  }`}
-                >
-                  {pageNumber}
-                </button>
-              ),
-            )}
+            </table>
           </div>
-        ) : null}
+
+          {rows.length > rowsPerPage ? (
+            <div className="flex items-center justify-center gap-2 border-t border-white/8 px-4 py-5">
+              {Array.from({ length: pageCount }, (_, index) => index + 1).map(
+                (pageNumber) => (
+                  <button
+                    key={pageNumber}
+                    type="button"
+                    onClick={() => setPage(pageNumber)}
+                    className={`h-10 min-w-10 rounded-xl px-3 text-lg font-semibold ${
+                      page === pageNumber
+                        ? "bg-white text-slate-950"
+                        : "bg-black text-white"
+                    }`}
+                  >
+                    {pageNumber}
+                  </button>
+                ),
+              )}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {isCreateModalOpen ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/72 px-4">
-          <div className="w-full max-w-[490px] rounded-lg bg-white p-6 text-slate-950 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-[490px] rounded-[28px] border border-white/10 bg-white p-6 text-slate-950 shadow-[0_28px_120px_rgba(0,0,0,0.58)]">
             <h3 className="text-2xl font-semibold tracking-[-0.04em]">도메인 생성</h3>
 
             <div className="mt-9 space-y-6">
@@ -403,7 +414,7 @@ export function DomainListBoard({
               <select
                 value={selectedOwnerId}
                 onChange={(event) => setSelectedOwnerId(event.target.value)}
-                className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none"
+                className="h-14 w-full rounded-xl border border-slate-300 px-5 text-sm outline-none"
               >
                 <option value="">총판 선택</option>
                 {options.map((option) => (
@@ -416,38 +427,38 @@ export function DomainListBoard({
                 value={url}
                 onChange={(event) => setUrl(event.target.value)}
                 placeholder="URL"
-                className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
+                className="h-14 w-full rounded-xl border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
               />
               <input
                 value={domainName}
                 onChange={(event) => setDomainName(event.target.value)}
                 placeholder="도메인 이름"
-                className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
+                className="h-14 w-full rounded-xl border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
               />
               <input
                 value={loginId}
                 onChange={(event) => setLoginId(event.target.value)}
                 placeholder="로그인 아이디"
-                className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
+                className="h-14 w-full rounded-xl border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
               />
               <input
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="비밀번호"
-                className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
+                className="h-14 w-full rounded-xl border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
               />
               <input
                 type="password"
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 placeholder="비밀번호 확인"
-                className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
+                className="h-14 w-full rounded-xl border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
               />
               <select
                 value={bankName}
                 onChange={(event) => setBankName(event.target.value)}
-                className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none"
+                className="h-14 w-full rounded-xl border border-slate-300 px-5 text-sm outline-none"
               >
                 <option value="">은행 선택</option>
                 {bankOptions.map((option) => (
@@ -460,13 +471,13 @@ export function DomainListBoard({
                 value={accountHolder}
                 onChange={(event) => setAccountHolder(event.target.value)}
                 placeholder="예금주"
-                className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
+                className="h-14 w-full rounded-xl border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
               />
               <input
                 value={accountNumber}
                 onChange={(event) => setAccountNumber(event.target.value)}
                 placeholder="계좌번호 [- 넣어서 입력]"
-                className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
+                className="h-14 w-full rounded-xl border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
               />
             </div>
 
@@ -475,14 +486,14 @@ export function DomainListBoard({
                 type="button"
                 onClick={handleCreate}
                 disabled={isCreating}
-                className="rounded bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+                className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 {isCreating ? "생성 중" : "생성"}
               </button>
               <button
                 type="button"
                 onClick={closeCreateModal}
-                className="rounded bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
+                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
               >
                 취소
               </button>
