@@ -65,7 +65,7 @@ function getPasswordCipherKey() {
   return createHash("sha256").update(secret).digest();
 }
 
-function encryptVisiblePassword(password: string) {
+export function encryptVisiblePassword(password: string) {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", getPasswordCipherKey(), iv);
   const encrypted = Buffer.concat([
