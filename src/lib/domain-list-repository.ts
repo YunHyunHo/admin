@@ -1,7 +1,8 @@
 import { hashPassword } from "@/lib/password";
 import { encryptVisiblePassword, getAllAdminAccounts } from "@/lib/admin-accounts";
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
-import { getDomainBoardData } from "@/lib/domain-management-repository";
+import { getDomainManagementRows } from "@/lib/domain-management-repository";
+import { getScopedDistributorCondition } from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
 
 export type DomainListOwnerOption = {
@@ -66,8 +67,20 @@ function isUuid(value: string | undefined) {
 }
 
 export async function getDomainListBoardData(user: SessionUser) {
-  const [{ rows, distributorOptions }, detailedAccounts] = await Promise.all([
-    getDomainBoardData([], user),
+  const scope = getScopedDistributorCondition(user);
+  const [rows, distributorOptions, detailedAccounts] = await Promise.all([
+    getDomainManagementRows([], user),
+    query<DomainListOwnerOption>(
+      `
+        select dist.id::text as id, dist.name
+        from distributors dist
+        where dist.status = 'ACTIVE'
+          and dist.parent_distributor_id is not null
+          ${scope.sql}
+        order by dist.name asc
+      `,
+      scope.values,
+    ),
     getAllAdminAccounts(user),
   ]);
 
@@ -101,7 +114,7 @@ export async function getDomainListBoardData(user: SessionUser) {
 
   return {
     rows: listRows,
-    ownerOptions: distributorOptions,
+    ownerOptions: distributorOptions.rows,
   };
 }
 
