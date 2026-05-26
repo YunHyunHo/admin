@@ -6,9 +6,12 @@ import { getKoreanNowStamp } from "@/lib/korean-time";
 
 type FeeRateRow = {
   id: string;
+  domainId?: string;
   distributorId?: string;
   domainName: string;
   totalRate: number;
+  companyName: string;
+  companyRate: number;
   topDistributor: string;
   topDistributorRate: number;
   distributor: string;
@@ -24,7 +27,7 @@ type FeeRateSettingsBoardProps = {
 };
 
 const rowsPerPage = 10;
-const rateKeys = ["totalRate"] as const;
+const rateKeys = ["companyRate", "topDistributorRate", "distributorRate"] as const;
 
 type RateKey = (typeof rateKeys)[number];
 type DraftRates = Pick<FeeRateRow, RateKey>;
@@ -47,7 +50,9 @@ function clampRate(value: number) {
 
 function getDraftRates(row: FeeRateRow): DraftRates {
   return {
-    totalRate: row.totalRate,
+    companyRate: row.companyRate,
+    topDistributorRate: row.topDistributorRate,
+    distributorRate: row.distributorRate,
   };
 }
 
@@ -120,10 +125,11 @@ export function FeeRateSettingsBoard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: row.id,
+          domainId: row.domainId ?? row.id,
           distributorId: row.distributorId,
-          totalRate: draft.totalRate,
-          topDistributorRate: draft.totalRate,
-          distributorRate: 0,
+          companyRate: draft.companyRate,
+          topDistributorRate: draft.topDistributorRate,
+          distributorRate: draft.distributorRate,
         }),
       });
       const data = (await response.json()) as {
@@ -147,8 +153,13 @@ export function FeeRateSettingsBoard({
                 ? {
                   ...currentRow,
                   ...draft,
-                  topDistributorRate: draft.totalRate,
-                  distributorRate: 0,
+                  totalRate: Number(
+                    (
+                      draft.companyRate +
+                      draft.topDistributorRate +
+                      draft.distributorRate
+                    ).toFixed(2),
+                  ),
                   updatedAt: getNowStamp(),
                 }
               : currentRow,
@@ -176,7 +187,7 @@ export function FeeRateSettingsBoard({
             수수료 관리
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-white/52">
-            하부계정별 총 수수료 요율을 관리하는 화면입니다.
+            도메인 생성에서 만든 업체(도메인) 계정 기준으로 본사, 상위총판, 총판 수수료율을 각각 관리합니다.
           </p>
         </div>
 
@@ -204,21 +215,23 @@ export function FeeRateSettingsBoard({
                 setSearch(event.target.value);
                 setPage(1);
               }}
-              placeholder="총판 검색"
+              placeholder="도메인 또는 총판 검색"
               className="h-12 w-full rounded-2xl border border-white/10 bg-white/[0.035] px-4 text-sm text-white outline-none transition placeholder:text-white/34 focus:border-cyan-300/40"
             />
           </label>
 
           <div className="overflow-x-auto rounded-[26px] border border-white/8 bg-black/18">
-            <table className="w-full min-w-[1040px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[1480px] border-collapse text-left text-sm">
               <thead className="bg-black/52 text-white/72">
                 <tr>
                   {[
+                    "업체(도메인)",
+                    "업체 총 수수료",
+                    "본사",
                     "상위총판",
                     "총판",
-                    "수수료율",
                     "수정일",
-                    "관리",
+                    "비율수정",
                   ].map((header, index) => (
                     <th
                       key={`${header}-${index}`}
@@ -240,19 +253,51 @@ export function FeeRateSettingsBoard({
                       className="border-b border-white/8 text-white/76 last:border-b-0 hover:bg-white/[0.025]"
                     >
                       <td className="px-4 py-4 text-center font-semibold text-white">
-                        {row.topDistributor}
+                        {row.domainName}
                       </td>
                       <td className="px-4 py-4 text-center font-semibold text-white">
-                        {row.distributor}
+                        {(
+                          draft.companyRate +
+                          draft.topDistributorRate +
+                          draft.distributorRate
+                        ).toFixed(2)}
+                        %
                       </td>
                       <td className="px-4 py-4 text-center">
-                        <RateInput
-                          value={draft.totalRate}
-                          disabled={!canManageFeeRates}
-                          onChange={(value) =>
-                            updateDraftRate(row.id, "totalRate", value)
-                          }
-                        />
+                        <div className="flex items-center justify-center gap-2">
+                          <span className="text-white">{row.companyName}</span>
+                          <RateInput
+                            value={draft.companyRate}
+                            disabled={!canManageFeeRates}
+                            onChange={(value) =>
+                              updateDraftRate(row.id, "companyRate", value)
+                            }
+                          />
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-center font-semibold text-white">
+                        <div className="flex items-center justify-center gap-2">
+                          <span>{row.topDistributor}</span>
+                          <RateInput
+                            value={draft.topDistributorRate}
+                            disabled={!canManageFeeRates}
+                            onChange={(value) =>
+                              updateDraftRate(row.id, "topDistributorRate", value)
+                            }
+                          />
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-center font-semibold text-white">
+                        <div className="flex items-center justify-center gap-2">
+                          <span>{row.distributor}</span>
+                          <RateInput
+                            value={draft.distributorRate}
+                            disabled={!canManageFeeRates}
+                            onChange={(value) =>
+                              updateDraftRate(row.id, "distributorRate", value)
+                            }
+                          />
+                        </div>
                       </td>
                       <td className="px-4 py-4 text-center text-white/52">
                         {row.updatedAt}

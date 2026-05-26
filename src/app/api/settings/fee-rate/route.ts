@@ -39,30 +39,30 @@ export async function POST(request: Request) {
 
   const body = (await request.json()) as {
     id?: string;
+    domainId?: string;
     distributorId?: string;
-    feeRate?: number | string;
-    totalRate?: number | string;
+    companyRate?: number | string;
     topDistributorRate?: number | string;
     distributorRate?: number | string;
   };
-  const totalRate = Number(body.totalRate ?? body.feeRate);
-  const topDistributorRate = Number(body.topDistributorRate ?? body.totalRate ?? body.feeRate);
-  const distributorRate = Number(body.distributorRate ?? 0);
+  const companyRate = Number(body.companyRate);
+  const topDistributorRate = Number(body.topDistributorRate);
+  const distributorRate = Number(body.distributorRate);
+  const totalRate = companyRate + topDistributorRate + distributorRate;
 
   if (
-    !Number.isFinite(totalRate) ||
+    !Number.isFinite(companyRate) ||
     !Number.isFinite(topDistributorRate) ||
     !Number.isFinite(distributorRate) ||
-    totalRate < 0 ||
+    companyRate < 0 ||
     topDistributorRate < 0 ||
     distributorRate < 0 ||
-    totalRate > 100 ||
+    companyRate > 100 ||
     topDistributorRate > 100 ||
-    distributorRate > 100 ||
-    Number((topDistributorRate + distributorRate).toFixed(2)) !== Number(totalRate.toFixed(2))
+    distributorRate > 100
   ) {
     return NextResponse.json(
-      { message: "수수료 요율과 배분 합계를 확인해주세요." },
+      { message: "수수료 요율 값을 확인해주세요." },
       { status: 400 },
     );
   }
@@ -70,9 +70,9 @@ export async function POST(request: Request) {
   if (hasDatabaseUrl()) {
     await saveFeeRateSettings({
       user,
-      targetId: body.id,
+      domainId: body.domainId ?? body.id,
       distributorId: body.distributorId,
-      totalRate,
+      companyRate,
       topDistributorRate,
       distributorRate,
     });

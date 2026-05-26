@@ -2,16 +2,17 @@ import { getFeeRateByCompanyFromSettings } from "@/lib/charge-utils";
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
 import { formatKoreanDateTime } from "@/lib/korean-time";
 import { getScopedDistributorCondition } from "@/lib/master-scope";
-import {
-  getAdminSettingsFromCookie,
-} from "@/lib/settings-cookie";
+import { getAdminSettingsFromCookie } from "@/lib/settings-cookie";
 import type { SessionUser } from "@/lib/auth";
 
 export type FeeRateSettingsRow = {
   id: string;
+  domainId?: string;
   distributorId?: string;
   domainName: string;
   totalRate: number;
+  companyName: string;
+  companyRate: number;
   topDistributor: string;
   topDistributorRate: number;
   distributor: string;
@@ -21,9 +22,10 @@ export type FeeRateSettingsRow = {
 
 type FeeRateDbRow = {
   id: string;
+  domain_id: string | null;
   distributor_id: string | null;
   distributor_name: string | null;
-  master_name: string | null;
+  top_distributor_name: string | null;
   domain_name: string | null;
   company_name: string | null;
   company_rate: string;
@@ -36,20 +38,35 @@ function formatStamp(value: Date | string) {
   return formatKoreanDateTime(value);
 }
 
-function getTotalRate(row: Pick<FeeRateDbRow, "company_rate" | "distributor_rate" | "agency_rate">) {
-  return Number(row.company_rate) + Number(row.distributor_rate) + Number(row.agency_rate);
+function getTotalRate(
+  row: Pick<FeeRateDbRow, "company_rate" | "distributor_rate" | "agency_rate">,
+) {
+  return (
+    Number(row.company_rate) +
+    Number(row.distributor_rate) +
+    Number(row.agency_rate)
+  );
 }
 
 function toSettingsRow(row: FeeRateDbRow): FeeRateSettingsRow {
+  const hasSubDistributor = Boolean(
+    row.top_distributor_name &&
+      row.distributor_name &&
+      row.top_distributor_name !== row.distributor_name,
+  );
+
   return {
     id: row.id,
+    domainId: row.domain_id ?? undefined,
     distributorId: row.distributor_id ?? undefined,
-    domainName: row.distributor_name ?? "하부계정 없음",
+    domainName: row.domain_name ?? row.company_name ?? "도메인 없음",
     totalRate: Number(getTotalRate(row).toFixed(2)),
-    topDistributor: row.master_name ?? "마스터 관리자",
-    topDistributorRate: Number(row.company_rate),
-    distributor: row.distributor_name ?? "하부계정 없음",
-    distributorRate: Number(row.distributor_rate),
+    companyName: "본사",
+    companyRate: Number(row.company_rate),
+    topDistributor: row.top_distributor_name ?? row.distributor_name ?? "-",
+    topDistributorRate: Number(row.distributor_rate),
+    distributor: hasSubDistributor ? row.distributor_name ?? "-" : "-",
+    distributorRate: Number(row.agency_rate),
     updatedAt: formatStamp(row.updated_at),
   };
 }
@@ -65,91 +82,92 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
       rows: [
         {
           id: "FEE-FALLBACK",
-          domainName: "하부계정",
+          domainId: undefined,
+          distributorId: undefined,
+          domainName: "도메인",
           totalRate: feeRate,
+          companyName: "본사",
+          companyRate: feeRate,
           topDistributor: user.nickname,
-          topDistributorRate: feeRate,
-          distributor: "하부계정",
+          topDistributorRate: 0,
+          distributor: "-",
           distributorRate: 0,
           updatedAt: "local",
         },
       ],
     };
   }
+
   const scope = getScopedDistributorCondition(user);
 
   const result = await query<FeeRateDbRow>(
     `
       select
-        coalesce(fr.id::text, dist.id::text) as id,
+        dom.id::text as id,
+        dom.id::text as domain_id,
         dist.id::text as distributor_id,
-        dist.name as distributor_name,
-        owner_master.name as master_name,
-        null::text as domain_name,
+        case when parent_dist.id is null then '-' else dist.name end as distributor_name,
+        coalesce(parent_dist.name, dist.name) as top_distributor_name,
+        dom.domain_name,
         c.company_name,
-        coalesce(fr.company_rate, 0.4)::text as company_rate,
-        coalesce(fr.distributor_rate, 0)::text as distributor_rate,
-        coalesce(fr.agency_rate, 0)::text as agency_rate,
-        coalesce(fr.updated_at, dist.updated_at) as updated_at
-      from distributors dist
-      join companies c on c.id = dist.company_id
+        coalesce(fr.company_rate, 0.2)::text as company_rate,
+        coalesce(fr.distributor_rate, 0.1)::text as distributor_rate,
+        coalesce(fr.agency_rate, case when parent_dist.id is null then 0 else 0.1 end)::text as agency_rate,
+        coalesce(fr.updated_at, dom.updated_at, dist.updated_at) as updated_at
+      from domains dom
+      join companies c on c.id = dom.company_id
+      left join distributors dist on dist.id = dom.distributor_id
+      left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
       left join admins dist_admin on dist_admin.id = dist.admin_id
-      left join admins owner_master on owner_master.id = dist_admin.created_by
       left join lateral (
         select *
         from fee_rates fee
-        where
-          fee.starts_at <= now()
+        where fee.starts_at <= now()
           and (fee.ends_at is null or fee.ends_at > now())
           and (
-            fee.distributor_id = dist.id
+            fee.domain_id = dom.id
             or (
-              fee.distributor_id is null
-              and fee.domain_id is null
-              and fee.company_id = dist.company_id
+              fee.domain_id is null
+              and fee.distributor_id = dist.id
+            )
+            or (
+              fee.domain_id is null
+              and fee.distributor_id is null
+              and fee.company_id = dom.company_id
             )
           )
         order by
-          case when fee.distributor_id = dist.id then 0 else 1 end,
+          case
+            when fee.domain_id = dom.id then 0
+            when fee.distributor_id = dist.id then 1
+            else 2
+          end,
           fee.starts_at desc,
           fee.created_at desc
         limit 1
       ) fr on true
-      where dist.status = 'ACTIVE'
+      where dom.status <> 'DELETED'
+        and dist.status = 'ACTIVE'
         ${scope.sql}
-      order by dist.created_at desc
+      order by dom.created_at desc
     `,
     scope.values,
   );
+
   const rows = result.rows.map(toSettingsRow);
-  const fallbackRows =
-    rows.length > 0
-      ? rows
-      : [
-          {
-            id: "FEE-DEFAULT",
-            domainName: "하부계정 없음",
-            totalRate: 0.4,
-            topDistributor: user.nickname,
-            topDistributorRate: 0.4,
-            distributor: "하부계정 없음",
-            distributorRate: 0,
-            updatedAt: "미설정",
-          },
-        ];
 
   return {
-    companyName: "총판",
-    feeRate: fallbackRows[0]?.totalRate ?? 0.4,
-    rows: fallbackRows,
+    companyName: "도메인",
+    feeRate: rows[0]?.totalRate ?? 0.4,
+    rows,
   };
 }
 
 export async function saveFeeRateSettings(input: {
   user: SessionUser;
-  targetId?: string;
+  domainId?: string;
   distributorId?: string;
-  totalRate: number;
+  companyRate: number;
   topDistributorRate: number;
   distributorRate: number;
 }) {
@@ -157,96 +175,59 @@ export async function saveFeeRateSettings(input: {
     return;
   }
 
+  if (!input.domainId) {
+    throw new Error("수수료 적용 도메인을 찾을 수 없습니다.");
+  }
+
   await withTransaction(async (client) => {
-    const currentResult = input.distributorId
-      ? await client.query<{
-          id: string;
-          company_id: string | null;
-          domain_id: string | null;
-          distributor_id: string | null;
-        }>(
-          `
-            select
-              fee.id::text,
-              fee.company_id::text,
-              fee.domain_id::text,
-              fee.distributor_id::text
+    const domainResult = await client.query<{
+      company_id: string;
+      distributor_id: string | null;
+      fee_id: string | null;
+    }>(
+      `
+        select
+          dom.company_id::text,
+          dom.distributor_id::text,
+          (
+            select fee.id::text
             from fee_rates fee
-            join distributors dist on dist.id = fee.distributor_id
-            left join admins dist_admin on dist_admin.id = dist.admin_id
-            where
-              fee.distributor_id = $1::uuid
-              and ${input.user.role === "MASTER" ? "dist_admin.created_by = $2::uuid" : "dist.admin_id = $2::uuid"}
+            join distributors scoped_dist on scoped_dist.id = dom.distributor_id
+            left join admins scoped_admin on scoped_admin.id = scoped_dist.admin_id
+            where fee.domain_id = dom.id
               and fee.starts_at <= now()
               and (fee.ends_at is null or fee.ends_at > now())
+              and ${input.user.role === "MASTER" ? "scoped_admin.created_by = $2::uuid" : "scoped_dist.admin_id = $2::uuid"}
             order by fee.starts_at desc, fee.created_at desc
             limit 1
-            for update
-          `,
-          [input.distributorId, input.user.id],
-        )
-      : await client.query<{
-          id: string;
-          company_id: string | null;
-          domain_id: string | null;
-          distributor_id: string | null;
-        }>(
-          `
-            select id::text, company_id::text, domain_id::text, distributor_id::text
-            from fee_rates
-            where created_by = $1::uuid and starts_at <= now() and (ends_at is null or ends_at > now())
-            order by starts_at desc, created_at desc
-            limit 1
-            for update
-          `,
-          [input.user.id],
-        );
-    const current = currentResult.rows[0];
-    let companyId = current?.company_id ?? null;
-    const domainId = current?.domain_id ?? null;
-    const distributorId = input.distributorId ?? current?.distributor_id ?? null;
+          ) as fee_id
+        from domains dom
+        join distributors dist on dist.id = dom.distributor_id
+        left join admins dist_admin on dist_admin.id = dist.admin_id
+        where dom.id = $1::uuid
+          and dom.status <> 'DELETED'
+          and ${input.user.role === "MASTER" ? "dist_admin.created_by = $2::uuid" : "dist.admin_id = $2::uuid"}
+        limit 1
+        for update
+      `,
+      [input.domainId, input.user.id],
+    );
 
-    if (distributorId && !companyId) {
-      const distributorResult = await client.query<{ company_id: string }>(
-        `
-          select company_id::text
-          from distributors
-          left join admins dist_admin on dist_admin.id = distributors.admin_id
-          where distributors.id = $1::uuid
-            and ${input.user.role === "MASTER" ? "dist_admin.created_by = $2::uuid" : "distributors.admin_id = $2::uuid"}
-        `,
-        [distributorId, input.user.id],
-      );
+    const domain = domainResult.rows[0];
 
-      companyId = distributorResult.rows[0]?.company_id ?? null;
+    if (!domain?.company_id) {
+      throw new Error("수수료 적용 도메인을 찾을 수 없습니다.");
     }
 
-    if (!companyId && !current) {
-      const companyResult = await client.query<{ id: string }>(
-        `
-          insert into companies (company_name, status)
-          values ('전체', 'ACTIVE')
-          on conflict (company_name) do update
-          set status = 'ACTIVE', updated_at = now()
-          returning id::text
-        `,
-      );
-
-      companyId = companyResult.rows[0]?.id ?? null;
-    }
-
-    if (!companyId && !domainId && !distributorId) {
-      throw new Error("수수료 적용 범위를 찾을 수 없습니다.");
-    }
-
-    if (current) {
+    if (domain.fee_id) {
       await client.query(
         `
           update fee_rates
           set ends_at = now(), updated_at = now()
-          where id = $1::uuid and ends_at is null
+          where id = $1::uuid
+            and ends_at is null
         `,
-        [current.id],
+        [domain.fee_id],
       );
     }
 
@@ -262,12 +243,13 @@ export async function saveFeeRateSettings(input: {
           starts_at,
           created_by
         )
-        values ($1::uuid, $2::uuid, $3::uuid, $4, $5, 0, now(), $6::uuid)
+        values ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, now(), $7::uuid)
       `,
       [
-        companyId,
-        domainId,
-        distributorId,
+        domain.company_id,
+        input.domainId,
+        domain.distributor_id,
+        input.companyRate,
         input.topDistributorRate,
         input.distributorRate,
         input.user.id,
