@@ -8,6 +8,7 @@ import type { SessionUser } from "@/lib/auth";
 export type DomainListOwnerOption = {
   id: string;
   name: string;
+  role: "HEADQUARTERS" | "TOP_DISTRIBUTOR" | "DISTRIBUTOR";
 };
 
 type DomainMappedCompanyRow = {
@@ -64,6 +65,8 @@ function normalizeUrl(value: string) {
   return value.trim();
 }
 
+const HEADQUARTERS_OWNER_ID = "HEADQUARTERS";
+
 function isUuid(value: string | undefined) {
   return Boolean(
     value?.match(
@@ -78,11 +81,16 @@ export async function getDomainListBoardData(user: SessionUser) {
     getDomainManagementRows([], user),
     query<DomainListOwnerOption>(
       `
-        select dist.id::text as id, dist.name
+        select
+          dist.id::text as id,
+          dist.name,
+          case
+            when dist.parent_distributor_id is null then 'TOP_DISTRIBUTOR'
+            else 'DISTRIBUTOR'
+          end as role
         from distributors dist
         left join admins dist_admin on dist_admin.id = dist.admin_id
         where dist.status = 'ACTIVE'
-          and dist.parent_distributor_id is not null
           ${scope.sql}
         order by dist.name asc
       `,
@@ -143,7 +151,10 @@ export async function getDomainListBoardData(user: SessionUser) {
 
   return {
     rows: listRows,
-    ownerOptions: distributorOptions.rows,
+    ownerOptions: [
+      { id: HEADQUARTERS_OWNER_ID, name: "본사", role: "HEADQUARTERS" as const },
+      ...distributorOptions.rows,
+    ],
   };
 }
 
@@ -152,8 +163,11 @@ export async function createDomainEntry(input: CreateDomainEntryInput) {
     throw new Error("DATABASE_URL 환경변수를 설정해주세요.");
   }
 
-  if (!isUuid(input.ownerDistributorId)) {
-    throw new Error("총판을 선택해주세요.");
+  const ownerDistributorId =
+    input.ownerDistributorId === HEADQUARTERS_OWNER_ID ? null : input.ownerDistributorId;
+
+  if (ownerDistributorId && !isUuid(ownerDistributorId)) {
+    throw new Error("소속 계정을 선택해주세요.");
   }
 
   const domainName = input.domainName.trim();
@@ -209,19 +223,21 @@ export async function createDomainEntry(input: CreateDomainEntryInput) {
       throw new Error("이미 사용 중인 도메인 이름입니다.");
     }
 
-    const distributorResult = await client.query<{ id: string }>(
-      `
-        select id::text
-        from distributors
-        where id = $1::uuid
-          and status = 'ACTIVE'
-        limit 1
-      `,
-      [input.ownerDistributorId],
-    );
+    if (ownerDistributorId) {
+      const distributorResult = await client.query<{ id: string }>(
+        `
+          select id::text
+          from distributors
+          where id = $1::uuid
+            and status = 'ACTIVE'
+          limit 1
+        `,
+        [ownerDistributorId],
+      );
 
-    if (!distributorResult.rows[0]) {
-      throw new Error("선택한 총판을 찾지 못했습니다.");
+      if (!distributorResult.rows[0]) {
+        throw new Error("선택한 소속 계정을 찾지 못했습니다.");
+      }
     }
 
     const companyResult = await client.query<{ id: string }>(
@@ -279,7 +295,7 @@ export async function createDomainEntry(input: CreateDomainEntryInput) {
         values ($1, $2::uuid, $3::uuid, 'ACTIVE')
         returning id::text
       `,
-      [url, companyId, input.ownerDistributorId],
+      [url, companyId, ownerDistributorId],
     );
 
     const domainId = domainResult.rows[0]?.id;
@@ -311,7 +327,7 @@ export async function createDomainEntry(input: CreateDomainEntryInput) {
       `,
       [
         companyId,
-        input.ownerDistributorId,
+        ownerDistributorId,
         input.bankName.trim(),
         input.accountNumber.trim(),
         input.accountHolder.trim(),

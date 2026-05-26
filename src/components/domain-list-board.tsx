@@ -304,7 +304,7 @@ export function DomainListBoard({
           }}
           className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
         >
-          도메인 추가
+          도메인 생성
         </button>
       </div>
 
@@ -483,10 +483,14 @@ export function DomainListBoard({
                 onChange={(event) => setSelectedOwnerId(event.target.value)}
                 className="h-14 w-full rounded-xl border border-slate-300 px-5 text-sm outline-none"
               >
-                <option value="">총판 선택</option>
+                <option value="">소속 선택</option>
                 {options.map((option) => (
                   <option key={option.id} value={option.id}>
-                    {option.name}
+                    {option.role === "HEADQUARTERS"
+                      ? "본사"
+                      : option.role === "TOP_DISTRIBUTOR"
+                        ? `상위총판 · ${option.name}`
+                        : `총판 · ${option.name}`}
                   </option>
                 ))}
               </select>
