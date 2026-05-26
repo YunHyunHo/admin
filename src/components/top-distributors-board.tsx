@@ -10,6 +10,7 @@ type TopDistributorRow = {
   nickname: string;
   loginId: string;
   password: string;
+  managedCompanies: string[];
   lastLoginAt: string | null;
   createdAt: string;
   status: "ACTIVE" | "SUSPENDED";
@@ -33,6 +34,7 @@ function toRows(accounts: AdminAccountRecord[]): TopDistributorRow[] {
       nickname: account.nickname,
       loginId: account.loginId,
       password: account.visiblePassword,
+      managedCompanies: account.managedCompanies,
       lastLoginAt: account.lastLoginAt,
       createdAt: account.createdAt,
       status: account.status,
@@ -67,6 +69,7 @@ export function TopDistributorsBoard({
   const [createModalMessage, setCreateModalMessage] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [managedCompaniesRow, setManagedCompaniesRow] = useState<TopDistributorRow | null>(null);
 
   const rows = useMemo(() => toRows(accounts), [accounts]);
   const filteredRows = useMemo(() => {
@@ -255,6 +258,7 @@ export function TopDistributorsBoard({
                   "관리자/아이디",
                   "비밀번호",
                   "상위총판",
+                  "관리 업체",
                   "연결 총판 수",
                   "상태",
                   "최근 로그인",
@@ -290,6 +294,15 @@ export function TopDistributorsBoard({
                     <span className="rounded-xl bg-fuchsia-500/78 px-3 py-2 text-xs font-semibold text-white">
                       {row.nickname}
                     </span>
+                  </td>
+                  <td className="px-4 py-4 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setManagedCompaniesRow(row)}
+                      className="rounded-xl border border-cyan-300/24 bg-cyan-400/10 px-3 py-2 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-400/18"
+                    >
+                      {row.managedCompanies.length}개
+                    </button>
                   </td>
                   <td className="px-4 py-4 text-center">
                     {row.distributorsCount ? `${row.distributorsCount}개` : "-"}
@@ -412,6 +425,46 @@ export function TopDistributorsBoard({
                 className="rounded bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
               >
                 취소
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {managedCompaniesRow ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-[460px] rounded-[28px] border border-white/10 bg-white p-6 text-slate-950 shadow-[0_28px_120px_rgba(0,0,0,0.58)]">
+            <h3 className="text-2xl font-semibold tracking-[-0.04em]">
+              관리 업체
+            </h3>
+            <p className="mt-2 text-sm text-slate-500">
+              {managedCompaniesRow.nickname} 계정에 연결된 업체 목록입니다.
+            </p>
+
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="mb-3 flex items-center justify-between text-sm font-semibold text-slate-700">
+                <span>총 업체 수</span>
+                <span>{managedCompaniesRow.managedCompanies.length}개</span>
+              </div>
+              <div className="max-h-[260px] space-y-2 overflow-y-auto">
+                {managedCompaniesRow.managedCompanies.map((company) => (
+                  <div
+                    key={company}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700"
+                  >
+                    {company}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-8 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setManagedCompaniesRow(null)}
+                className="rounded bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+              >
+                닫기
               </button>
             </div>
           </div>
