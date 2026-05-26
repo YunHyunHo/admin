@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { loginPartnerAccount } from "@/lib/partner-auth";
+import { loginPartnerAccount, logPartnerLoginAttempt, normalizePartnerDomain } from "@/lib/partner-auth";
 
 export const runtime = "nodejs";
 
@@ -30,6 +30,10 @@ export async function OPTIONS(request: Request) {
 
 export async function POST(request: Request) {
   const origin = request.headers.get("origin");
+  const ipAddress =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    request.headers.get("x-real-ip");
+  const userAgent = request.headers.get("user-agent");
 
   let payload: LoginPayload;
 
@@ -50,6 +54,15 @@ export async function POST(request: Request) {
   const domain = payload.domain?.trim() ?? "";
 
   if (!loginId || !password || !domain) {
+    await logPartnerLoginAttempt({
+      loginId,
+      domain: normalizePartnerDomain(domain),
+      ok: false,
+      message: "missing_required_fields",
+      ipAddress,
+      userAgent,
+    });
+
     return withCors(
       NextResponse.json(
         { ok: false, message: "loginId, password, domain은 모두 필수입니다." },
@@ -62,6 +75,15 @@ export async function POST(request: Request) {
   const result = await loginPartnerAccount({ loginId, password, domain });
 
   if (!result) {
+    await logPartnerLoginAttempt({
+      loginId,
+      domain: normalizePartnerDomain(domain),
+      ok: false,
+      message: "invalid_credentials_or_domain",
+      ipAddress,
+      userAgent,
+    });
+
     return withCors(
       NextResponse.json(
         { ok: false, message: "아이디 또는 비밀번호가 올바르지 않습니다." },
@@ -70,6 +92,17 @@ export async function POST(request: Request) {
       origin,
     );
   }
+
+  await logPartnerLoginAttempt({
+    loginId,
+    domain: normalizePartnerDomain(domain),
+    ok: true,
+    message: "success",
+    adminId: result.audit.adminId,
+    domainId: result.audit.domainId,
+    ipAddress,
+    userAgent,
+  });
 
   return withCors(
     NextResponse.json({

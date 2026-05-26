@@ -33,6 +33,13 @@ export type PartnerLoginSuccess = {
   };
 };
 
+type PartnerLoginResult = PartnerLoginSuccess & {
+  audit: {
+    adminId: string;
+    domainId: string;
+  };
+};
+
 export type PartnerAccessTokenPayload = {
   sub: string;
   loginId: string;
@@ -130,11 +137,59 @@ export function verifyPartnerAccessToken(token: string) {
   }
 }
 
+export async function logPartnerLoginAttempt(input: {
+  loginId: string;
+  domain: string;
+  ok: boolean;
+  message: string;
+  adminId?: string | null;
+  domainId?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+}) {
+  await query(
+    `
+      insert into admin_audit_logs (
+        admin_id,
+        action,
+        resource_type,
+        resource_id,
+        before_data,
+        after_data,
+        ip_address,
+        user_agent
+      )
+      values (
+        $1::uuid,
+        'partner_login',
+        'partner_auth',
+        $2::uuid,
+        null,
+        $3::jsonb,
+        $4,
+        $5
+      )
+    `,
+    [
+      input.adminId ?? null,
+      input.domainId ?? null,
+      JSON.stringify({
+        loginId: input.loginId,
+        domain: input.domain,
+        ok: input.ok,
+        message: input.message,
+      }),
+      input.ipAddress ?? null,
+      input.userAgent ?? null,
+    ],
+  );
+}
+
 export async function loginPartnerAccount(input: {
   loginId: string;
   password: string;
   domain: string;
-}): Promise<PartnerLoginSuccess | null> {
+}): Promise<PartnerLoginResult | null> {
   const normalizedLoginId = input.loginId.trim();
   const normalizedDomain = normalizePartnerDomain(input.domain);
 
@@ -207,6 +262,10 @@ export async function loginPartnerAccount(input: {
       name: matchedRow.company_name,
       domainId: matchedRow.domain_id,
       domain: normalizePartnerDomain(matchedRow.domain_name),
+    },
+    audit: {
+      adminId: matchedRow.admin_id,
+      domainId: matchedRow.domain_id,
     },
   };
 }
