@@ -67,6 +67,12 @@ export function DomainListBoard({
   const [isCreating, setIsCreating] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
+  const [accountModalRow, setAccountModalRow] = useState<DomainListRow | null>(null);
+  const [accountModalMessage, setAccountModalMessage] = useState("");
+  const [editingBankName, setEditingBankName] = useState("");
+  const [editingAccountHolder, setEditingAccountHolder] = useState("");
+  const [editingAccountNumber, setEditingAccountNumber] = useState("");
+  const [isSavingAccount, setIsSavingAccount] = useState(false);
 
   const pageCount = Math.max(1, Math.ceil(rows.length / rowsPerPage));
   const visibleRows = useMemo(
@@ -86,6 +92,22 @@ export function DomainListBoard({
     setBankName("");
     setAccountHolder("");
     setAccountNumber("");
+  }
+
+  function openAccountModal(row: DomainListRow) {
+    setAccountModalMessage("");
+    setAccountModalRow(row);
+    setEditingBankName(row.bankName === "-" ? "" : row.bankName);
+    setEditingAccountHolder(row.accountHolder === "-" ? "" : row.accountHolder);
+    setEditingAccountNumber(row.accountNumber === "-" ? "" : row.accountNumber);
+  }
+
+  function closeAccountModal() {
+    setAccountModalRow(null);
+    setAccountModalMessage("");
+    setEditingBankName("");
+    setEditingAccountHolder("");
+    setEditingAccountNumber("");
   }
 
   function applyPayload(data: ApiResponse) {
@@ -219,6 +241,47 @@ export function DomainListBoard({
     }
   }
 
+  async function handleSaveAccount() {
+    if (!accountModalRow || isSavingAccount) {
+      return;
+    }
+
+    if (!editingBankName.trim() || !editingAccountHolder.trim() || !editingAccountNumber.trim()) {
+      setAccountModalMessage("은행, 예금주, 계좌번호를 모두 입력해주세요.");
+      return;
+    }
+
+    setIsSavingAccount(true);
+    setAccountModalMessage("");
+
+    try {
+      const response = await fetch("/api/domain-list", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: accountModalRow.id,
+          action: "update-account",
+          bankName: editingBankName,
+          accountHolder: editingAccountHolder,
+          accountNumber: editingAccountNumber,
+        }),
+      });
+      const text = await response.text();
+      const data = safeParseJson(text);
+
+      if (!response.ok || !("rows" in data)) {
+        setAccountModalMessage(data.message ?? "계좌 정보 수정에 실패했습니다.");
+        return;
+      }
+
+      applyPayload(data);
+      setMessage(data.message ?? "계좌 정보가 수정되었습니다.");
+      closeAccountModal();
+    } finally {
+      setIsSavingAccount(false);
+    }
+  }
+
   return (
     <section className="rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
       <div className="flex flex-col gap-3 border-b border-white/8 px-5 py-6 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
@@ -323,10 +386,14 @@ export function DomainListBoard({
                     {row.url}
                   </td>
                   <td className="px-4 py-5">
-                    <div className="rounded-2xl border border-white/8 bg-white/[0.035] px-3 py-3 text-center text-xs leading-5 text-white/68">
-                      <div>{row.bankName}</div>
-                      <div>{row.accountHolder}</div>
-                      <div>{row.accountNumber}</div>
+                    <div className="flex justify-center">
+                      <button
+                        type="button"
+                        onClick={() => openAccountModal(row)}
+                        className="rounded-xl bg-cyan-500/18 px-3 py-2 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-500/28"
+                      >
+                        계좌확인
+                      </button>
                     </div>
                   </td>
                   <td className="px-4 py-5 text-center font-semibold text-white">
@@ -496,6 +563,68 @@ export function DomainListBoard({
                 className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
               >
                 취소
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {accountModalRow ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-[490px] rounded-[28px] border border-white/10 bg-white p-6 text-slate-950 shadow-[0_28px_120px_rgba(0,0,0,0.58)]">
+            <h3 className="text-2xl font-semibold tracking-[-0.04em]">
+              계좌 정보
+            </h3>
+            <p className="mt-2 text-sm text-slate-500">
+              {accountModalRow.companyName} 계정의 출금 계좌를 확인하고 수정할 수 있습니다.
+            </p>
+
+            <div className="mt-7 space-y-5">
+              <ModalFeedback message={accountModalMessage} />
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                연결 계정: <span className="font-semibold text-slate-900">{accountModalRow.loginId}</span>
+              </div>
+              <select
+                value={editingBankName}
+                onChange={(event) => setEditingBankName(event.target.value)}
+                className="h-14 w-full rounded-xl border border-slate-300 px-5 text-sm outline-none"
+              >
+                <option value="">은행 선택</option>
+                {bankOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={editingAccountHolder}
+                onChange={(event) => setEditingAccountHolder(event.target.value)}
+                placeholder="예금주"
+                className="h-14 w-full rounded-xl border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
+              />
+              <input
+                value={editingAccountNumber}
+                onChange={(event) => setEditingAccountNumber(event.target.value)}
+                placeholder="계좌번호 [- 넣어서 입력]"
+                className="h-14 w-full rounded-xl border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
+              />
+            </div>
+
+            <div className="mt-12 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={handleSaveAccount}
+                disabled={isSavingAccount}
+                className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {isSavingAccount ? "저장 중" : "수정"}
+              </button>
+              <button
+                type="button"
+                onClick={closeAccountModal}
+                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
+              >
+                닫기
               </button>
             </div>
           </div>

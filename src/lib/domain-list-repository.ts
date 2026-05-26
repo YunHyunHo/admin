@@ -294,6 +294,99 @@ export async function updateDomainEntryStatus(input: {
   );
 }
 
+export async function updateDomainEntryAccount(input: {
+  id: string;
+  bankName: string;
+  accountHolder: string;
+  accountNumber: string;
+}) {
+  if (!isUuid(input.id)) {
+    throw new Error("도메인 정보를 확인해주세요.");
+  }
+
+  if (!input.bankName.trim() || !input.accountHolder.trim() || !input.accountNumber.trim()) {
+    throw new Error("은행, 예금주, 계좌번호를 모두 입력해주세요.");
+  }
+
+  await withTransaction(async (client) => {
+    const domainResult = await client.query<{
+      company_id: string;
+      distributor_id: string | null;
+      account_id: string | null;
+    }>(
+      `
+        select
+          dom.company_id::text,
+          dom.distributor_id::text,
+          (
+            select ba.id::text
+            from bank_accounts ba
+            where ba.company_id = dom.company_id
+              and (ba.distributor_id = dom.distributor_id or ba.distributor_id is null)
+            order by
+              case when ba.distributor_id = dom.distributor_id then 0 else 1 end,
+              ba.created_at desc
+            limit 1
+          ) as account_id
+        from domains dom
+        where dom.id = $1::uuid
+          and dom.status <> 'DELETED'
+        limit 1
+      `,
+      [input.id],
+    );
+
+    const domain = domainResult.rows[0];
+
+    if (!domain?.company_id) {
+      throw new Error("도메인 정보를 찾지 못했습니다.");
+    }
+
+    if (domain.account_id) {
+      await client.query(
+        `
+          update bank_accounts
+          set
+            bank_name = $2,
+            account_number = $3,
+            account_holder = $4,
+            is_active = true,
+            updated_at = now()
+          where id = $1::uuid
+        `,
+        [
+          domain.account_id,
+          input.bankName.trim(),
+          input.accountNumber.trim(),
+          input.accountHolder.trim(),
+        ],
+      );
+      return;
+    }
+
+    await client.query(
+      `
+        insert into bank_accounts (
+          company_id,
+          distributor_id,
+          bank_name,
+          account_number,
+          account_holder,
+          is_active
+        )
+        values ($1::uuid, $2::uuid, $3, $4, $5, true)
+      `,
+      [
+        domain.company_id,
+        domain.distributor_id,
+        input.bankName.trim(),
+        input.accountNumber.trim(),
+        input.accountHolder.trim(),
+      ],
+    );
+  });
+}
+
 export async function deleteDomainEntry(id: string) {
   await deleteDomainEntryWithAccount(id, false);
 }

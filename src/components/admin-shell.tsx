@@ -61,11 +61,6 @@ const sideMenuGroups = [
         key: "domain-list",
       },
       {
-        title: "보유금 관리",
-        href: "/dashboard/domains",
-        key: "domains",
-      },
-      {
         title: "도메인환전",
         href: "/dashboard/domains/exchanges",
         key: "domain-exchanges",
@@ -114,7 +109,6 @@ const masterOnlyMenuKeys = new Set([
   "org-distributors",
   "fee-rate-settings",
   "domain-list",
-  "domains",
   "admins",
 ]);
 
