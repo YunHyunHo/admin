@@ -56,8 +56,12 @@ function getDraftRates(row: FeeRateRow): DraftRates {
   };
 }
 
-function hasDraftChanges(row: FeeRateRow, draft: DraftRates) {
-  return rateKeys.some((key) => row[key] !== draft[key]);
+function hasDraftChanges(row: FeeRateRow, draft: DraftRates, key?: RateKey) {
+  if (key) {
+    return row[key] !== draft[key];
+  }
+
+  return rateKeys.some((candidate) => row[candidate] !== draft[candidate]);
 }
 
 export function FeeRateSettingsBoard({
@@ -108,13 +112,20 @@ export function FeeRateSettingsBoard({
     }));
   }
 
-  async function saveRate(row: FeeRateRow) {
+  async function saveRate(row: FeeRateRow, key?: RateKey) {
     if (!canManageFeeRates) {
       setMessage("수수료 수정은 마스터 계정만 가능합니다.");
       return;
     }
 
     const draft = draftRates[row.id] ?? getDraftRates(row);
+    const nextDraft = {
+      companyRate: key === "companyRate" ? draft.companyRate : row.companyRate,
+      topDistributorRate:
+        key === "topDistributorRate" ? draft.topDistributorRate : row.topDistributorRate,
+      distributorRate:
+        key === "distributorRate" ? draft.distributorRate : row.distributorRate,
+    };
 
     setSavingId(row.id);
     setMessage("");
@@ -127,9 +138,9 @@ export function FeeRateSettingsBoard({
           id: row.id,
           domainId: row.domainId ?? row.id,
           distributorId: row.distributorId,
-          companyRate: draft.companyRate,
-          topDistributorRate: draft.topDistributorRate,
-          distributorRate: draft.distributorRate,
+          companyRate: nextDraft.companyRate,
+          topDistributorRate: nextDraft.topDistributorRate,
+          distributorRate: nextDraft.distributorRate,
         }),
       });
       const data = (await response.json()) as {
@@ -152,12 +163,12 @@ export function FeeRateSettingsBoard({
               currentRow.id === row.id
                 ? {
                   ...currentRow,
-                  ...draft,
+                  ...nextDraft,
                   totalRate: Number(
                     (
-                      draft.companyRate +
-                      draft.topDistributorRate +
-                      draft.distributorRate
+                      nextDraft.companyRate +
+                      nextDraft.topDistributorRate +
+                      nextDraft.distributorRate
                     ).toFixed(2),
                   ),
                   updatedAt: getNowStamp(),
@@ -231,7 +242,6 @@ export function FeeRateSettingsBoard({
                     "상위총판",
                     "총판",
                     "수정일",
-                    "비율수정",
                   ].map((header, index) => (
                     <th
                       key={`${header}-${index}`}
@@ -245,7 +255,9 @@ export function FeeRateSettingsBoard({
               <tbody>
                 {visibleRows.map((row) => {
                   const draft = draftRates[row.id] ?? getDraftRates(row);
-                  const isChanged = hasDraftChanges(row, draft);
+                  const companyChanged = hasDraftChanges(row, draft, "companyRate");
+                  const topChanged = hasDraftChanges(row, draft, "topDistributorRate");
+                  const distributorChanged = hasDraftChanges(row, draft, "distributorRate");
 
                   return (
                     <tr
@@ -273,6 +285,17 @@ export function FeeRateSettingsBoard({
                               updateDraftRate(row.id, "companyRate", value)
                             }
                           />
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void saveRate(row, "companyRate");
+                            }}
+                            disabled={!canManageFeeRates || !companyChanged || savingId === row.id}
+                            className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/34"
+                          >
+                            {savingId === row.id ? "저장 중" : "수정"}
+                          </button>
                         </div>
                       </td>
                       <td className="px-4 py-4 text-center font-semibold text-white">
@@ -285,6 +308,17 @@ export function FeeRateSettingsBoard({
                               updateDraftRate(row.id, "topDistributorRate", value)
                             }
                           />
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void saveRate(row, "topDistributorRate");
+                            }}
+                            disabled={!canManageFeeRates || !topChanged || savingId === row.id}
+                            className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/34"
+                          >
+                            {savingId === row.id ? "저장 중" : "수정"}
+                          </button>
                         </div>
                       </td>
                       <td className="px-4 py-4 text-center font-semibold text-white">
@@ -297,23 +331,21 @@ export function FeeRateSettingsBoard({
                               updateDraftRate(row.id, "distributorRate", value)
                             }
                           />
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void saveRate(row, "distributorRate");
+                            }}
+                            disabled={!canManageFeeRates || !distributorChanged || savingId === row.id}
+                            className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/34"
+                          >
+                            {savingId === row.id ? "저장 중" : "수정"}
+                          </button>
                         </div>
                       </td>
                       <td className="px-4 py-4 text-center text-white/52">
                         {row.updatedAt}
-                      </td>
-                      <td className="px-4 py-4 text-center">
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void saveRate(row);
-                          }}
-                          disabled={!canManageFeeRates || !isChanged || savingId === row.id}
-                          className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/34"
-                        >
-                          {savingId === row.id ? "저장 중" : "수정"}
-                        </button>
                       </td>
                     </tr>
                   );
