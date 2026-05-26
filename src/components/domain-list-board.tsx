@@ -37,14 +37,6 @@ function formatKoreanWon(value: number) {
   return `${value.toLocaleString("ko-KR")}원`;
 }
 
-function truncateId(value: string) {
-  if (value.length <= 12) {
-    return value;
-  }
-
-  return `${value.slice(0, 6)}...${value.slice(-4)}`;
-}
-
 function safeParseJson(text: string) {
   try {
     return JSON.parse(text) as ApiResponse;
@@ -325,11 +317,10 @@ export function DomainListBoard({
 
         <div className="overflow-hidden rounded-[26px] border border-white/8 bg-black/18">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1650px] border-collapse text-sm">
+            <table className="w-full min-w-[1500px] border-collapse text-sm">
               <thead className="bg-black/48 text-white/72">
               <tr>
                 {[
-                  "ID",
                   "본사",
                   "상위총판",
                   "총판",
@@ -343,7 +334,6 @@ export function DomainListBoard({
                   "충전거래 생성허용",
                   "생성일",
                   "관리",
-                  "텔레알림",
                 ].map((head) => (
                   <th
                     key={head}
@@ -360,9 +350,6 @@ export function DomainListBoard({
                   key={row.id}
                   className="border-b border-white/8 text-white/76 last:border-b-0"
                 >
-                  <td className="px-4 py-5 text-center font-mono text-xs text-white/60">
-                    {truncateId(row.id)}
-                  </td>
                   <td className="px-4 py-5 text-center">
                     {row.headquarters}
                   </td>
@@ -454,15 +441,6 @@ export function DomainListBoard({
                         {processingId === row.id ? "처리중" : "삭제"}
                       </button>
                     </div>
-                  </td>
-                  <td className="px-4 py-5 text-center">
-                    <button
-                      type="button"
-                      onClick={() => setMessage(`${row.companyName} 알림관리 기능은 준비 중입니다.`)}
-                      className="rounded-xl bg-blue-500/18 px-3 py-2 text-xs font-semibold text-blue-100 transition hover:bg-blue-500/28"
-                    >
-                      알림관리
-                    </button>
                   </td>
                 </tr>
               ))}
