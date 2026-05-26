@@ -74,6 +74,7 @@ export async function getDomainListBoardData(user: SessionUser) {
       `
         select dist.id::text as id, dist.name
         from distributors dist
+        left join admins dist_admin on dist_admin.id = dist.admin_id
         where dist.status = 'ACTIVE'
           and dist.parent_distributor_id is not null
           ${scope.sql}
