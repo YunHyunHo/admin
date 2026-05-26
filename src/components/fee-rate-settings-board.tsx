@@ -20,8 +20,6 @@ type FeeRateRow = {
 };
 
 type FeeRateSettingsBoardProps = {
-  companyName: string;
-  initialFeeRate: number;
   initialRows: FeeRateRow[];
   canManageFeeRates: boolean;
 };
@@ -65,7 +63,6 @@ function hasDraftChanges(row: FeeRateRow, draft: DraftRates, key?: RateKey) {
 }
 
 export function FeeRateSettingsBoard({
-  initialFeeRate,
   initialRows,
   canManageFeeRates,
 }: FeeRateSettingsBoardProps) {
@@ -200,13 +197,6 @@ export function FeeRateSettingsBoard({
           <p className="mt-2 max-w-3xl text-sm leading-6 text-white/52">
             도메인 생성에서 만든 업체(도메인) 계정 기준으로 본사, 상위총판, 총판 수수료율을 각각 관리합니다.
           </p>
-        </div>
-
-        <div className="rounded-2xl border border-cyan-400/18 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-50">
-          현재 기본 요율: <strong>{initialFeeRate}%</strong>
-          {!canManageFeeRates ? (
-            <span className="ml-2 text-cyan-100/70">읽기 전용</span>
-          ) : null}
         </div>
       </div>
 

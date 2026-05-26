@@ -30,8 +30,6 @@ export default async function FeeRateSettingsPage() {
       helperText="업체별 수수료 요율을 수정하고 정산 계산에 반영합니다."
     >
       <FeeRateSettingsBoard
-        companyName={feeRateSettings.companyName}
-        initialFeeRate={feeRateSettings.feeRate}
         initialRows={feeRateSettings.rows}
         canManageFeeRates={canManageMasterResources(user)}
       />
