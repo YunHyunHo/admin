@@ -37,10 +37,6 @@ function formatKoreanWon(value: number) {
   return `${value.toLocaleString("ko-KR")}원`;
 }
 
-function truncateId(value: string) {
-  return value.length > 12 ? `${value.slice(0, 4)}...${value.slice(-4)}` : value;
-}
-
 function safeParseJson(text: string) {
   try {
     return JSON.parse(text) as ApiResponse;
@@ -249,11 +245,10 @@ export function DomainListBoard({
 
       <div className="mt-4 overflow-hidden border border-white/24 bg-black/10">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1700px] border-collapse text-sm">
+          <table className="w-full min-w-[1500px] border-collapse text-sm">
             <thead className="bg-black/72 text-white">
               <tr>
                 {[
-                  "ID",
                   "본사",
                   "상위총판",
                   "총판",
@@ -267,7 +262,6 @@ export function DomainListBoard({
                   "충전거래 생성허용",
                   "생성일",
                   "관리",
-                  "텔레알림",
                 ].map((head) => (
                   <th
                     key={head}
@@ -284,9 +278,6 @@ export function DomainListBoard({
                   key={row.id}
                   className="border-b border-white/16 bg-white/[0.035] text-white/88 last:border-b-0"
                 >
-                  <td className="border border-white/18 px-4 py-4 text-center font-semibold">
-                    {truncateId(row.id)}
-                  </td>
                   <td className="border border-white/18 px-4 py-4 text-center">
                     {row.headquarters}
                   </td>
@@ -373,15 +364,6 @@ export function DomainListBoard({
                         {processingId === row.id ? "처리중" : "삭제"}
                       </button>
                     </div>
-                  </td>
-                  <td className="border border-white/18 px-4 py-4 text-center">
-                    <button
-                      type="button"
-                      onClick={() => setMessage("텔레알림 관리는 다음 단계에서 연결할게요.")}
-                      className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-600"
-                    >
-                      알림관리
-                    </button>
                   </td>
                 </tr>
               ))}

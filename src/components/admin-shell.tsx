@@ -56,11 +56,6 @@ const sideMenuGroups = [
     title: "도메인",
     items: [
       {
-        title: "도메인 어드민",
-        href: "/dashboard/domains/admins",
-        key: "domain-admins",
-      },
-      {
         title: "도메인",
         href: "/dashboard/domains/list",
         key: "domain-list",
@@ -118,7 +113,6 @@ const masterOnlyMenuKeys = new Set([
   "org-top-distributors",
   "org-distributors",
   "fee-rate-settings",
-  "domain-admins",
   "domain-list",
   "domains",
   "admins",
