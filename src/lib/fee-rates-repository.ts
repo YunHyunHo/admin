@@ -124,24 +124,8 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
         from fee_rates fee
         where fee.starts_at <= now()
           and (fee.ends_at is null or fee.ends_at > now())
-          and (
-            fee.domain_id = dom.id
-            or (
-              fee.domain_id is null
-              and fee.distributor_id = dist.id
-            )
-            or (
-              fee.domain_id is null
-              and fee.distributor_id is null
-              and fee.company_id = dom.company_id
-            )
-          )
+          and fee.domain_id = dom.id
         order by
-          case
-            when fee.domain_id = dom.id then 0
-            when fee.distributor_id = dist.id then 1
-            else 2
-          end,
           fee.starts_at desc,
           fee.created_at desc
         limit 1

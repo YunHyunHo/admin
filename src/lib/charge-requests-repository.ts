@@ -514,29 +514,13 @@ export async function processDbChargeRequest(input: {
         where
           starts_at <= now()
           and (ends_at is null or ends_at > now())
-          and (
-            domain_id = $1::uuid
-            or distributor_id = $2::uuid
-            or company_id = $3::uuid
-            or (domain_id is null and distributor_id is null and company_id is null)
-          )
-        order by
-          case
-            when domain_id = $1::uuid then 0
-            when distributor_id = $2::uuid then 1
-            when company_id = $3::uuid then 2
-            else 3
-          end,
-          starts_at desc
+          and domain_id = $1::uuid
+        order by starts_at desc, created_at desc
         limit 1
       `,
-      [updated.domain_id, updated.distributor_id, updated.company_id],
+      [updated.domain_id],
     );
-    const feeRates = feeRateResult.rows[0] ?? {
-      company_rate: "0.4",
-      distributor_rate: "0",
-      agency_rate: "0",
-    };
+    const feeRates = feeRateResult.rows[0];
     let distributorId = updated.distributor_id;
 
     if (!distributorId) {
@@ -554,9 +538,14 @@ export async function processDbChargeRequest(input: {
     }
 
     const amount = Number(updated.amount);
-    const companyRate = Number(feeRates.company_rate);
-    const distributorRate = Number(feeRates.distributor_rate);
-    const agencyRate = Number(feeRates.agency_rate);
+    const hasSubDistributor =
+      Boolean(updated.top_distributor_name) &&
+      updated.distributor_name !== "-";
+    const companyRate = Number(feeRates?.company_rate ?? "0.2");
+    const distributorRate = Number(feeRates?.distributor_rate ?? "0.1");
+    const agencyRate = Number(
+      feeRates?.agency_rate ?? (hasSubDistributor ? "0.1" : "0"),
+    );
     const totalRate = companyRate + distributorRate + agencyRate;
     const companyFee = Math.floor(amount * (companyRate / 100));
     const distributorFee = Math.floor(amount * (distributorRate / 100));
