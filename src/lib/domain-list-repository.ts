@@ -10,6 +10,10 @@ export type DomainListOwnerOption = {
   name: string;
 };
 
+type DomainMappedCompanyRow = {
+  company_name: string;
+};
+
 export type DomainListRow = {
   id: string;
   headquarters: string;
@@ -68,7 +72,7 @@ function isUuid(value: string | undefined) {
 
 export async function getDomainListBoardData(user: SessionUser) {
   const scope = getScopedDistributorCondition(user);
-  const [rows, distributorOptions, detailedAccounts] = await Promise.all([
+  const [rows, distributorOptions, detailedAccounts, mappedCompanies] = await Promise.all([
     getDomainManagementRows([], user),
     query<DomainListOwnerOption>(
       `
@@ -83,11 +87,30 @@ export async function getDomainListBoardData(user: SessionUser) {
       scope.values,
     ),
     getAllAdminAccounts(user),
+    query<DomainMappedCompanyRow>(
+      `
+        select distinct c.company_name
+        from admins a
+        join admin_domain_mappings adm on adm.admin_id = a.id
+        join admin_company_mappings acm on acm.admin_id = a.id
+        join companies c on c.id = acm.company_id
+        where a.role = 'DOMAIN_ADMIN'
+          and a.status = 'ACTIVE'
+          and a.created_by = $1::uuid
+      `,
+      [user.id],
+    ),
   ]);
+
+  const mappedCompanySet = new Set(mappedCompanies.rows.map((row) => row.company_name));
 
   const domainAdminByCompany = new Map(
     detailedAccounts
-      .filter((account) => account.role === "DOMAIN_ADMIN")
+      .filter(
+        (account) =>
+          account.role === "DOMAIN_ADMIN" &&
+          mappedCompanySet.has(account.managedCompanies[0] ?? ""),
+      )
       .map((account) => [account.managedCompanies[0], account]),
   );
 
