@@ -1,5 +1,5 @@
 import { hashPassword } from "@/lib/password";
-import { encryptVisiblePassword, getAllAdminAccounts } from "@/lib/admin-accounts";
+import { decryptVisiblePassword, encryptVisiblePassword } from "@/lib/admin-accounts";
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
 import { getDomainManagementRows } from "@/lib/domain-management-repository";
 import { getScopedDistributorCondition } from "@/lib/master-scope";
@@ -11,7 +11,9 @@ export type DomainListOwnerOption = {
 };
 
 type DomainMappedCompanyRow = {
-  company_name: string;
+  domain_id: string;
+  login_id: string;
+  visible_password: string | null;
 };
 
 export type DomainListRow = {
@@ -72,7 +74,7 @@ function isUuid(value: string | undefined) {
 
 export async function getDomainListBoardData(user: SessionUser) {
   const scope = getScopedDistributorCondition(user);
-  const [rows, distributorOptions, detailedAccounts, mappedCompanies] = await Promise.all([
+  const [rows, distributorOptions, mappedDomains] = await Promise.all([
     getDomainManagementRows([], user),
     query<DomainListOwnerOption>(
       `
@@ -86,14 +88,14 @@ export async function getDomainListBoardData(user: SessionUser) {
       `,
       scope.values,
     ),
-    getAllAdminAccounts(user),
     query<DomainMappedCompanyRow>(
       `
-        select distinct c.company_name
+        select
+          adm.domain_id::text as domain_id,
+          a.login_id,
+          a.password_ciphertext as visible_password
         from admins a
         join admin_domain_mappings adm on adm.admin_id = a.id
-        join admin_company_mappings acm on acm.admin_id = a.id
-        join companies c on c.id = acm.company_id
         where a.role = 'DOMAIN_ADMIN'
           and a.status = 'ACTIVE'
           and a.created_by = $1::uuid
@@ -101,21 +103,20 @@ export async function getDomainListBoardData(user: SessionUser) {
       [user.id],
     ),
   ]);
-
-  const mappedCompanySet = new Set(mappedCompanies.rows.map((row) => row.company_name));
-
-  const domainAdminByCompany = new Map(
-    detailedAccounts
-      .filter(
-        (account) =>
-          account.role === "DOMAIN_ADMIN" &&
-          mappedCompanySet.has(account.managedCompanies[0] ?? ""),
-      )
-      .map((account) => [account.managedCompanies[0], account]),
+  const domainAdminByDomainId = new Map(
+    mappedDomains.rows.map((row) => [
+      row.domain_id,
+      {
+        loginId: row.login_id,
+        visiblePassword: row.visible_password
+          ? decryptVisiblePassword(row.visible_password)
+          : "저장된 비밀번호를 확인할 수 없습니다.",
+      },
+    ]),
   );
 
   const listRows: DomainListRow[] = rows.map((row) => {
-    const domainAdmin = domainAdminByCompany.get(row.companyName);
+    const domainAdmin = domainAdminByDomainId.get(row.id);
 
     if (!domainAdmin) {
       return null;

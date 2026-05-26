@@ -77,7 +77,7 @@ export function encryptVisiblePassword(password: string) {
   return `v1:${iv.toString("base64url")}:${tag.toString("base64url")}:${encrypted.toString("base64url")}`;
 }
 
-function decryptVisiblePassword(value: string | null) {
+export function decryptVisiblePassword(value: string | null) {
   if (!value?.startsWith("v1:")) {
     return hiddenPasswordMessage;
   }
