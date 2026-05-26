@@ -94,6 +94,10 @@ export async function getDomainListBoardData(user: SessionUser) {
   const listRows: DomainListRow[] = rows.map((row) => {
     const domainAdmin = domainAdminByCompany.get(row.companyName);
 
+    if (!domainAdmin) {
+      return null;
+    }
+
     return {
       id: row.id,
       headquarters: "본사",
@@ -111,7 +115,7 @@ export async function getDomainListBoardData(user: SessionUser) {
       depositEnabled: row.depositEnabled,
       createdAt: row.createdAt,
     };
-  });
+  }).filter((row): row is DomainListRow => row !== null);
 
   return {
     rows: listRows,
