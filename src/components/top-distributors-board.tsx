@@ -30,26 +30,21 @@ function toRows(accounts: AdminAccountRecord[]): TopDistributorRow[] {
   return accounts
     .filter((account) => account.role === "TOP_DISTRIBUTOR")
     .map((account) => {
-      const childDistributorIds = accounts
+      const childDistributors = accounts
         .filter(
           (candidate) =>
             candidate.role === "ADMIN" && candidate.parentAdminId === account.id,
-        )
-        .map((candidate) => candidate.id);
+        );
+      const childDistributorIds = childDistributors.map((candidate) => candidate.id);
 
       return {
         id: account.id,
         nickname: account.nickname,
         loginId: account.loginId,
         password: account.visiblePassword,
-        managedAccountNames: accounts
-          .filter(
-            (candidate) =>
-              candidate.role === "DOMAIN_ADMIN" &&
-              (candidate.parentAdminId === account.id ||
-                childDistributorIds.includes(candidate.parentAdminId ?? "")),
-          )
-          .map((candidate) => `${candidate.nickname} / ${candidate.loginId}`),
+        managedAccountNames: childDistributors.map(
+          (candidate) => `${candidate.nickname} / ${candidate.loginId}`,
+        ),
         lastLoginAt: account.lastLoginAt,
         createdAt: account.createdAt,
         status: account.status,
@@ -456,7 +451,7 @@ export function TopDistributorsBoard({
 
             <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div className="mb-3 flex items-center justify-between text-sm font-semibold text-slate-700">
-                <span>총 업체 수</span>
+                <span>총 계정 수</span>
                 <span>{managedCompaniesRow.managedAccountNames.length}개</span>
               </div>
               <div className="max-h-[260px] space-y-2 overflow-y-auto">

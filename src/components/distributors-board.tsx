@@ -464,7 +464,7 @@ export function DistributorsBoard({
 
             <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div className="mb-3 flex items-center justify-between text-sm font-semibold text-slate-700">
-                <span>총 업체 수</span>
+                <span>총 계정 수</span>
                 <span>{managedCompaniesRow.managedAccountNames.length}개</span>
               </div>
               <div className="max-h-[260px] space-y-2 overflow-y-auto">
