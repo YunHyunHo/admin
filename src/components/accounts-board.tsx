@@ -407,7 +407,7 @@ export function AccountsBoard({
                   "계좌번호",
                   "생성일",
                   "사용여부",
-                  "API 연동 사이트",
+                  "연결된 도메인",
                   ...(canManageAccounts ? ["삭제"] : []),
                 ].map((header) => (
                   <th
@@ -494,7 +494,7 @@ export function AccountsBoard({
                         }}
                         className="rounded-xl bg-teal-400/80 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-teal-300"
                       >
-                        확인
+                        보기
                       </button>
                     </div>
                   </td>
@@ -635,7 +635,7 @@ export function AccountsBoard({
           <div className="w-full max-w-5xl rounded-[18px] border border-white/10 bg-[#202020] p-6 text-white shadow-[0_28px_120px_rgba(0,0,0,0.58)]">
             <div className="flex items-center justify-between">
               <h3 className="text-2xl font-semibold tracking-[-0.03em]">
-                API 연동 사이트
+                연결된 도메인
               </h3>
               <button
                 type="button"
@@ -724,7 +724,7 @@ export function AccountsBoard({
 
               {!selectedAccount?.linkedDomains.length ? (
                 <p className="border border-t-0 border-white/55 px-4 py-8 text-center text-sm text-white/48">
-                  API 문서 기준으로 연동 확인된 사이트가 없습니다.
+                  연결된 도메인이 없습니다.
                 </p>
               ) : null}
             </div>
@@ -775,10 +775,8 @@ function EditableField({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         disabled={!isEditing}
-        className={`h-10 min-w-[210px] flex-1 rounded-xl border px-3 text-sm outline-none transition ${
-          isEditing
-            ? "border-cyan-300 bg-white text-slate-950"
-            : "border-white/8 bg-white/35 text-slate-900"
+        className={`h-10 min-w-[210px] flex-1 rounded-xl border bg-white px-3 text-sm text-slate-950 outline-none transition ${
+          isEditing ? "border-cyan-300" : "border-white/8"
         }`}
       />
       <button
@@ -792,7 +790,7 @@ function EditableField({
         }}
         className="rounded-xl bg-blue-700 px-3 py-2 text-xs font-semibold text-white"
       >
-        {isEditing ? "완료" : "수정"}
+        수정
       </button>
     </div>
   );
