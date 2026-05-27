@@ -5,7 +5,11 @@ export function canManageMasterResources(user: Pick<SessionUser, "role">) {
 }
 
 export function canUseDistributorMenus(user: Pick<SessionUser, "role">) {
-  return user.role === "ADMIN" || user.role === "TOP_DISTRIBUTOR";
+  return (
+    user.role === "ADMIN" ||
+    user.role === "TOP_DISTRIBUTOR" ||
+    user.role === "DOMAIN_ADMIN"
+  );
 }
 
 export function canProcessRequests(user: Pick<SessionUser, "role">) {

@@ -131,6 +131,7 @@ export async function POST(request: Request) {
       id: body.id,
       status: body.status,
       processedBy: user.id,
+      user,
     });
 
     if (!processedRequest) {

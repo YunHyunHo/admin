@@ -22,6 +22,11 @@ import type { SessionUser } from "@/lib/auth";
 
 const DEFAULT_ROW_LIMIT = 300;
 
+type ScopedClause = {
+  sql: string;
+  values: unknown[];
+};
+
 type ChargeRequestRow = {
   id: string;
   user_uid: string;
@@ -118,8 +123,64 @@ function splitRows(rows: ChargeRequestRow[]): ChargeRequestsResponse {
   };
 }
 
+function shiftSqlParams(sql: string, offset: number) {
+  return sql.replace(/\$(\d+)/g, (_, indexText) => {
+    const index = Number(indexText);
+    return `$${index + offset}`;
+  });
+}
+
+async function getManagedCompanyIds(userId: string) {
+  const result = await query<{ company_id: string }>(
+    `
+      select acm.company_id::text as company_id
+      from admin_company_mappings acm
+      join companies c on c.id = acm.company_id
+      where acm.admin_id = $1::uuid
+        and c.status = 'ACTIVE'
+      order by c.company_name asc
+    `,
+    [userId],
+  );
+
+  return result.rows.map((row) => row.company_id);
+}
+
+async function getChargeRequestScope(
+  user: SessionUser,
+  aliases: {
+    charge?: string;
+    distributor?: string;
+    distributorAdmin?: string;
+  } = {},
+): Promise<ScopedClause> {
+  if (user.role === "DOMAIN_ADMIN") {
+    const companyIds = await getManagedCompanyIds(user.id);
+
+    if (!companyIds.length) {
+      return {
+        sql: "and 1 = 0",
+        values: [],
+      };
+    }
+
+    return {
+      sql: `and ${(aliases.charge ?? "cr")}.company_id = any($1::uuid[])`,
+      values: [companyIds],
+    };
+  }
+
+  const scope = getScopedDistributorCondition(
+    user,
+    aliases.distributor,
+    aliases.distributorAdmin,
+  );
+
+  return { sql: scope.sql, values: scope.values };
+}
+
 async function getDbChargeRequests(user: SessionUser) {
-  const scope = getScopedDistributorCondition(user);
+  const scope = await getChargeRequestScope(user);
   const result = await query<ChargeRequestRow>(
     `
       select
@@ -174,13 +235,21 @@ export async function getChargeRequestsForUser(user: SessionUser) {
 }
 
 async function ensureDbScope(input: { domainId?: string | null; domainName?: string; user: SessionUser }) {
-  const scope = getScopedDistributorCondition(input.user);
+  const scope = await getChargeRequestScope(input.user, {
+    charge: "dom",
+    distributor: "dist",
+    distributorAdmin: "dist_admin",
+  });
   const domainValue = input.domainId ?? input.domainName;
   const domainPredicate = input.domainId
     ? "dom.id = $2::uuid"
     : "dom.domain_name = $2";
 
   if (!domainValue) {
+    if (input.user.role === "DOMAIN_ADMIN") {
+      throw new Error("연결할 도메인을 선택해주세요.");
+    }
+
     const distributorResult = await query<{
       company_id: string;
       distributor_id: string;
@@ -449,9 +518,29 @@ export async function processDbChargeRequest(input: {
   id: string;
   status: ProcessedRequest["status"];
   processedBy: string;
+  user: SessionUser;
 }) {
   const nextStatus = input.status === "승인" ? "APPROVED" : "REJECTED";
   const result = await withTransaction(async (client) => {
+    const scope = await getChargeRequestScope(input.user);
+    const scopedSql = shiftSqlParams(scope.sql, 1);
+    const accessCheck = await client.query<{ id: string }>(
+      `
+        select cr.id::text
+        from charge_requests cr
+        left join distributors dist on dist.id = cr.distributor_id
+        left join admins dist_admin on dist_admin.id = dist.admin_id
+        where cr.id = $1::uuid
+          ${scopedSql}
+        limit 1
+      `,
+      [input.id, ...scope.values],
+    );
+
+    if (!accessCheck.rows.length) {
+      return null;
+    }
+
     const updateResult = await client.query<
       ChargeRequestRow & {
         company_id: string;
@@ -644,7 +733,7 @@ export async function processDbChargeRequest(input: {
     return updateResult;
   });
 
-  const row = result.rows[0];
+  const row = result?.rows[0];
 
   return row ? toProcessedRequest(row) : null;
 }
