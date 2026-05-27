@@ -48,6 +48,26 @@ function getRoleLabel(role: AdminRole) {
   }
 }
 
+function getParentLabel(admin: AdminRow) {
+  if (admin.role === "TOP_DISTRIBUTOR") {
+    return "본사";
+  }
+
+  return admin.parentDistributorName ?? "-";
+}
+
+function getManagedCompanyLabel(admin: AdminRow) {
+  const companies = admin.managedCompanies.filter(
+    (company) => company && company !== "전체",
+  );
+
+  if (!companies.length) {
+    return "-";
+  }
+
+  return companies.join(", ");
+}
+
 type AdminsBoardProps = {
   initialAdmins: PublicAdminAccount[];
   managedCompanies: string[];
@@ -395,10 +415,10 @@ export function AdminsBoard({
                     {getRoleLabel(admin.role)}
                   </td>
                   <td className="border border-white/18 px-4 py-4 text-center">
-                    {admin.parentDistributorName ?? "-"}
+                    {getParentLabel(admin)}
                   </td>
                   <td className="border border-white/18 px-4 py-4 text-center">
-                    {admin.managedCompanies.join(", ")}
+                    {getManagedCompanyLabel(admin)}
                   </td>
                   <td className="border border-white/18 px-4 py-4 text-center">
                     <span className="mr-2 font-semibold text-sky-400">
