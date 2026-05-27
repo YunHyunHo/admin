@@ -272,7 +272,6 @@ export function FeeRateSettingsBoard({
                     "상위총판",
                     "총판",
                     "수정일",
-                    "비율수정",
                   ].map((header, index) => (
                     <th
                       key={`${header}-${index}`}
@@ -281,6 +280,9 @@ export function FeeRateSettingsBoard({
                       {header}
                     </th>
                   ))}
+                  <th className="sticky right-0 border-b border-l border-white/8 bg-black/90 px-4 py-4 text-center font-semibold backdrop-blur">
+                    비율수정
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -371,7 +373,7 @@ export function FeeRateSettingsBoard({
                       <td className="px-4 py-4 text-center text-white/52">
                         {row.updatedAt}
                       </td>
-                      <td className="px-4 py-4 text-center">
+                      <td className="sticky right-0 border-l border-white/8 bg-[rgba(12,16,24,0.96)] px-4 py-4 text-center">
                         <button
                           type="button"
                           onClick={() => void saveRate(row)}
