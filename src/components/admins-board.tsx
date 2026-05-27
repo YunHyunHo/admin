@@ -66,9 +66,6 @@ export function AdminsBoard({
   const [accountType, setAccountType] = useState<"ADMIN" | "DOMAIN_ADMIN">(
     "ADMIN",
   );
-  const [selectedCompanies, setSelectedCompanies] = useState<string[]>([
-    managedCompanies[0],
-  ]);
   const [selectedTopDistributorId, setSelectedTopDistributorId] = useState("");
   const [selectedDomainOwnerId, setSelectedDomainOwnerId] = useState("");
   const [nickname, setNickname] = useState("");
@@ -195,6 +192,9 @@ export function AdminsBoard({
       const selectedTopDistributor = topDistributorOptions.find(
         (option) => option.id === selectedTopDistributorId,
       );
+      const selectedDomainOwner =
+        topDistributorOptions.find((option) => option.id === selectedDomainOwnerId) ??
+        distributorOwnerOptions.find((option) => option.id === selectedDomainOwnerId);
       const data = await requestAdminAccount("POST", {
         role: accountType,
         nickname,
@@ -204,10 +204,11 @@ export function AdminsBoard({
           accountType === "ADMIN" ? selectedTopDistributorId : undefined,
         parentDistributorName:
           accountType === "ADMIN" ? selectedTopDistributor?.name : undefined,
-        managedCompanies:
+        managedCompanies: [
           accountType === "DOMAIN_ADMIN"
-            ? selectedCompanies.slice(0, 1)
-            : selectedCompanies,
+            ? selectedDomainOwner?.company ?? managedCompanies[0]
+            : selectedTopDistributor?.company ?? managedCompanies[0],
+        ],
       });
       setNickname("");
       setLoginId("");
@@ -215,7 +216,6 @@ export function AdminsBoard({
       setAccountType("ADMIN");
       setSelectedTopDistributorId("");
       setSelectedDomainOwnerId("");
-      setSelectedCompanies([managedCompanies[0]]);
       setIsCreateModalOpen(false);
       setMessage(
         data.message ??
@@ -497,7 +497,6 @@ export function AdminsBoard({
                   setAccountType(nextType);
                   setSelectedTopDistributorId("");
                   setSelectedDomainOwnerId("");
-                  setSelectedCompanies([managedCompanies[0]]);
                 }}
                 className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none"
               >
@@ -543,18 +542,7 @@ export function AdminsBoard({
               {accountType === "DOMAIN_ADMIN" ? (
                 <select
                   value={selectedDomainOwnerId}
-                  onChange={(event) => {
-                    const nextId = event.target.value;
-                    const owner =
-                      topDistributorOptions.find((option) => option.id === nextId) ??
-                      distributorOwnerOptions.find((option) => option.id === nextId);
-
-                    setSelectedDomainOwnerId(nextId);
-
-                    if (owner?.company) {
-                      setSelectedCompanies([owner.company]);
-                    }
-                  }}
+                  onChange={(event) => setSelectedDomainOwnerId(event.target.value)}
                   className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none"
                 >
                   <option value="">업체 소속 선택</option>
@@ -578,17 +566,6 @@ export function AdminsBoard({
                   ) : null}
                 </select>
               ) : null}
-              <select
-                value={selectedCompanies[0] ?? ""}
-                onChange={(event) => setSelectedCompanies([event.target.value])}
-                className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none"
-              >
-                {managedCompanies.map((company) => (
-                  <option key={company} value={company}>
-                    {company}
-                  </option>
-                ))}
-              </select>
               <p className="text-sm text-slate-500">
                 {accountType === "DOMAIN_ADMIN"
                   ? "업체 계정은 상위총판/총판 소속을 먼저 고른 뒤 해당 업체 기준으로 권한이 설정됩니다."
