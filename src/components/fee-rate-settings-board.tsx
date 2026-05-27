@@ -8,7 +8,6 @@ type FeeRateRow = {
   id: string;
   domainId?: string;
   distributorId?: string;
-  companyId?: string;
   vendorName: string;
   domainName: string;
   totalRate: number;
@@ -137,7 +136,6 @@ export function FeeRateSettingsBoard({
           id: row.id,
           domainId: row.domainId,
           distributorId: row.distributorId,
-          companyId: row.companyId,
           companyRate: nextDraft.companyRate,
           topDistributorRate: nextDraft.topDistributorRate,
           distributorRate: nextDraft.distributorRate,

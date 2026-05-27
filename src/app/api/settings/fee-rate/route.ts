@@ -41,7 +41,6 @@ export async function POST(request: Request) {
     id?: string;
     domainId?: string;
     distributorId?: string;
-    companyId?: string;
     companyRate?: number | string;
     topDistributorRate?: number | string;
     distributorRate?: number | string;
@@ -73,7 +72,6 @@ export async function POST(request: Request) {
       user,
       domainId: body.domainId,
       distributorId: body.distributorId,
-      companyId: body.companyId,
       companyRate,
       topDistributorRate,
       distributorRate,
