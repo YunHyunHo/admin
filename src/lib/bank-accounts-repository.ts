@@ -73,7 +73,7 @@ export async function getBankAccountBoardData(user?: SessionUser) {
             jsonb_agg(
               distinct jsonb_build_object(
                 'id', dom.id::text,
-                'name', dom.domain_name,
+                'name', coalesce(dom_company.company_name, dom.domain_name),
                 'address', dom.domain_name,
                 'userCount', 0
               )
@@ -86,6 +86,7 @@ export async function getBankAccountBoardData(user?: SessionUser) {
         left join admins owner_master on owner_master.id = dist_admin.created_by
         left join domains dom on dom.distributor_id = ba.distributor_id
           and dom.status <> 'DELETED'
+        left join companies dom_company on dom_company.id = dom.company_id
         where 1 = 1
           ${scope.sql.replaceAll("dist.", "d.")}
         group by ba.id, d.name, owner_master.name

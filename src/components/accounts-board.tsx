@@ -632,34 +632,42 @@ export function AccountsBoard({
 
       {selectedAccountId ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-5xl rounded-[18px] border border-white/10 bg-[#202020] p-6 text-white shadow-[0_28px_120px_rgba(0,0,0,0.58)]">
+          <div className="w-full max-w-5xl rounded-[32px] border border-white/10 bg-[linear-gradient(180deg,_rgba(14,18,26,0.98)_0%,_rgba(9,12,18,0.99)_100%)] p-6 text-white shadow-[0_28px_120px_rgba(0,0,0,0.58)]">
             <div className="flex items-center justify-between">
-              <h3 className="text-2xl font-semibold tracking-[-0.03em]">
-                연결된 도메인
-              </h3>
+              <div>
+                <p className="text-xs uppercase tracking-[0.24em] text-cyan-300/55">
+                  Linked Domains
+                </p>
+                <h3 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">
+                  연결된 도메인
+                </h3>
+                <p className="mt-2 text-sm text-white/48">
+                  선택한 계좌로 입금 확인에 사용하는 도메인명과 도메인 주소를 확인합니다.
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => setSelectedAccountId(null)}
-                className="rounded-xl border border-white/10 px-3 py-2 text-sm text-white/70 hover:bg-white/[0.06]"
+                className="rounded-2xl border border-white/10 px-4 py-2 text-sm text-white/70 transition hover:bg-white/[0.06]"
               >
                 닫기
               </button>
             </div>
 
             <div className="mt-8 overflow-x-auto">
+              <div className="overflow-hidden rounded-[26px] border border-white/8 bg-black/18">
               <table className="w-full min-w-[760px] border-collapse text-sm">
-                <thead className="bg-black text-white">
+                <thead className="bg-black/52 text-white/72">
                   <tr>
                     {[
-                      "사이트명",
-                      "API 주소",
-                      "연동상태",
+                      "도메인명",
+                      "도메인주소",
                       "사용자수",
                       ...(canManageAccounts ? ["관리"] : []),
                     ].map((header) => (
                         <th
                           key={header}
-                          className="border border-white/55 px-4 py-4 text-center font-semibold"
+                          className="border-b border-white/8 px-4 py-4 text-center font-semibold"
                         >
                           {header}
                         </th>
@@ -669,27 +677,24 @@ export function AccountsBoard({
                 </thead>
                 <tbody>
                   {visibleLinkedDomains.map((domain) => (
-                      <tr key={domain.id} className="text-white/86">
-                        <td className="border border-white/55 px-4 py-4 text-center font-semibold">
+                      <tr key={domain.id} className="border-b border-white/8 text-white/86 last:border-b-0">
+                        <td className="px-4 py-4 text-center font-semibold">
                           {domain.name}
                         </td>
-                        <td className="border border-white/55 px-4 py-4 text-center">
+                        <td className="px-4 py-4 text-center">
                           {domain.address}
                         </td>
-                        <td className="border border-white/55 px-4 py-4 text-center text-cyan-200">
-                          연동됨
-                        </td>
-                        <td className="border border-white/55 px-4 py-4 text-center">
+                        <td className="px-4 py-4 text-center">
                           {domain.userCount}
                         </td>
                         {canManageAccounts ? (
-                          <td className="border border-white/55 px-4 py-4 text-center">
+                          <td className="px-4 py-4 text-center">
                             <button
                               type="button"
                               onClick={() =>
                                 unlinkDomain(selectedAccountId, domain.id)
                               }
-                              className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-500"
+                              className="rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-500"
                             >
                               연동해제
                             </button>
@@ -699,9 +704,10 @@ export function AccountsBoard({
                     ))}
                 </tbody>
               </table>
+              </div>
 
               {(selectedAccount?.linkedDomains.length ?? 0) > rowsPerPage ? (
-                <div className="flex items-center justify-center gap-2 border-x border-b border-white/55 px-4 py-5">
+                <div className="flex items-center justify-center gap-2 px-4 py-5">
                   {Array.from(
                     { length: linkedDomainPageCount },
                     (_, index) => index + 1,
@@ -723,7 +729,7 @@ export function AccountsBoard({
               ) : null}
 
               {!selectedAccount?.linkedDomains.length ? (
-                <p className="border border-t-0 border-white/55 px-4 py-8 text-center text-sm text-white/48">
+                <p className="rounded-[26px] border border-white/8 bg-black/18 px-4 py-8 text-center text-sm text-white/48">
                   연결된 도메인이 없습니다.
                 </p>
               ) : null}
