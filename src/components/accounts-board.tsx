@@ -3,10 +3,7 @@
 import { useState } from "react";
 
 import { getKoreanNowStamp } from "@/lib/korean-time";
-import type {
-  AccountBranchOption,
-  AccountRow,
-} from "@/lib/bank-accounts-types";
+import type { AccountRow } from "@/lib/bank-accounts-types";
 import { ModalFeedback } from "@/components/modal-feedback";
 
 const bankOptions = [
@@ -133,7 +130,6 @@ const rowsPerPage = 10;
 
 type AccountsBoardProps = {
   initialAccounts?: AccountRow[];
-  branchOptions?: AccountBranchOption[];
   canCreateAccounts?: boolean;
   canManageAccounts?: boolean;
 };
@@ -144,7 +140,6 @@ function getNowStamp() {
 
 export function AccountsBoard({
   initialAccounts = fallbackAccounts,
-  branchOptions = [],
   canCreateAccounts = true,
   canManageAccounts = true,
 }: AccountsBoardProps) {
@@ -161,13 +156,10 @@ export function AccountsBoard({
     accountId: string;
     field: "holder" | "accountNumber";
   } | null>(null);
-  const [branchName, setBranchName] = useState("");
-  const [branchId, setBranchId] = useState("");
   const [bankName, setBankName] = useState("");
   const [holder, setHolder] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [message, setMessage] = useState("");
-  const selectableBranches = branchOptions;
   const pageCount = Math.max(1, Math.ceil(accounts.length / rowsPerPage));
   const visibleAccounts = accounts.slice(
     (page - 1) * rowsPerPage,
@@ -295,8 +287,8 @@ export function AccountsBoard({
       return;
     }
 
-    if (!branchId || !bankName || !holder || !accountNumber) {
-      setCreateModalMessage("본사명, 은행, 예금주, 계좌번호를 모두 입력해주세요.");
+    if (!bankName || !holder || !accountNumber) {
+      setCreateModalMessage("은행, 예금주, 계좌번호를 모두 입력해주세요.");
       return;
     }
 
@@ -308,7 +300,6 @@ export function AccountsBoard({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          distributorId: branchId,
           bankName,
           holder,
           accountNumber,
@@ -332,7 +323,7 @@ export function AccountsBoard({
       } else {
         const nextAccount: AccountRow = {
           id: `ACC-${Date.now().toString().slice(-6)}`,
-          branchName,
+          branchName: "본사",
           creator: "총관리자",
           bankName,
           holder,
@@ -346,8 +337,6 @@ export function AccountsBoard({
       }
 
       setPage(1);
-      setBranchName("");
-      setBranchId("");
       setBankName("");
       setHolder("");
       setAccountNumber("");
@@ -380,8 +369,7 @@ export function AccountsBoard({
               setCreateModalMessage("");
               setIsCreateModalOpen(true);
             }}
-            disabled={selectableBranches.length === 0}
-            className="rounded-2xl bg-fuchsia-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-fuchsia-400 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/40"
+            className="rounded-2xl bg-fuchsia-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-fuchsia-400"
           >
             계좌생성
           </button>
@@ -546,29 +534,6 @@ export function AccountsBoard({
 
             <div className="mt-7 space-y-4">
               <ModalFeedback message={createModalMessage} />
-              <label className="block">
-                <span className="sr-only">본사명 선택</span>
-                <select
-                  value={branchId}
-                  onChange={(event) => {
-                    const selectedBranch = selectableBranches.find(
-                      (branch) => branch.id === event.target.value,
-                    );
-
-                    setBranchId(event.target.value);
-                    setBranchName(selectedBranch?.name ?? event.target.value);
-                  }}
-                  className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-slate-500"
-                >
-                  <option value="">본사명 선택</option>
-                  {selectableBranches.map((branch) => (
-                    <option key={branch.id} value={branch.id}>
-                      {branch.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
               <label className="block">
                 <span className="sr-only">은행 선택</span>
                 <select

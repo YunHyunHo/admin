@@ -28,7 +28,6 @@ export default async function AccountsPage() {
     >
       <AccountsBoard
         initialAccounts={isDatabaseBacked ? accountData.accounts : undefined}
-        branchOptions={accountData.branchOptions}
         canCreateAccounts={isMaster}
         canManageAccounts={isMaster}
       />

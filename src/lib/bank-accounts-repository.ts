@@ -115,28 +115,13 @@ export async function getBankAccountBoardData(user?: SessionUser) {
 
 export async function createBankAccount(
   input: {
-    distributorId: string;
     bankName: string;
     holder: string;
     accountNumber: string;
   },
-  user: SessionUser,
+  _user: SessionUser,
 ) {
-  const distributor = await query<{ id: string; company_id: string | null }>(
-    `
-      select dist.id::text, dist.company_id::text
-      from distributors dist
-      left join admins dist_admin on dist_admin.id = dist.admin_id
-      where dist.id = $1::uuid
-        and dist.status = 'ACTIVE'
-        and dist_admin.created_by = $2::uuid
-    `,
-    [input.distributorId, user.id],
-  );
-
-  if (distributor.rows.length !== 1) {
-    throw new Error("하부계정을 찾을 수 없습니다.");
-  }
+  void _user;
 
   await query(
     `
@@ -150,8 +135,8 @@ export async function createBankAccount(
       values ($1::uuid, $2::uuid, $3, $4, $5)
     `,
     [
-      distributor.rows[0].company_id,
-      distributor.rows[0].id,
+      null,
+      null,
       input.bankName,
       input.accountNumber,
       input.holder,

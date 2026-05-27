@@ -12,7 +12,6 @@ import { hasDatabaseUrl } from "@/lib/db";
 export const runtime = "nodejs";
 
 type CreateAccountPayload = {
-  distributorId?: string;
   bankName?: string;
   holder?: string;
   accountNumber?: string;
@@ -59,37 +58,21 @@ export async function POST(request: Request) {
   }
 
   const payload = (await request.json()) as CreateAccountPayload;
-  const distributorId = payload.distributorId?.trim();
   const bankName = payload.bankName?.trim() ?? "";
   const holder = payload.holder?.trim() ?? "";
   const accountNumber = payload.accountNumber?.trim() ?? "";
 
-  if (!distributorId) {
-    return NextResponse.json(
-      { message: "본사명을 선택해주세요." },
-      { status: 400 },
-    );
-  }
-
   if (!bankName || !holder || !accountNumber) {
     return NextResponse.json(
-      { message: "은행명, 예금주, 계좌번호를 모두 입력해주세요." },
+      { message: "은행, 예금주, 계좌번호를 모두 입력해주세요." },
       { status: 400 },
     );
   }
 
   if (hasDatabaseUrl()) {
-    if (!isUuid(distributorId)) {
-      return NextResponse.json(
-        { message: "하부계정 정보를 확인해주세요." },
-        { status: 400 },
-      );
-    }
-
     try {
       await createBankAccount(
         {
-          distributorId,
           bankName,
           holder,
           accountNumber,
