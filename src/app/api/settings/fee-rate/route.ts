@@ -41,6 +41,7 @@ export async function POST(request: Request) {
     id?: string;
     domainId?: string;
     distributorId?: string;
+    companyId?: string;
     companyRate?: number | string;
     topDistributorRate?: number | string;
     distributorRate?: number | string;
@@ -70,8 +71,9 @@ export async function POST(request: Request) {
   if (hasDatabaseUrl()) {
     await saveFeeRateSettings({
       user,
-      domainId: body.domainId ?? body.id,
+      domainId: body.domainId,
       distributorId: body.distributorId,
+      companyId: body.companyId,
       companyRate,
       topDistributorRate,
       distributorRate,
