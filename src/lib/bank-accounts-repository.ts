@@ -34,7 +34,7 @@ function toAccountRow(row: BankAccountDbRow): AccountRow {
   return {
     id: row.id,
     distributorId: row.distributor_id ?? undefined,
-    branchName: row.distributor_name ?? "하부계정 없음",
+    branchName: "본사",
     creator: row.creator_name ?? "마스터 관리자",
     bankName: row.bank_name,
     holder: row.account_holder,
