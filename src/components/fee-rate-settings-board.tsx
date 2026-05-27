@@ -8,6 +8,7 @@ type FeeRateRow = {
   id: string;
   domainId?: string;
   distributorId?: string;
+  vendorName: string;
   domainName: string;
   totalRate: number;
   companyName: string;
@@ -85,7 +86,7 @@ export function FeeRateSettingsBoard({
     }
 
     return rows.filter((row) =>
-      [row.domainName, row.topDistributor, row.distributor]
+      [row.vendorName, row.domainName, row.topDistributor, row.distributor]
         .join(" ")
         .toLowerCase()
         .includes(keyword),
@@ -222,15 +223,18 @@ export function FeeRateSettingsBoard({
           </label>
 
           <div className="overflow-x-auto rounded-[26px] border border-white/8 bg-black/18">
-            <table className="w-full min-w-[1480px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[1800px] border-collapse text-left text-sm">
               <thead className="bg-black/52 text-white/72">
                 <tr>
                   {[
-                    "업체(도메인)",
-                    "업체 총 수수료",
-                    "본사",
                     "상위총판",
                     "총판",
+                    "업체",
+                    "도메인",
+                    "업체 총 수수료",
+                    "본사",
+                    "상위총판 수수료",
+                    "총판 수수료",
                     "수정일",
                   ].map((header, index) => (
                     <th
@@ -254,6 +258,15 @@ export function FeeRateSettingsBoard({
                       key={row.id}
                       className="border-b border-white/8 text-white/76 last:border-b-0 hover:bg-white/[0.025]"
                     >
+                      <td className="px-4 py-4 text-center font-semibold text-white">
+                        {row.topDistributor}
+                      </td>
+                      <td className="px-4 py-4 text-center font-semibold text-white">
+                        {row.distributor}
+                      </td>
+                      <td className="px-4 py-4 text-center font-semibold text-white">
+                        {row.vendorName}
+                      </td>
                       <td className="px-4 py-4 text-center font-semibold text-white">
                         {row.domainName}
                       </td>
@@ -289,50 +302,56 @@ export function FeeRateSettingsBoard({
                         </div>
                       </td>
                       <td className="px-4 py-4 text-center font-semibold text-white">
-                        <div className="flex items-center justify-center gap-2">
-                          <span>{row.topDistributor}</span>
-                          <RateInput
-                            value={draft.topDistributorRate}
-                            disabled={!canManageFeeRates}
-                            onChange={(value) =>
-                              updateDraftRate(row.id, "topDistributorRate", value)
-                            }
-                          />
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void saveRate(row, "topDistributorRate");
-                            }}
-                            disabled={!canManageFeeRates || !topChanged || savingId === row.id}
-                            className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/34"
-                          >
-                            {savingId === row.id ? "저장 중" : "수정"}
-                          </button>
-                        </div>
+                        {row.topDistributor === "-" ? (
+                          "-"
+                        ) : (
+                          <div className="flex items-center justify-center gap-2">
+                            <RateInput
+                              value={draft.topDistributorRate}
+                              disabled={!canManageFeeRates}
+                              onChange={(value) =>
+                                updateDraftRate(row.id, "topDistributorRate", value)
+                              }
+                            />
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void saveRate(row, "topDistributorRate");
+                              }}
+                              disabled={!canManageFeeRates || !topChanged || savingId === row.id}
+                              className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/34"
+                            >
+                              {savingId === row.id ? "저장 중" : "수정"}
+                            </button>
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-4 text-center font-semibold text-white">
-                        <div className="flex items-center justify-center gap-2">
-                          <span>{row.distributor}</span>
-                          <RateInput
-                            value={draft.distributorRate}
-                            disabled={!canManageFeeRates}
-                            onChange={(value) =>
-                              updateDraftRate(row.id, "distributorRate", value)
-                            }
-                          />
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void saveRate(row, "distributorRate");
-                            }}
-                            disabled={!canManageFeeRates || !distributorChanged || savingId === row.id}
-                            className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/34"
-                          >
-                            {savingId === row.id ? "저장 중" : "수정"}
-                          </button>
-                        </div>
+                        {row.distributor === "-" ? (
+                          "-"
+                        ) : (
+                          <div className="flex items-center justify-center gap-2">
+                            <RateInput
+                              value={draft.distributorRate}
+                              disabled={!canManageFeeRates}
+                              onChange={(value) =>
+                                updateDraftRate(row.id, "distributorRate", value)
+                              }
+                            />
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void saveRate(row, "distributorRate");
+                              }}
+                              disabled={!canManageFeeRates || !distributorChanged || savingId === row.id}
+                              className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/34"
+                            >
+                              {savingId === row.id ? "저장 중" : "수정"}
+                            </button>
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-4 text-center text-white/52">
                         {row.updatedAt}

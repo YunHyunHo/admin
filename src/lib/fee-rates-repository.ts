@@ -9,6 +9,7 @@ export type FeeRateSettingsRow = {
   id: string;
   domainId?: string;
   distributorId?: string;
+  vendorName: string;
   domainName: string;
   totalRate: number;
   companyName: string;
@@ -28,6 +29,7 @@ type FeeRateDbRow = {
   top_distributor_name: string | null;
   domain_name: string | null;
   company_name: string | null;
+  vendor_name: string | null;
   company_rate: string;
   distributor_rate: string;
   agency_rate: string;
@@ -49,23 +51,18 @@ function getTotalRate(
 }
 
 function toSettingsRow(row: FeeRateDbRow): FeeRateSettingsRow {
-  const hasSubDistributor = Boolean(
-    row.top_distributor_name &&
-      row.distributor_name &&
-      row.top_distributor_name !== row.distributor_name,
-  );
-
   return {
     id: row.id,
     domainId: row.domain_id ?? undefined,
     distributorId: row.distributor_id ?? undefined,
-    domainName: row.domain_name ?? row.company_name ?? "도메인 없음",
+    vendorName: row.vendor_name ?? row.company_name ?? "-",
+    domainName: row.domain_name ?? "-",
     totalRate: Number(getTotalRate(row).toFixed(2)),
     companyName: "본사",
     companyRate: Number(row.company_rate),
-    topDistributor: row.top_distributor_name ?? row.distributor_name ?? "-",
+    topDistributor: row.top_distributor_name ?? "-",
     topDistributorRate: Number(row.distributor_rate),
-    distributor: hasSubDistributor ? row.distributor_name ?? "-" : "-",
+    distributor: row.distributor_name ?? "-",
     distributorRate: Number(row.agency_rate),
     updatedAt: formatStamp(row.updated_at),
   };
@@ -84,6 +81,7 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
           id: "FEE-FALLBACK",
           domainId: undefined,
           distributorId: undefined,
+          vendorName: user.companyName,
           domainName: "도메인",
           totalRate: feeRate,
           companyName: "본사",
@@ -106,10 +104,19 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
         dom.id::text as id,
         dom.id::text as domain_id,
         dist.id::text as distributor_id,
-        case when parent_dist.id is null then '-' else dist.name end as distributor_name,
-        coalesce(parent_dist.name, dist.name) as top_distributor_name,
+        case
+          when dist.id is null then '-'
+          when parent_dist.id is null then '-'
+          else dist.name
+        end as distributor_name,
+        case
+          when dist.id is null then '-'
+          when parent_dist.id is null then dist.name
+          else parent_dist.name
+        end as top_distributor_name,
         dom.domain_name,
         c.company_name,
+        coalesce(domain_admin.name, c.company_name) as vendor_name,
         coalesce(fr.company_rate, 0.2)::text as company_rate,
         coalesce(fr.distributor_rate, 0.1)::text as distributor_rate,
         coalesce(fr.agency_rate, case when parent_dist.id is null then 0 else 0.1 end)::text as agency_rate,
@@ -119,6 +126,16 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
       left join distributors dist on dist.id = dom.distributor_id
       left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
       left join admins dist_admin on dist_admin.id = dist.admin_id
+      left join lateral (
+        select a.name
+        from admin_domain_mappings adm
+        join admins a on a.id = adm.admin_id
+        where adm.domain_id = dom.id
+          and a.role = 'DOMAIN_ADMIN'
+          and a.status <> 'DELETED'
+        order by a.created_at desc
+        limit 1
+      ) domain_admin on true
       left join lateral (
         select *
         from fee_rates fee
