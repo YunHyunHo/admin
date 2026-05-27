@@ -486,17 +486,31 @@ export async function createPersistedAdminAccount(input: {
     throw new Error("어드민 계정 생성에 실패했습니다.");
   }
 
-  const companyIdResult = await query<{ id: string }>(
-    `
-      select id::text
-      from companies
-      where company_name = any($1::text[])
-      order by company_name asc
-      limit 1
-    `,
-    [normalizedCompanies],
-  );
-  const primaryCompanyId = companyIdResult.rows[0]?.id;
+  let primaryCompanyId =
+    (
+      await query<{ id: string }>(
+        `
+          select id::text
+          from companies
+          where company_name = any($1::text[])
+          order by company_name asc
+          limit 1
+        `,
+        [normalizedCompanies],
+      )
+    ).rows[0]?.id ?? null;
+
+  if (!primaryCompanyId) {
+    const createdCompany = await query<{ id: string }>(
+      `
+        insert into companies (company_name, status)
+        values ($1, 'ACTIVE')
+        returning id::text
+      `,
+      [normalizedCompanies[0]],
+    );
+    primaryCompanyId = createdCompany.rows[0]?.id ?? null;
+  }
 
   await query(
     `
