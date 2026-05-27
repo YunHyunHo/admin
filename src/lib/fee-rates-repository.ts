@@ -148,7 +148,8 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
         limit 1
       ) fr on true
       where dom.status <> 'DELETED'
-        and dist.status = 'ACTIVE'
+        and (dist.id is null or dist.status = 'ACTIVE')
+        and domain_admin.name is not null
         ${scope.sql}
       order by dom.created_at desc
     `,
