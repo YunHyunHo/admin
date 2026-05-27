@@ -74,10 +74,6 @@ export function DomainListBoard({
   const [selectedLinkAccountId, setSelectedLinkAccountId] = useState("");
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(false);
   const [isLinkingAccount, setIsLinkingAccount] = useState(false);
-  const [editingBankName, setEditingBankName] = useState("");
-  const [editingAccountHolder, setEditingAccountHolder] = useState("");
-  const [editingAccountNumber, setEditingAccountNumber] = useState("");
-  const [isSavingAccount, setIsSavingAccount] = useState(false);
 
   const pageCount = Math.max(1, Math.ceil(rows.length / rowsPerPage));
   const visibleRows = useMemo(
@@ -102,9 +98,6 @@ export function DomainListBoard({
   async function openAccountModal(row: DomainListRow) {
     setAccountModalMessage("");
     setAccountModalRow(row);
-    setEditingBankName(row.bankName === "-" ? "" : row.bankName);
-    setEditingAccountHolder(row.accountHolder === "-" ? "" : row.accountHolder);
-    setEditingAccountNumber(row.accountNumber === "-" ? "" : row.accountNumber);
     setSelectedLinkAccountId("");
     setAvailableAccounts([]);
     setIsLoadingAccounts(true);
@@ -132,9 +125,6 @@ export function DomainListBoard({
   function closeAccountModal() {
     setAccountModalRow(null);
     setAccountModalMessage("");
-    setEditingBankName("");
-    setEditingAccountHolder("");
-    setEditingAccountNumber("");
     setAvailableAccounts([]);
     setSelectedLinkAccountId("");
     setIsLoadingAccounts(false);
@@ -272,47 +262,6 @@ export function DomainListBoard({
     }
   }
 
-  async function handleSaveAccount() {
-    if (!accountModalRow || isSavingAccount) {
-      return;
-    }
-
-    if (!editingBankName.trim() || !editingAccountHolder.trim() || !editingAccountNumber.trim()) {
-      setAccountModalMessage("은행, 예금주, 계좌번호를 모두 입력해주세요.");
-      return;
-    }
-
-    setIsSavingAccount(true);
-    setAccountModalMessage("");
-
-    try {
-      const response = await fetch("/api/domain-list", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: accountModalRow.id,
-          action: "update-account",
-          bankName: editingBankName,
-          accountHolder: editingAccountHolder,
-          accountNumber: editingAccountNumber,
-        }),
-      });
-      const text = await response.text();
-      const data = safeParseJson(text);
-
-      if (!response.ok || !("rows" in data)) {
-        setAccountModalMessage(data.message ?? "계좌 정보 수정에 실패했습니다.");
-        return;
-      }
-
-      applyPayload(data);
-      setMessage(data.message ?? "계좌 정보가 수정되었습니다.");
-      closeAccountModal();
-    } finally {
-      setIsSavingAccount(false);
-    }
-  }
-
   async function handleLinkAccount() {
     if (!accountModalRow || isLinkingAccount) {
       return;
@@ -346,13 +295,7 @@ export function DomainListBoard({
 
       applyPayload(data);
       setMessage(data.message ?? "계좌가 연동되었습니다.");
-      const updatedRow = data.rows.find((row) => row.id === accountModalRow.id) ?? null;
-      if (updatedRow) {
-        setAccountModalRow(updatedRow);
-        setEditingBankName(updatedRow.bankName === "-" ? "" : updatedRow.bankName);
-        setEditingAccountHolder(updatedRow.accountHolder === "-" ? "" : updatedRow.accountHolder);
-        setEditingAccountNumber(updatedRow.accountNumber === "-" ? "" : updatedRow.accountNumber);
-      }
+      closeAccountModal();
     } finally {
       setIsLinkingAccount(false);
     }
@@ -649,10 +592,10 @@ export function DomainListBoard({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 backdrop-blur-sm">
           <div className="w-full max-w-[490px] rounded-[28px] border border-white/10 bg-white p-6 text-slate-950 shadow-[0_28px_120px_rgba(0,0,0,0.58)]">
             <h3 className="text-2xl font-semibold tracking-[-0.04em]">
-              계좌 정보
+              계좌관리
             </h3>
             <p className="mt-2 text-sm text-slate-500">
-              {accountModalRow.companyName} 계정의 출금 계좌를 확인하고 수정할 수 있습니다.
+              {accountModalRow.companyName} 계정에 연결할 계좌를 선택한 뒤 연동할 수 있습니다.
             </p>
 
             <div className="mt-7 space-y-5">
@@ -682,44 +625,9 @@ export function DomainListBoard({
                   {isLinkingAccount ? "연동 중" : "연동"}
                 </button>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                연결 계정: <span className="font-semibold text-slate-900">{accountModalRow.loginId}</span>
-              </div>
-              <select
-                value={editingBankName}
-                onChange={(event) => setEditingBankName(event.target.value)}
-                className="h-14 w-full rounded-xl border border-slate-300 px-5 text-sm outline-none"
-              >
-                <option value="">은행 선택</option>
-                {bankOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-              <input
-                value={editingAccountHolder}
-                onChange={(event) => setEditingAccountHolder(event.target.value)}
-                placeholder="예금주"
-                className="h-14 w-full rounded-xl border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
-              />
-              <input
-                value={editingAccountNumber}
-                onChange={(event) => setEditingAccountNumber(event.target.value)}
-                placeholder="계좌번호 [- 넣어서 입력]"
-                className="h-14 w-full rounded-xl border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
-              />
             </div>
 
             <div className="mt-12 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={handleSaveAccount}
-                disabled={isSavingAccount}
-                className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
-              >
-                {isSavingAccount ? "저장 중" : "수정"}
-              </button>
               <button
                 type="button"
                 onClick={closeAccountModal}
