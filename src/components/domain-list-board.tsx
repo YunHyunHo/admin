@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { ModalFeedback } from "@/components/modal-feedback";
+import type { AccountRow } from "@/lib/bank-accounts-types";
 import type {
   DomainListOwnerOption,
   DomainListRow,
@@ -69,6 +70,10 @@ export function DomainListBoard({
   const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
   const [accountModalRow, setAccountModalRow] = useState<DomainListRow | null>(null);
   const [accountModalMessage, setAccountModalMessage] = useState("");
+  const [availableAccounts, setAvailableAccounts] = useState<AccountRow[]>([]);
+  const [selectedLinkAccountId, setSelectedLinkAccountId] = useState("");
+  const [isLoadingAccounts, setIsLoadingAccounts] = useState(false);
+  const [isLinkingAccount, setIsLinkingAccount] = useState(false);
   const [editingBankName, setEditingBankName] = useState("");
   const [editingAccountHolder, setEditingAccountHolder] = useState("");
   const [editingAccountNumber, setEditingAccountNumber] = useState("");
@@ -94,12 +99,34 @@ export function DomainListBoard({
     setAccountNumber("");
   }
 
-  function openAccountModal(row: DomainListRow) {
+  async function openAccountModal(row: DomainListRow) {
     setAccountModalMessage("");
     setAccountModalRow(row);
     setEditingBankName(row.bankName === "-" ? "" : row.bankName);
     setEditingAccountHolder(row.accountHolder === "-" ? "" : row.accountHolder);
     setEditingAccountNumber(row.accountNumber === "-" ? "" : row.accountNumber);
+    setSelectedLinkAccountId("");
+    setAvailableAccounts([]);
+    setIsLoadingAccounts(true);
+
+    try {
+      const response = await fetch("/api/bank-accounts");
+      const data = (await response.json()) as {
+        accounts?: AccountRow[];
+        message?: string;
+      };
+
+      if (!response.ok) {
+        setAccountModalMessage(data.message ?? "계좌 목록을 불러오지 못했습니다.");
+        return;
+      }
+
+      setAvailableAccounts((data.accounts ?? []).filter((account) => account.isActive));
+    } catch {
+      setAccountModalMessage("계좌 목록을 불러오지 못했습니다.");
+    } finally {
+      setIsLoadingAccounts(false);
+    }
   }
 
   function closeAccountModal() {
@@ -108,6 +135,10 @@ export function DomainListBoard({
     setEditingBankName("");
     setEditingAccountHolder("");
     setEditingAccountNumber("");
+    setAvailableAccounts([]);
+    setSelectedLinkAccountId("");
+    setIsLoadingAccounts(false);
+    setIsLinkingAccount(false);
   }
 
   function applyPayload(data: ApiResponse) {
@@ -282,6 +313,51 @@ export function DomainListBoard({
     }
   }
 
+  async function handleLinkAccount() {
+    if (!accountModalRow || isLinkingAccount) {
+      return;
+    }
+
+    if (!selectedLinkAccountId) {
+      setAccountModalMessage("연결할 계좌를 선택해주세요.");
+      return;
+    }
+
+    setIsLinkingAccount(true);
+    setAccountModalMessage("");
+
+    try {
+      const response = await fetch("/api/domain-list", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: accountModalRow.id,
+          action: "link-account",
+          accountId: selectedLinkAccountId,
+        }),
+      });
+      const text = await response.text();
+      const data = safeParseJson(text);
+
+      if (!response.ok || !("rows" in data)) {
+        setAccountModalMessage(data.message ?? "계좌 연동에 실패했습니다.");
+        return;
+      }
+
+      applyPayload(data);
+      setMessage(data.message ?? "계좌가 연동되었습니다.");
+      const updatedRow = data.rows.find((row) => row.id === accountModalRow.id) ?? null;
+      if (updatedRow) {
+        setAccountModalRow(updatedRow);
+        setEditingBankName(updatedRow.bankName === "-" ? "" : updatedRow.bankName);
+        setEditingAccountHolder(updatedRow.accountHolder === "-" ? "" : updatedRow.accountHolder);
+        setEditingAccountNumber(updatedRow.accountNumber === "-" ? "" : updatedRow.accountNumber);
+      }
+    } finally {
+      setIsLinkingAccount(false);
+    }
+  }
+
   return (
     <section className="rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
       <div className="flex flex-col gap-3 border-b border-white/8 px-5 py-6 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
@@ -389,7 +465,9 @@ export function DomainListBoard({
                     <div className="flex justify-center">
                       <button
                         type="button"
-                        onClick={() => openAccountModal(row)}
+                        onClick={() => {
+                          void openAccountModal(row);
+                        }}
                         className="rounded-xl bg-cyan-500/18 px-3 py-2 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-500/28"
                       >
                         계좌확인
@@ -426,7 +504,7 @@ export function DomainListBoard({
                       <button
                         type="button"
                         onClick={() => {
-                          window.location.href = "/dashboard/accounts";
+                          void openAccountModal(row);
                         }}
                         className="rounded-xl bg-cyan-500/18 px-3 py-2 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-500/28"
                       >
@@ -585,6 +663,31 @@ export function DomainListBoard({
 
             <div className="mt-7 space-y-5">
               <ModalFeedback message={accountModalMessage} />
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-start">
+                <select
+                  value={selectedLinkAccountId}
+                  onChange={(event) => setSelectedLinkAccountId(event.target.value)}
+                  disabled={isLoadingAccounts}
+                  className="h-14 w-full rounded-xl border border-slate-300 px-5 text-sm outline-none disabled:bg-slate-100"
+                >
+                  <option value="">
+                    {isLoadingAccounts ? "계좌 불러오는 중" : "연결할 계좌를 선택"}
+                  </option>
+                  {availableAccounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {`${account.bankName} ${account.holder} ${account.accountNumber}`}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleLinkAccount}
+                  disabled={isLoadingAccounts || isLinkingAccount}
+                  className="h-14 rounded-xl bg-blue-700 px-6 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  {isLinkingAccount ? "연동 중" : "연동"}
+                </button>
+              </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
                 연결 계정: <span className="font-semibold text-slate-900">{accountModalRow.loginId}</span>
               </div>

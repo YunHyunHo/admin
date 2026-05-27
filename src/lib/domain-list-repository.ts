@@ -445,6 +445,45 @@ export async function updateDomainEntryAccount(input: {
   });
 }
 
+export async function linkDomainEntryAccount(input: {
+  id: string;
+  accountId: string;
+}) {
+  if (!isUuid(input.id) || !isUuid(input.accountId)) {
+    throw new Error("도메인 또는 계좌 정보를 확인해주세요.");
+  }
+
+  await withTransaction(async (client) => {
+    const accountResult = await client.query<{
+      bank_name: string;
+      account_number: string;
+      account_holder: string;
+    }>(
+      `
+        select bank_name, account_number, account_holder
+        from bank_accounts
+        where id = $1::uuid
+          and is_active = true
+        limit 1
+      `,
+      [input.accountId],
+    );
+
+    const selected = accountResult.rows[0];
+
+    if (!selected) {
+      throw new Error("선택한 계좌를 찾지 못했습니다.");
+    }
+
+    await updateDomainEntryAccount({
+      id: input.id,
+      bankName: selected.bank_name,
+      accountHolder: selected.account_holder,
+      accountNumber: selected.account_number,
+    });
+  });
+}
+
 export async function deleteDomainEntry(id: string) {
   await deleteDomainEntryWithAccount(id, false);
 }

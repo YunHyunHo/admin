@@ -5,6 +5,7 @@ import {
   createDomainEntry,
   deleteDomainEntry,
   getDomainListBoardData,
+  linkDomainEntryAccount,
   updateDomainEntryAccount,
   updateDomainEntryStatus,
 } from "@/lib/domain-list-repository";
@@ -25,11 +26,12 @@ type CreateDomainEntryPayload = {
 
 type PatchDomainEntryPayload = {
   id?: string;
-  action?: "toggle-status" | "delete" | "update-account";
+  action?: "toggle-status" | "delete" | "update-account" | "link-account";
   depositEnabled?: boolean;
   bankName?: string;
   accountHolder?: string;
   accountNumber?: string;
+  accountId?: string;
 };
 
 function canWrite(role: string | undefined) {
@@ -122,6 +124,11 @@ export async function PATCH(request: Request) {
   try {
     if (payload.action === "delete") {
       await deleteDomainEntry(payload.id);
+    } else if (payload.action === "link-account") {
+      await linkDomainEntryAccount({
+        id: payload.id,
+        accountId: payload.accountId?.trim() ?? "",
+      });
     } else if (payload.action === "update-account") {
       await updateDomainEntryAccount({
         id: payload.id,
@@ -147,11 +154,13 @@ export async function PATCH(request: Request) {
 
   return NextResponse.json({
     ...(await getDomainListBoardData(user)),
-    message:
-      payload.action === "delete"
-        ? "도메인이 삭제되었습니다."
-        : payload.action === "update-account"
-          ? "계좌 정보가 수정되었습니다."
-          : "도메인 상태가 변경되었습니다.",
+      message:
+        payload.action === "delete"
+          ? "도메인이 삭제되었습니다."
+          : payload.action === "link-account"
+            ? "계좌가 연동되었습니다."
+          : payload.action === "update-account"
+            ? "계좌 정보가 수정되었습니다."
+            : "도메인 상태가 변경되었습니다.",
   });
 }
