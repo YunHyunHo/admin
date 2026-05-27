@@ -26,18 +26,6 @@ function getVisibleAdmins(accounts: PublicAdminAccount[]) {
   );
 }
 
-function getManagedCompanyLabel(admin: AdminRow) {
-  const companies = admin.managedCompanies.filter(
-    (company) => company && company !== "전체",
-  );
-
-  if (!companies.length) {
-    return "-";
-  }
-
-  return companies.join(", ");
-}
-
 type AdminsBoardProps = {
   initialAdmins: PublicAdminAccount[];
   managedCompanies: string[];
@@ -310,7 +298,6 @@ export function AdminsBoard({
                 {[
                   "닉네임",
                   "아이디",
-                  "업체",
                   "상태",
                   "업체선택",
                   "가입일",
@@ -336,9 +323,6 @@ export function AdminsBoard({
                   </td>
                   <td className="border border-white/18 px-4 py-4 text-center font-semibold">
                     {admin.loginId}
-                  </td>
-                  <td className="border border-white/18 px-4 py-4 text-center">
-                    {getManagedCompanyLabel(admin)}
                   </td>
                   <td className="border border-white/18 px-4 py-4 text-center">
                     <span className="mr-2 font-semibold text-sky-400">
