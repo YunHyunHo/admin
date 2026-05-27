@@ -37,6 +37,9 @@ export function AdminsBoard({
   managedCompanies,
   canManageAdmins,
 }: AdminsBoardProps) {
+  const assignableCompanies = managedCompanies.filter(
+    (company) => company !== "전체",
+  );
   const [admins, setAdmins] = useState<AdminRow[]>(getVisibleAdmins(initialAdmins));
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -423,9 +426,8 @@ export function AdminsBoard({
             <div className="mt-9 space-y-6">
               <ModalFeedback message={companyModalMessage} />
               <div className="max-h-80 space-y-3 overflow-y-auto rounded border border-slate-300 p-4">
-                {managedCompanies
-                  .filter((company) => company !== "전체")
-                  .map((company) => {
+                {assignableCompanies.length ? (
+                  assignableCompanies.map((company) => {
                     const checked = selectedManagedCompanies.includes(company);
 
                     return (
@@ -448,7 +450,12 @@ export function AdminsBoard({
                         />
                       </label>
                     );
-                  })}
+                  })
+                ) : (
+                  <div className="rounded border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">
+                    도메인 생성에서 만든 업체가 아직 없습니다.
+                  </div>
+                )}
               </div>
               <p className="text-sm text-slate-500">
                 선택한 업체들이 한 페이지에서 함께 보이도록 연결됩니다.
