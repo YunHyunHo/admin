@@ -154,6 +154,13 @@ async function getChargeRequestScope(
     distributorAdmin?: string;
   } = {},
 ): Promise<ScopedClause> {
+  if (user.role === "MASTER") {
+    return {
+      sql: "",
+      values: [],
+    };
+  }
+
   if (user.role === "DOMAIN_ADMIN") {
     const companyIds = await getManagedCompanyIds(user.id);
 
