@@ -28,6 +28,7 @@ export type AdminAccountRecord = {
   companyName: string;
   apiLabel: string;
   managedCompanies: string[];
+  hasDomainMapping?: boolean;
   createdBy: string | null;
   parentAdminId?: string | null;
   parentDistributorName?: string | null;
@@ -53,6 +54,7 @@ type DbAdminRow = {
   created_at: Date | string;
   updated_at: Date | string;
   managed_companies: string[] | null;
+  has_domain_mapping: boolean;
   parent_admin_id: string | null;
   parent_distributor_name: string | null;
 };
@@ -208,6 +210,7 @@ function toAdminAccountRecord(
     apiLabel:
       row.role === "DOMAIN_ADMIN" ? `${managedCompanies[0]} 연동 API` : "권한 범위 API",
     managedCompanies,
+    hasDomainMapping: row.has_domain_mapping,
     createdBy: row.created_by,
     parentAdminId: row.parent_admin_id,
     parentDistributorName: row.parent_distributor_name,
@@ -263,7 +266,8 @@ async function getDbAdminAccounts(user?: Pick<SessionUser, "id" | "role"> | null
         coalesce(
           array_remove(array_agg(c.company_name order by c.company_name), null),
           array[]::text[]
-        ) as managed_companies
+        ) as managed_companies,
+        bool_or(adm.admin_id is not null) as has_domain_mapping
       from admins a
       left join distributors dist on dist.admin_id = a.id
       left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
@@ -414,6 +418,7 @@ export function createIssuedAdminAccount(input: {
         ? `${normalizedCompanies[0]} 연동 API`
         : "권한 범위 API",
     managedCompanies: normalizedCompanies,
+    hasDomainMapping: false,
     createdBy: input.role === "MASTER" ? null : input.createdBy,
     parentAdminId: input.parentAdminId ?? null,
     parentDistributorName: input.parentDistributorName ?? null,
