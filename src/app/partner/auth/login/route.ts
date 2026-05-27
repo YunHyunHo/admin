@@ -53,7 +53,7 @@ export async function POST(request: Request) {
   const password = payload.password ?? "";
   const domain = payload.domain?.trim() ?? "";
 
-  if (!loginId || !password || !domain) {
+  if (!loginId || !password) {
     await logPartnerLoginAttempt({
       loginId,
       domain: normalizePartnerDomain(domain),
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
 
     return withCors(
       NextResponse.json(
-        { ok: false, message: "loginId, password, domain은 모두 필수입니다." },
+        { ok: false, message: "loginId와 password는 모두 필수입니다." },
         { status: 400 },
       ),
       origin,

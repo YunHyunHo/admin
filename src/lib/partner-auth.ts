@@ -188,12 +188,12 @@ export async function logPartnerLoginAttempt(input: {
 export async function loginPartnerAccount(input: {
   loginId: string;
   password: string;
-  domain: string;
+  domain?: string;
 }): Promise<PartnerLoginResult | null> {
   const normalizedLoginId = input.loginId.trim();
-  const normalizedDomain = normalizePartnerDomain(input.domain);
+  const normalizedDomain = normalizePartnerDomain(input.domain ?? "");
 
-  if (!normalizedLoginId || !input.password || !normalizedDomain) {
+  if (!normalizedLoginId || !input.password) {
     return null;
   }
 
@@ -222,9 +222,12 @@ export async function loginPartnerAccount(input: {
     [normalizedLoginId],
   );
 
-  const matchedRow = result.rows.find(
-    (row) => normalizePartnerDomain(row.domain_name) === normalizedDomain,
-  );
+  const matchedRow =
+    (normalizedDomain
+      ? result.rows.find(
+          (row) => normalizePartnerDomain(row.domain_name) === normalizedDomain,
+        )
+      : null) ?? result.rows[0];
 
   if (!matchedRow) {
     return null;

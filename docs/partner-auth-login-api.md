@@ -15,7 +15,7 @@
 {
   "loginId": "업체 로그인 ID",
   "password": "비밀번호",
-  "domain": "접속 도메인"
+  "domain": "접속 도메인 (선택)"
 }
 ```
 
@@ -69,8 +69,9 @@
 
 - `loginId`는 생성된 도메인 계정의 로그인 ID여야 합니다.
 - `password`는 해당 계정 비밀번호여야 합니다.
-- `domain`은 해당 계정에 매핑된 활성 도메인과 일치해야 합니다.
-- 즉 로그인은 `loginId + password + domain` 3개를 함께 확인합니다.
+- `domain`은 선택값입니다.
+- `domain`을 보내면 해당 도메인과 일치하는 계정을 우선 확인합니다.
+- `domain`을 보내지 않아도 `loginId + password`로 로그인할 수 있습니다.
 
 ## 토큰 사용 방식
 
