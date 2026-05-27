@@ -157,11 +157,16 @@ export function FeeRateSettingsBoard({
 
     const draft = draftRates[row.id] ?? getDraftRates(row);
     const nextDraft = {
-      companyRate: key === "companyRate" ? draft.companyRate : row.companyRate,
+      companyRate:
+        key === undefined || key === "companyRate" ? draft.companyRate : row.companyRate,
       topDistributorRate:
-        key === "topDistributorRate" ? draft.topDistributorRate : row.topDistributorRate,
+        key === undefined || key === "topDistributorRate"
+          ? draft.topDistributorRate
+          : row.topDistributorRate,
       distributorRate:
-        key === "distributorRate" ? draft.distributorRate : row.distributorRate,
+        key === undefined || key === "distributorRate"
+          ? draft.distributorRate
+          : row.distributorRate,
     };
 
     setSavingId(row.id);
