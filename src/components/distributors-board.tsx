@@ -10,7 +10,7 @@ type DistributorRow = {
   nickname: string;
   loginId: string;
   password: string;
-  managedCompanies: string[];
+  managedAccountNames: string[];
   topDistributor: string;
   topDistributorId: string | null;
   lastLoginAt: string | null;
@@ -35,7 +35,12 @@ function toRows(accounts: AdminAccountRecord[]): DistributorRow[] {
       nickname: account.nickname,
       loginId: account.loginId,
       password: account.visiblePassword,
-      managedCompanies: account.managedCompanies,
+      managedAccountNames: accounts
+        .filter(
+          (candidate) =>
+            candidate.role === "DOMAIN_ADMIN" && candidate.parentAdminId === account.id,
+        )
+        .map((candidate) => `${candidate.nickname} / ${candidate.loginId}`),
       topDistributor: account.parentDistributorName ?? "-",
       topDistributorId: account.parentAdminId ?? null,
       lastLoginAt: account.lastLoginAt,
@@ -308,7 +313,7 @@ export function DistributorsBoard({
                       onClick={() => setManagedCompaniesRow(row)}
                       className="rounded-xl border border-cyan-300/24 bg-cyan-400/10 px-3 py-2 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-400/18"
                     >
-                      {row.managedCompanies.length}개
+                      {row.managedAccountNames.length}개
                     </button>
                   </td>
                   <td className="px-4 py-4 text-center">
@@ -454,21 +459,21 @@ export function DistributorsBoard({
               관리 업체
             </h3>
             <p className="mt-2 text-sm text-slate-500">
-              {managedCompaniesRow.nickname} 계정에 연결된 업체 목록입니다.
+              {managedCompaniesRow.nickname} 계정 하위에 연결된 계정 목록입니다.
             </p>
 
             <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div className="mb-3 flex items-center justify-between text-sm font-semibold text-slate-700">
                 <span>총 업체 수</span>
-                <span>{managedCompaniesRow.managedCompanies.length}개</span>
+                <span>{managedCompaniesRow.managedAccountNames.length}개</span>
               </div>
               <div className="max-h-[260px] space-y-2 overflow-y-auto">
-                {managedCompaniesRow.managedCompanies.map((company) => (
+                {managedCompaniesRow.managedAccountNames.map((accountName) => (
                   <div
-                    key={company}
+                    key={accountName}
                     className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700"
                   >
-                    {company}
+                    {accountName}
                   </div>
                 ))}
               </div>

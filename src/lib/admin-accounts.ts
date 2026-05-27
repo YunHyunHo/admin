@@ -248,8 +248,18 @@ async function getDbAdminAccounts(user?: Pick<SessionUser, "id" | "role"> | null
         a.last_login_at,
         a.created_at,
         a.updated_at,
-        max(parent_admin.id::text) as parent_admin_id,
-        max(parent_dist.name) as parent_distributor_name,
+        max(
+          coalesce(
+            parent_admin.id::text,
+            owner_dist_admin.id::text
+          )
+        ) as parent_admin_id,
+        max(
+          coalesce(
+            parent_dist.name,
+            owner_dist.name
+          )
+        ) as parent_distributor_name,
         coalesce(
           array_remove(array_agg(c.company_name order by c.company_name), null),
           array[]::text[]
@@ -258,6 +268,10 @@ async function getDbAdminAccounts(user?: Pick<SessionUser, "id" | "role"> | null
       left join distributors dist on dist.admin_id = a.id
       left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
       left join admins parent_admin on parent_admin.id = parent_dist.admin_id
+      left join admin_domain_mappings adm on adm.admin_id = a.id
+      left join domains owned_dom on owned_dom.id = adm.domain_id and owned_dom.status <> 'DELETED'
+      left join distributors owner_dist on owner_dist.id = owned_dom.distributor_id
+      left join admins owner_dist_admin on owner_dist_admin.id = owner_dist.admin_id
       left join admin_company_mappings acm on acm.admin_id = a.id
       left join companies c on c.id = acm.company_id
       where a.status <> 'DELETED'
