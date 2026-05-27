@@ -111,12 +111,21 @@ export function decryptVisiblePassword(value: string | null) {
 export function normalizeManagedCompanies(
   companies: string[],
   allowedCompanies = managedCompanyOptions,
+  options?: { allowEmpty?: boolean },
 ) {
   const normalized = companies.filter((company) =>
     allowedCompanies.includes(company),
   );
 
-  return normalized.length ? normalized : [allowedCompanies[0] ?? managedCompanyOptions[0]];
+  if (normalized.length) {
+    return normalized;
+  }
+
+  if (options?.allowEmpty) {
+    return [];
+  }
+
+  return [allowedCompanies[0] ?? managedCompanyOptions[0]];
 }
 
 export function getNowStamp() {
@@ -185,12 +194,13 @@ function toAdminAccountRecord(
   const managedCompanies = normalizeManagedCompanies(
     row.managed_companies?.length ? row.managed_companies : companyOptions,
     companyOptions,
+    { allowEmpty: row.role === "DOMAIN_ADMIN" },
   );
   const isMaster = row.role === "MASTER";
   const companyName = isMaster
     ? "전체관리"
     : row.role === "DOMAIN_ADMIN"
-      ? managedCompanies[0]
+      ? (managedCompanies[0] ?? "-")
       : `${managedCompanies.length}개 업체`;
 
   return {
@@ -204,11 +214,13 @@ function toAdminAccountRecord(
     companyId: isMaster
       ? "master"
       : row.role === "DOMAIN_ADMIN"
-        ? managedCompanies[0]
+        ? (managedCompanies[0] ?? "-")
         : "multi",
     companyName,
     apiLabel:
-      row.role === "DOMAIN_ADMIN" ? `${managedCompanies[0]} 연동 API` : "권한 범위 API",
+      row.role === "DOMAIN_ADMIN"
+        ? `${managedCompanies[0] ?? "미설정"} 연동 API`
+        : "권한 범위 API",
     managedCompanies,
     hasDomainMapping: row.has_domain_mapping,
     createdBy: row.created_by,
@@ -313,7 +325,11 @@ function decodeAccounts(value: string | undefined): AdminAccountRecord[] {
     return Array.isArray(parsed)
       ? parsed.map((account) => ({
           ...account,
-          managedCompanies: normalizeManagedCompanies(account.managedCompanies),
+          managedCompanies: normalizeManagedCompanies(
+            account.managedCompanies,
+            managedCompanyOptions,
+            { allowEmpty: account.role === "DOMAIN_ADMIN" },
+          ),
         }))
       : [];
   } catch {
@@ -397,9 +413,15 @@ export function createIssuedAdminAccount(input: {
   parentDistributorName?: string | null;
 }): AdminAccountRecord {
   const normalizedCompanies = normalizeManagedCompanies(input.managedCompanies);
+  const domainManagedCompanies =
+    input.role === "DOMAIN_ADMIN"
+      ? normalizeManagedCompanies(input.managedCompanies, managedCompanyOptions, {
+          allowEmpty: true,
+        })
+      : normalizedCompanies;
   const companyName =
     input.role === "DOMAIN_ADMIN"
-      ? normalizedCompanies[0]
+      ? (domainManagedCompanies[0] ?? "-")
       : `${normalizedCompanies.length}개 업체`;
   const now = getNowStamp();
 
@@ -411,13 +433,13 @@ export function createIssuedAdminAccount(input: {
     nickname: input.nickname,
     role: input.role,
     status: "ACTIVE",
-    companyId: input.role === "DOMAIN_ADMIN" ? normalizedCompanies[0] : "multi",
+    companyId: input.role === "DOMAIN_ADMIN" ? (domainManagedCompanies[0] ?? "-") : "multi",
     companyName,
     apiLabel:
       input.role === "DOMAIN_ADMIN"
-        ? `${normalizedCompanies[0]} 연동 API`
+        ? `${domainManagedCompanies[0] ?? "미설정"} 연동 API`
         : "권한 범위 API",
-    managedCompanies: normalizedCompanies,
+    managedCompanies: input.role === "DOMAIN_ADMIN" ? domainManagedCompanies : normalizedCompanies,
     hasDomainMapping: false,
     createdBy: input.role === "MASTER" ? null : input.createdBy,
     parentAdminId: input.parentAdminId ?? null,
@@ -443,10 +465,12 @@ export async function createPersistedAdminAccount(input: {
   }
 
   const companyOptions = await getDbManagedCompanyOptions();
-  const normalizedCompanies = normalizeManagedCompanies(
-    input.managedCompanies,
-    companyOptions,
-  );
+  const normalizedCompanies =
+    input.role === "DOMAIN_ADMIN"
+      ? normalizeManagedCompanies(input.managedCompanies, companyOptions, {
+          allowEmpty: true,
+        })
+      : normalizeManagedCompanies(input.managedCompanies, companyOptions);
   const passwordHash = await hashPassword(input.password);
   const encryptedPassword = encryptVisiblePassword(input.password);
   const result = await query<{ id: string }>(
@@ -812,6 +836,7 @@ export async function updatePersistedAdminAccount(input: {
     const managedCompanies = normalizeManagedCompanies(
       input.managedCompanies ?? [],
       companyOptions,
+      { allowEmpty: true },
     );
 
     await query("delete from admin_company_mappings where admin_id = $1::uuid", [

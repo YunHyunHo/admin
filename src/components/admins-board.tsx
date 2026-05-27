@@ -53,7 +53,9 @@ export function AdminsBoard({
   const [companySettingsAdmin, setCompanySettingsAdmin] = useState<AdminRow | null>(
     null,
   );
-  const [selectedManagedCompany, setSelectedManagedCompany] = useState("");
+  const [selectedManagedCompanies, setSelectedManagedCompanies] = useState<string[]>(
+    [],
+  );
   const [companyModalMessage, setCompanyModalMessage] = useState("");
   const [isSavingCompany, setIsSavingCompany] = useState(false);
 
@@ -231,8 +233,8 @@ export function AdminsBoard({
       return;
     }
 
-    if (!selectedManagedCompany) {
-      setCompanyModalMessage("업체를 선택해주세요.");
+    if (!selectedManagedCompanies.length) {
+      setCompanyModalMessage("업체를 하나 이상 선택해주세요.");
       return;
     }
 
@@ -243,7 +245,7 @@ export function AdminsBoard({
       const data = await requestAdminAccount("PATCH", {
         id: companySettingsAdmin.id,
         action: "set-companies",
-        managedCompanies: [selectedManagedCompany],
+        managedCompanies: selectedManagedCompanies,
       });
       setCompanySettingsAdmin(null);
       setMessage(data.message ?? `${companySettingsAdmin.loginId} 업체가 설정되었습니다.`);
@@ -350,9 +352,10 @@ export function AdminsBoard({
                       type="button"
                       onClick={() => {
                         setCompanySettingsAdmin(admin);
-                        setSelectedManagedCompany(
-                          admin.managedCompanies.find((company) => company && company !== "전체") ??
-                            "",
+                        setSelectedManagedCompanies(
+                          admin.managedCompanies.filter(
+                            (company) => company && company !== "전체",
+                          ),
                         );
                         setCompanyModalMessage("");
                       }}
@@ -414,25 +417,42 @@ export function AdminsBoard({
               업체 설정
             </h3>
             <p className="mt-2 text-sm text-slate-500">
-              {companySettingsAdmin.nickname} 계정에 연결할 업체를 선택합니다.
+              {companySettingsAdmin.nickname} 계정이 관리할 업체를 선택합니다.
             </p>
 
             <div className="mt-9 space-y-6">
               <ModalFeedback message={companyModalMessage} />
-              <select
-                value={selectedManagedCompany}
-                onChange={(event) => setSelectedManagedCompany(event.target.value)}
-                className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none"
-              >
-                <option value="">업체 선택</option>
+              <div className="max-h-80 space-y-3 overflow-y-auto rounded border border-slate-300 p-4">
                 {managedCompanies
                   .filter((company) => company !== "전체")
-                  .map((company) => (
-                    <option key={company} value={company}>
-                      {company}
-                    </option>
-                  ))}
-              </select>
+                  .map((company) => {
+                    const checked = selectedManagedCompanies.includes(company);
+
+                    return (
+                      <label
+                        key={company}
+                        className="flex items-center justify-between gap-3 rounded border border-slate-200 px-4 py-3 text-sm text-slate-700"
+                      >
+                        <span>{company}</span>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(event) => {
+                            setSelectedManagedCompanies((current) =>
+                              event.target.checked
+                                ? [...current, company]
+                                : current.filter((candidate) => candidate !== company),
+                            );
+                          }}
+                          className="h-4 w-4"
+                        />
+                      </label>
+                    );
+                  })}
+              </div>
+              <p className="text-sm text-slate-500">
+                선택한 업체들이 한 페이지에서 함께 보이도록 연결됩니다.
+              </p>
             </div>
 
             <div className="mt-12 flex justify-end gap-3">
