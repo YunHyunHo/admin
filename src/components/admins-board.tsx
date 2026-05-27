@@ -33,29 +33,6 @@ function getVisibleAdmins(accounts: PublicAdminAccount[]) {
   );
 }
 
-function getRoleLabel(role: AdminRole) {
-  switch (role) {
-    case "MASTER":
-      return "마스터";
-    case "TOP_DISTRIBUTOR":
-      return "상위총판";
-    case "ADMIN":
-      return "총판";
-    case "DOMAIN_ADMIN":
-      return "업체";
-    default:
-      return role;
-  }
-}
-
-function getParentLabel(admin: AdminRow) {
-  if (admin.role === "TOP_DISTRIBUTOR") {
-    return "본사";
-  }
-
-  return admin.parentDistributorName ?? "-";
-}
-
 function getManagedCompanyLabel(admin: AdminRow) {
   const companies = admin.managedCompanies.filter(
     (company) => company && company !== "전체",
@@ -97,6 +74,12 @@ export function AdminsBoard({
     null,
   );
   const [isCreating, setIsCreating] = useState(false);
+  const [companySettingsAdmin, setCompanySettingsAdmin] = useState<AdminRow | null>(
+    null,
+  );
+  const [selectedManagedCompany, setSelectedManagedCompany] = useState("");
+  const [companyModalMessage, setCompanyModalMessage] = useState("");
+  const [isSavingCompany, setIsSavingCompany] = useState(false);
 
   const filteredAdmins = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -311,32 +294,38 @@ export function AdminsBoard({
     }
   }
 
-  async function handleHardDeleteAdmin(admin: AdminRow) {
+  async function handleSaveManagedCompany() {
+    if (!companySettingsAdmin) {
+      return;
+    }
+
     if (!canManageAdmins) {
-      setMessage("마스터 계정만 하부계정을 완전 삭제할 수 있습니다.");
+      setCompanyModalMessage("마스터 계정만 업체를 설정할 수 있습니다.");
       return;
     }
 
-    if (
-      !window.confirm(
-        `${admin.loginId} 계정을 완전 삭제할까요?\n연결된 업체/총판 데이터와 기록이 삭제되며 복구할 수 없습니다.`,
-      )
-    ) {
+    if (!selectedManagedCompany) {
+      setCompanyModalMessage("업체를 선택해주세요.");
       return;
     }
 
-    setProcessingAdminId(admin.id);
+    setIsSavingCompany(true);
+    setCompanyModalMessage("");
 
     try {
       const data = await requestAdminAccount("PATCH", {
-        id: admin.id,
-        action: "hard-delete",
+        id: companySettingsAdmin.id,
+        action: "set-companies",
+        managedCompanies: [selectedManagedCompany],
       });
-      setMessage(data.message ?? `${admin.loginId} 계정이 완전 삭제되었습니다.`);
+      setCompanySettingsAdmin(null);
+      setMessage(data.message ?? `${companySettingsAdmin.loginId} 업체가 설정되었습니다.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "완전 삭제에 실패했습니다.");
+      setCompanyModalMessage(
+        error instanceof Error ? error.message : "업체 설정에 실패했습니다.",
+      );
     } finally {
-      setProcessingAdminId(null);
+      setIsSavingCompany(false);
     }
   }
 
@@ -382,11 +371,9 @@ export function AdminsBoard({
                 {[
                   "닉네임",
                   "아이디",
-                  "분류",
-                  "상위총판",
                   "업체",
                   "상태",
-                  "최근 로그인",
+                  "업체선택",
                   "가입일",
                   "삭제",
                 ].map((head) => (
@@ -410,12 +397,6 @@ export function AdminsBoard({
                   </td>
                   <td className="border border-white/18 px-4 py-4 text-center font-semibold">
                     {admin.loginId}
-                  </td>
-                  <td className="border border-white/18 px-4 py-4 text-center">
-                    {getRoleLabel(admin.role)}
-                  </td>
-                  <td className="border border-white/18 px-4 py-4 text-center">
-                    {getParentLabel(admin)}
                   </td>
                   <td className="border border-white/18 px-4 py-4 text-center">
                     {getManagedCompanyLabel(admin)}
@@ -442,7 +423,21 @@ export function AdminsBoard({
                     </button>
                   </td>
                   <td className="border border-white/18 px-4 py-4 text-center">
-                    {admin.lastLoginAt ?? "-"}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCompanySettingsAdmin(admin);
+                        setSelectedManagedCompany(
+                          admin.managedCompanies.find((company) => company && company !== "전체") ??
+                            "",
+                        );
+                        setCompanyModalMessage("");
+                      }}
+                      disabled={!canManageAdmins}
+                      className="rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/34"
+                    >
+                      업체설정
+                    </button>
                   </td>
                   <td className="border border-white/18 px-4 py-4 text-center">
                     {admin.createdAt}
@@ -459,18 +454,6 @@ export function AdminsBoard({
                       className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 transition hover:bg-white/80 disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/34"
                     >
                       {processingAdminId === admin.id ? "처리중" : "삭제"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleHardDeleteAdmin(admin)}
-                      disabled={
-                        admin.role === "MASTER" ||
-                        !canManageAdmins ||
-                        processingAdminId === admin.id
-                      }
-                      className="ml-2 rounded-lg bg-rose-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-rose-600 disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/34"
-                    >
-                      {processingAdminId === admin.id ? "처리중" : "완전 삭제"}
                     </button>
                   </td>
                 </tr>
@@ -500,6 +483,58 @@ export function AdminsBoard({
           </div>
         ) : null}
       </div>
+
+      {companySettingsAdmin ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/72 px-4">
+          <div className="w-full max-w-[490px] rounded-lg bg-white p-6 text-slate-950 shadow-2xl">
+            <h3 className="text-2xl font-semibold tracking-[-0.04em]">
+              업체 설정
+            </h3>
+            <p className="mt-2 text-sm text-slate-500">
+              {companySettingsAdmin.nickname} 계정에 연결할 업체를 선택합니다.
+            </p>
+
+            <div className="mt-9 space-y-6">
+              <ModalFeedback message={companyModalMessage} />
+              <select
+                value={selectedManagedCompany}
+                onChange={(event) => setSelectedManagedCompany(event.target.value)}
+                className="h-14 w-full rounded border border-slate-300 px-5 text-sm outline-none"
+              >
+                <option value="">업체 선택</option>
+                {managedCompanies
+                  .filter((company) => company !== "전체")
+                  .map((company) => (
+                    <option key={company} value={company}>
+                      {company}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div className="mt-12 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={handleSaveManagedCompany}
+                disabled={isSavingCompany}
+                className="rounded bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {isSavingCompany ? "저장 중" : "저장"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCompanyModalMessage("");
+                  setCompanySettingsAdmin(null);
+                }}
+                className="rounded bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {isCreateModalOpen ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/72 px-4">
