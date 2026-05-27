@@ -55,6 +55,10 @@ export async function getBankAccountBoardData(user?: SessionUser) {
   const scope = user
     ? getScopedDistributorCondition(user)
     : { sql: "", values: [] as string[] };
+  const accountScopeSql =
+    user?.role === "MASTER"
+      ? `and (dist_admin.created_by = $1::uuid or ba.distributor_id is null)`
+      : scope.sql.replaceAll("dist.", "d.");
 
   const [accounts, branchOptions] = await Promise.all([
     query<BankAccountDbRow>(
@@ -88,7 +92,7 @@ export async function getBankAccountBoardData(user?: SessionUser) {
           and dom.status <> 'DELETED'
         left join companies dom_company on dom_company.id = dom.company_id
         where 1 = 1
-          ${scope.sql.replaceAll("dist.", "d.")}
+          ${accountScopeSql}
         group by ba.id, d.name, owner_master.name
         order by ba.created_at desc
       `,
