@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { getKoreanNowStamp } from "@/lib/korean-time";
+import { ModalFeedback } from "@/components/modal-feedback";
 
 type FeeRateRow = {
   id: string;
@@ -30,6 +31,12 @@ const rateKeys = ["companyRate", "topDistributorRate", "distributorRate"] as con
 
 type RateKey = (typeof rateKeys)[number];
 type DraftRates = Pick<FeeRateRow, RateKey>;
+type EditTarget = "company" | "topDistributor" | "distributor";
+
+type EditModalState = {
+  rowId: string;
+  target: EditTarget;
+} | null;
 
 function getNowStamp() {
   return getKoreanNowStamp();
@@ -77,6 +84,9 @@ export function FeeRateSettingsBoard({
   );
   const [message, setMessage] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [editModal, setEditModal] = useState<EditModalState>(null);
+  const [modalSelection, setModalSelection] = useState("");
+  const [modalMessage, setModalMessage] = useState("");
 
   const filteredRows = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -108,6 +118,35 @@ export function FeeRateSettingsBoard({
         [key]: nextValue,
       },
     }));
+  }
+
+  function openEditModal(row: FeeRateRow, target: EditTarget) {
+    const selected =
+      target === "company"
+        ? row.companyName
+        : target === "topDistributor"
+          ? row.topDistributor
+          : row.distributor;
+
+    setEditModal({ rowId: row.id, target });
+    setModalSelection(selected === "-" ? "" : selected);
+    setModalMessage("");
+  }
+
+  function closeEditModal() {
+    setEditModal(null);
+    setModalSelection("");
+    setModalMessage("");
+  }
+
+  function submitEditModal() {
+    if (!modalSelection) {
+      setModalMessage("변경할 대상을 선택해주세요.");
+      return;
+    }
+
+    setMessage("연결 대상 팝업을 확인했습니다. 비율 수정은 맨 끝 비율수정 버튼으로 저장됩니다.");
+    closeEditModal();
   }
 
   async function saveRate(row: FeeRateRow, key?: RateKey) {
@@ -233,6 +272,7 @@ export function FeeRateSettingsBoard({
                     "상위총판",
                     "총판",
                     "수정일",
+                    "비율수정",
                   ].map((header, index) => (
                     <th
                       key={`${header}-${index}`}
@@ -246,9 +286,6 @@ export function FeeRateSettingsBoard({
               <tbody>
                 {visibleRows.map((row) => {
                   const draft = draftRates[row.id] ?? getDraftRates(row);
-                  const companyChanged = hasDraftChanges(row, draft, "companyRate");
-                  const topChanged = hasDraftChanges(row, draft, "topDistributorRate");
-                  const distributorChanged = hasDraftChanges(row, draft, "distributorRate");
 
                   return (
                     <tr
@@ -278,14 +315,10 @@ export function FeeRateSettingsBoard({
                           />
                           <button
                             type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void saveRate(row, "companyRate");
-                            }}
-                            disabled={!canManageFeeRates || !companyChanged || savingId === row.id}
-                            className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/34"
+                            onClick={() => openEditModal(row, "company")}
+                            className="rounded-xl bg-white/14 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
                           >
-                            {savingId === row.id ? "저장 중" : "수정"}
+                            수정
                           </button>
                         </div>
                       </td>
@@ -304,14 +337,10 @@ export function FeeRateSettingsBoard({
                             />
                             <button
                               type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                void saveRate(row, "topDistributorRate");
-                              }}
-                              disabled={!canManageFeeRates || !topChanged || savingId === row.id}
-                              className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/34"
+                              onClick={() => openEditModal(row, "topDistributor")}
+                              className="rounded-xl bg-white/14 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
                             >
-                              {savingId === row.id ? "저장 중" : "수정"}
+                              수정
                             </button>
                           </div>
                         )}
@@ -331,20 +360,30 @@ export function FeeRateSettingsBoard({
                             />
                             <button
                               type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                void saveRate(row, "distributorRate");
-                              }}
-                              disabled={!canManageFeeRates || !distributorChanged || savingId === row.id}
-                              className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/34"
+                              onClick={() => openEditModal(row, "distributor")}
+                              className="rounded-xl bg-white/14 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
                             >
-                              {savingId === row.id ? "저장 중" : "수정"}
+                              수정
                             </button>
                           </div>
                         )}
                       </td>
                       <td className="px-4 py-4 text-center text-white/52">
                         {row.updatedAt}
+                      </td>
+                      <td className="px-4 py-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() => void saveRate(row)}
+                          disabled={
+                            !canManageFeeRates ||
+                            !hasDraftChanges(row, draft) ||
+                            savingId === row.id
+                          }
+                          className="rounded-xl bg-fuchsia-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-fuchsia-400 disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/34"
+                        >
+                          {savingId === row.id ? "저장 중" : "수정"}
+                        </button>
                       </td>
                     </tr>
                   );
@@ -375,6 +414,18 @@ export function FeeRateSettingsBoard({
           </div>
         </div>
       </div>
+
+      {editModal ? (
+        <EditTargetModal
+          row={rows.find((row) => row.id === editModal.rowId) ?? null}
+          target={editModal.target}
+          selection={modalSelection}
+          message={modalMessage}
+          onSelectionChange={setModalSelection}
+          onClose={closeEditModal}
+          onSubmit={submitEditModal}
+        />
+      ) : null}
     </section>
   );
 }
@@ -403,4 +454,88 @@ function RateInput({
       <span className="font-semibold text-white/64">%</span>
     </div>
   );
+}
+
+function EditTargetModal({
+  row,
+  target,
+  selection,
+  message,
+  onSelectionChange,
+  onClose,
+  onSubmit,
+}: {
+  row: FeeRateRow | null;
+  target: EditTarget;
+  selection: string;
+  message: string;
+  onSelectionChange: (value: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  if (!row) {
+    return null;
+  }
+
+  const title =
+    target === "company"
+      ? "본사 변경"
+      : target === "topDistributor"
+        ? "상위총판 변경"
+        : "총판 변경";
+
+  const options = getTargetOptions(row, target);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-3xl rounded-[32px] bg-white px-10 py-11 shadow-[0_28px_90px_rgba(0,0,0,0.34)]">
+        <h3 className="text-4xl font-semibold tracking-[-0.04em] text-slate-950">
+          {title}
+        </h3>
+        <div className="mt-10 space-y-5">
+          <label className="block">
+            <span className="sr-only">{title}</span>
+            <select
+              value={selection}
+              onChange={(event) => onSelectionChange(event.target.value)}
+              className="h-24 w-full rounded-2xl border border-slate-300 px-6 text-2xl text-slate-950 outline-none transition focus:border-slate-500"
+            >
+              <option value="">선택</option>
+              {options.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+          <ModalFeedback message={message} />
+        </div>
+        <div className="mt-10 flex justify-end gap-4">
+          <button
+            type="button"
+            onClick={onSubmit}
+            className="rounded-xl bg-blue-600 px-8 py-4 text-2xl font-semibold text-white transition hover:bg-blue-500"
+          >
+            변경
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl bg-red-600 px-8 py-4 text-2xl font-semibold text-white transition hover:bg-red-500"
+          >
+            취소
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function getTargetOptions(row: FeeRateRow, target: EditTarget) {
+  if (target === "company") {
+    return ["본사"];
+  }
+
+  const value = target === "topDistributor" ? row.topDistributor : row.distributor;
+  return value === "-" ? [] : [value];
 }
