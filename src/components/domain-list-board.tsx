@@ -68,6 +68,7 @@ export function DomainListBoard({
   const [isCreating, setIsCreating] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
+  const [revealedAccounts, setRevealedAccounts] = useState<Record<string, boolean>>({});
   const [accountModalRow, setAccountModalRow] = useState<DomainListRow | null>(null);
   const [accountModalMessage, setAccountModalMessage] = useState("");
   const [availableAccounts, setAvailableAccounts] = useState<AccountRow[]>([]);
@@ -462,16 +463,26 @@ export function DomainListBoard({
                     {row.url}
                   </td>
                   <td className="px-4 py-5">
-                    <div className="flex justify-center">
+                    <div className="flex flex-col items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => {
-                          void openAccountModal(row);
-                        }}
+                        onClick={() =>
+                          setRevealedAccounts((current) => ({
+                            ...current,
+                            [row.id]: !current[row.id],
+                          }))
+                        }
                         className="rounded-xl bg-cyan-500/18 px-3 py-2 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-500/28"
                       >
-                        계좌확인
+                        {revealedAccounts[row.id] ? "계좌닫기" : "계좌확인"}
                       </button>
+                      {revealedAccounts[row.id] ? (
+                        <div className="max-w-[260px] rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3 text-center text-xs leading-5 text-white/80">
+                          <div>{row.bankName}</div>
+                          <div>{row.accountNumber}</div>
+                          <div>{row.accountHolder}</div>
+                        </div>
+                      ) : null}
                     </div>
                   </td>
                   <td className="px-4 py-5 text-center font-semibold text-white">
