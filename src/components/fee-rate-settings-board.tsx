@@ -217,24 +217,21 @@ export function FeeRateSettingsBoard({
                 setSearch(event.target.value);
                 setPage(1);
               }}
-              placeholder="도메인 또는 총판 검색"
+              placeholder="업체 또는 총판 검색"
               className="h-12 w-full rounded-2xl border border-white/10 bg-white/[0.035] px-4 text-sm text-white outline-none transition placeholder:text-white/34 focus:border-cyan-300/40"
             />
           </label>
 
           <div className="overflow-x-auto rounded-[26px] border border-white/8 bg-black/18">
-            <table className="w-full min-w-[1800px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[1480px] border-collapse text-left text-sm">
               <thead className="bg-black/52 text-white/72">
                 <tr>
                   {[
-                    "상위총판",
-                    "총판",
-                    "업체",
-                    "도메인",
+                    "업체(도메인)",
                     "업체 총 수수료",
                     "본사",
-                    "상위총판 수수료",
-                    "총판 수수료",
+                    "상위총판",
+                    "총판",
                     "수정일",
                   ].map((header, index) => (
                     <th
@@ -259,16 +256,7 @@ export function FeeRateSettingsBoard({
                       className="border-b border-white/8 text-white/76 last:border-b-0 hover:bg-white/[0.025]"
                     >
                       <td className="px-4 py-4 text-center font-semibold text-white">
-                        {row.topDistributor}
-                      </td>
-                      <td className="px-4 py-4 text-center font-semibold text-white">
-                        {row.distributor}
-                      </td>
-                      <td className="px-4 py-4 text-center font-semibold text-white">
                         {row.vendorName}
-                      </td>
-                      <td className="px-4 py-4 text-center font-semibold text-white">
-                        {row.domainName}
                       </td>
                       <td className="px-4 py-4 text-center font-semibold text-white">
                         {(
@@ -306,6 +294,7 @@ export function FeeRateSettingsBoard({
                           "-"
                         ) : (
                           <div className="flex items-center justify-center gap-2">
+                            <span>{row.topDistributor}</span>
                             <RateInput
                               value={draft.topDistributorRate}
                               disabled={!canManageFeeRates}
@@ -332,6 +321,7 @@ export function FeeRateSettingsBoard({
                           "-"
                         ) : (
                           <div className="flex items-center justify-center gap-2">
+                            <span>{row.distributor}</span>
                             <RateInput
                               value={draft.distributorRate}
                               disabled={!canManageFeeRates}
