@@ -143,11 +143,11 @@ export async function getDomainBoardData(fallbackRows: DomainRow[], user?: Sessi
         from distributors dist
         left join admins dist_admin on dist_admin.id = dist.admin_id
         where dist.status = 'ACTIVE'
-          ${user ? getScopedDistributorCondition(user).sql : ""}
+          ${user ? getDomainManagementScopeCondition(user).sql : ""}
         order by name asc
         limit ${DEFAULT_ROW_LIMIT}
       `,
-      user ? getScopedDistributorCondition(user).values : [],
+      user ? getDomainManagementScopeCondition(user).values : [],
     ),
   ]);
 

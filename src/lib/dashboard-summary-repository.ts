@@ -53,12 +53,24 @@ export async function getDashboardSummaryForUser(user: SessionUser) {
 
     return getDashboardSummary(user.companyName, state, settings);
   }
-  const scope = getScopedDistributorCondition(user);
-  const balanceScopeSql = getScopedDistributorCondition(
-    user,
-    "balance_dist",
-    "balance_dist_admin",
-  ).sql;
+  const scope =
+    user.role === "MASTER"
+      ? { sql: "", values: [] as string[] }
+      : getScopedDistributorCondition(user);
+  const balanceScopeSql =
+    user.role === "MASTER"
+      ? ""
+      : getScopedDistributorCondition(
+          user,
+          "balance_dist",
+          "balance_dist_admin",
+        ).sql;
+  const feeRateScopeSql = scope.sql
+    ? `and (
+        fee.distributor_id is null
+        or (${scope.sql.replace("and ", "")})
+      )`
+    : "";
 
   const [summaryResult, feeRateResult] = await Promise.all([
     query<DashboardSummaryRow>(
@@ -94,10 +106,7 @@ export async function getDashboardSummaryForUser(user: SessionUser) {
         left join admins dist_admin on dist_admin.id = dist.admin_id
         where fee.starts_at <= now()
           and (fee.ends_at is null or fee.ends_at > now())
-          and (
-            fee.distributor_id is null
-            or (${scope.sql.replace("and ", "")})
-          )
+          ${feeRateScopeSql}
         order by fee.starts_at desc, fee.created_at desc
         limit 1
       `,
@@ -131,8 +140,8 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
   const dashboardScope =
     user.role === "MASTER"
       ? {
-          sql: "and dist_admin.created_by = $3::uuid",
-          values: [user.id],
+          sql: "",
+          values: [] as string[],
         }
       : user.role === "TOP_DISTRIBUTOR"
         ? {

@@ -133,12 +133,15 @@ export async function getDomainExchangeOptions(user: SessionUser) {
 
   const result = await query<DomainExchangeOption>(
     `
-      select dom.id::text, dom.domain_name as name
+      select
+        dom.id::text,
+        coalesce(nullif(dom.domain_name, ''), c.company_name) as name
       from domains dom
+      join companies c on c.id = dom.company_id
       join distributors dist on dist.id = dom.distributor_id
       where dom.status <> 'DELETED'
         and dist.admin_id = $1::uuid
-      order by dom.domain_name asc
+      order by coalesce(nullif(dom.domain_name, ''), c.company_name) asc
     `,
     [user.id],
   );

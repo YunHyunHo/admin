@@ -103,7 +103,9 @@ export async function getDistributorWithdrawalRows(
     return fallbackRows;
   }
   const scope = user
-    ? getScopedDistributorCondition(user, "d", "dist_admin")
+    ? user.role === "MASTER"
+      ? { sql: "", values: [] as string[] }
+      : getScopedDistributorCondition(user, "d", "dist_admin")
     : { sql: "", values: [] as string[] };
 
   const withdrawals = await query<WithdrawalDbRow>(

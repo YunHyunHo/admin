@@ -10,7 +10,7 @@ import type { SessionUser } from "@/lib/auth";
 
 type SettlementAggregateRow = {
   date: string;
-  domain_name: string;
+  domain_name: string | null;
   charge_total: string;
   exchange_total: string;
   fee_total: string;
@@ -25,8 +25,14 @@ async function getCommissionAggregates(
   startDate: string,
   endDate: string,
 ) {
-  const scope = getScopedDistributorCondition(user);
+  const scope =
+    user.role === "MASTER"
+      ? { sql: "", values: [] as string[] }
+      : getScopedDistributorCondition(user);
   const scopeSql = scope.sql.replaceAll("$1", "$3");
+  const values = user.role === "MASTER"
+    ? [startDate, endDate]
+    : [startDate, endDate, user.id];
   const result = await query<SettlementAggregateRow>(
     `
       select
@@ -74,7 +80,7 @@ async function getCommissionAggregates(
       group by date, domain_name
       order by date asc
     `,
-    [startDate, endDate, user.id],
+    values,
   );
 
   return result.rows;

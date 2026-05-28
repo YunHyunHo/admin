@@ -13,7 +13,7 @@ type PartnerDbRow = {
   company_id: string;
   company_name: string;
   domain_id: string;
-  domain_name: string;
+  domain_name: string | null;
 };
 
 export type PartnerLoginSuccess = {
@@ -225,7 +225,7 @@ export async function loginPartnerAccount(input: {
   const matchedRow =
     (normalizedDomain
       ? result.rows.find(
-          (row) => normalizePartnerDomain(row.domain_name) === normalizedDomain,
+          (row) => normalizePartnerDomain(row.domain_name ?? "") === normalizedDomain,
         )
       : null) ?? result.rows[0];
 
@@ -246,7 +246,7 @@ export async function loginPartnerAccount(input: {
     partnerId: matchedRow.company_id,
     partnerName: matchedRow.company_name,
     domainId: matchedRow.domain_id,
-    domain: normalizePartnerDomain(matchedRow.domain_name),
+    domain: normalizePartnerDomain(matchedRow.domain_name ?? ""),
     permissions: defaultPermissions,
     menus: defaultMenus,
   });
@@ -264,7 +264,7 @@ export async function loginPartnerAccount(input: {
       id: matchedRow.company_id,
       name: matchedRow.company_name,
       domainId: matchedRow.domain_id,
-      domain: normalizePartnerDomain(matchedRow.domain_name),
+      domain: normalizePartnerDomain(matchedRow.domain_name ?? ""),
     },
     audit: {
       adminId: matchedRow.admin_id,

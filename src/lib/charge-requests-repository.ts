@@ -497,9 +497,10 @@ export async function getIntegrationChargeDomainOptions() {
     `
       select
         dom.id::text as id,
-        dom.domain_name as name,
+        coalesce(nullif(dom.domain_name, ''), c.company_name) as name,
         dist.name as "distributorName"
       from domains dom
+      join companies c on c.id = dom.company_id
       join distributors dist on dist.id = dom.distributor_id
       where dom.status = 'ACTIVE'
         and dist.status = 'ACTIVE'

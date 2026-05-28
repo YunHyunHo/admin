@@ -53,11 +53,13 @@ export async function getBankAccountBoardData(user?: SessionUser) {
     };
   }
   const scope = user
-    ? getScopedDistributorCondition(user)
+    ? user.role === "MASTER"
+      ? { sql: "", values: [] as string[] }
+      : getScopedDistributorCondition(user)
     : { sql: "", values: [] as string[] };
   const accountScopeSql =
     user?.role === "MASTER"
-      ? `and (dist_admin.created_by = $1::uuid or ba.distributor_id is null)`
+      ? ""
       : scope.sql.replaceAll("dist.", "d.");
 
   const [accounts, branchOptions] = await Promise.all([
@@ -88,7 +90,14 @@ export async function getBankAccountBoardData(user?: SessionUser) {
         left join distributors d on d.id = ba.distributor_id
         left join admins dist_admin on dist_admin.id = d.admin_id
         left join admins owner_master on owner_master.id = dist_admin.created_by
-        left join domains dom on dom.distributor_id = ba.distributor_id
+        left join domains dom on (
+          dom.distributor_id = ba.distributor_id
+          or (
+            ba.distributor_id is null
+            and ba.company_id is not null
+            and dom.company_id = ba.company_id
+          )
+        )
           and dom.status <> 'DELETED'
         left join companies dom_company on dom_company.id = dom.company_id
         where 1 = 1
