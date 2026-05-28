@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/auth";
 import {
   getFeeRateSettingsForUser,
   saveFeeRateSettings,
+  updateFeeRateDomainDistributor,
 } from "@/lib/fee-rates-repository";
 import { hasDatabaseUrl } from "@/lib/db";
 import {
@@ -99,4 +100,44 @@ export async function POST(request: Request) {
   setAdminSettingsCookie(response, nextSettings);
 
   return response;
+}
+
+export async function PATCH(request: Request) {
+  const user = await getSessionUser();
+
+  if (!user) {
+    return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
+  }
+
+  if (user.role !== "MASTER") {
+    return NextResponse.json(
+      { message: "수수료 수정은 마스터 계정만 가능합니다." },
+      { status: 403 },
+    );
+  }
+
+  const body = (await request.json()) as {
+    domainId?: string;
+    distributorId?: string;
+  };
+
+  try {
+    await updateFeeRateDomainDistributor({
+      domainId: body.domainId,
+      distributorId: body.distributorId,
+    });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        message:
+          error instanceof Error ? error.message : "총판 연결 변경에 실패했습니다.",
+      },
+      { status: 400 },
+    );
+  }
+
+  return NextResponse.json({
+    ...(await getFeeRateSettingsForUser(user)),
+    message: "총판 연결이 변경되었습니다.",
+  });
 }

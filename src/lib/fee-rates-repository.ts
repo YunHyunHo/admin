@@ -9,6 +9,7 @@ export type FeeRateSettingsRow = {
   id: string;
   domainId?: string;
   distributorId?: string;
+  topDistributorId?: string;
   vendorName: string;
   domainName: string;
   totalRate: number;
@@ -21,10 +22,18 @@ export type FeeRateSettingsRow = {
   updatedAt: string;
 };
 
+export type FeeRateDistributorOption = {
+  id: string;
+  name: string;
+  parentDistributorId?: string;
+  role: "TOP_DISTRIBUTOR" | "DISTRIBUTOR";
+};
+
 type FeeRateDbRow = {
   id: string;
   domain_id: string | null;
   distributor_id: string | null;
+  top_distributor_id: string | null;
   distributor_name: string | null;
   child_distributor_names: string | null;
   top_distributor_name: string | null;
@@ -56,6 +65,7 @@ function toSettingsRow(row: FeeRateDbRow): FeeRateSettingsRow {
     id: row.id,
     domainId: row.domain_id ?? undefined,
     distributorId: row.distributor_id ?? undefined,
+    topDistributorId: row.top_distributor_id ?? undefined,
     vendorName: row.vendor_name ?? row.company_name ?? "-",
     domainName: row.domain_name ?? "-",
     totalRate: Number(getTotalRate(row).toFixed(2)),
@@ -77,6 +87,7 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
     return {
       companyName: user.companyName,
       feeRate,
+      distributorOptions: [] satisfies FeeRateDistributorOption[],
       rows: [
         {
           id: "FEE-FALLBACK",
@@ -108,6 +119,7 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
         dom.id::text as id,
         dom.id::text as domain_id,
         dist.id::text as distributor_id,
+        coalesce(parent_dist.id, dist.id)::text as top_distributor_id,
         case
           when dist.id is null then '-'
           when parent_dist.id is null then null
@@ -170,13 +182,88 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
     scope.values,
   );
 
+  const optionResult = await query<FeeRateDistributorOption>(
+    `
+      select
+        dist.id::text as id,
+        dist.name,
+        dist.parent_distributor_id::text as "parentDistributorId",
+        case
+          when dist.parent_distributor_id is null then 'TOP_DISTRIBUTOR'
+          else 'DISTRIBUTOR'
+        end as role
+      from distributors dist
+      where dist.status = 'ACTIVE'
+      order by
+        case when dist.parent_distributor_id is null then 0 else 1 end,
+        dist.name asc
+    `,
+  );
+
   const rows = result.rows.map(toSettingsRow);
 
   return {
     companyName: "도메인",
     feeRate: rows[0]?.totalRate ?? 0.4,
     rows,
+    distributorOptions: optionResult.rows,
   };
+}
+
+export async function updateFeeRateDomainDistributor(input: {
+  domainId?: string;
+  distributorId?: string;
+}) {
+  if (!hasDatabaseUrl()) {
+    return;
+  }
+
+  if (!input.domainId || !input.distributorId) {
+    throw new Error("변경할 도메인과 총판 정보를 확인해주세요.");
+  }
+
+  await withTransaction(async (client) => {
+    const distributorResult = await client.query<{ id: string }>(
+      `
+        select id::text
+        from distributors
+        where id = $1::uuid
+          and status = 'ACTIVE'
+        limit 1
+      `,
+      [input.distributorId],
+    );
+
+    if (!distributorResult.rows[0]) {
+      throw new Error("선택한 총판 정보를 찾을 수 없습니다.");
+    }
+
+    const domainResult = await client.query<{ id: string }>(
+      `
+        update domains
+        set distributor_id = $2::uuid, updated_at = now()
+        where id = $1::uuid
+          and status <> 'DELETED'
+        returning id::text
+      `,
+      [input.domainId, input.distributorId],
+    );
+
+    if (!domainResult.rows[0]) {
+      throw new Error("변경할 도메인을 찾을 수 없습니다.");
+    }
+
+    await client.query(
+      `
+        update fee_rates
+        set distributor_id = $2::uuid, updated_at = now()
+        where domain_id = $1::uuid
+          and starts_at <= now()
+          and (ends_at is null or ends_at > now())
+      `,
+      [input.domainId, input.distributorId],
+    );
+  });
 }
 
 export async function saveFeeRateSettings(input: {

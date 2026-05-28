@@ -31,6 +31,7 @@ export default async function FeeRateSettingsPage() {
     >
       <FeeRateSettingsBoard
         initialRows={feeRateSettings.rows}
+        distributorOptions={feeRateSettings.distributorOptions}
         canManageFeeRates={canManageMasterResources(user)}
       />
     </AdminShell>
