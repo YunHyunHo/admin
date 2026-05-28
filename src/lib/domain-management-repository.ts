@@ -17,6 +17,7 @@ type DomainDbRow = {
   distributor_name: string | null;
   distributor_login_id: string | null;
   top_distributor_name: string | null;
+  child_distributor_names: string | null;
   current_balance: string | null;
   bank_name: string | null;
   account_number: string | null;
@@ -36,7 +37,8 @@ function formatStamp(value: Date | string | null) {
 
 function toDomainRow(row: DomainDbRow): DomainRow {
   const topDistributor = row.top_distributor_name ?? "-";
-  const distributorName = row.distributor_name ?? "-";
+  const distributorName =
+    row.distributor_name ?? row.child_distributor_names ?? "-";
 
   return {
     id: row.id,
@@ -76,9 +78,10 @@ export async function getDomainManagementRows(
         dom.distributor_id::text,
         dom.domain_name,
         c.company_name,
-        case when parent_dist.id is null then '-' else dist.name end as distributor_name,
+        case when parent_dist.id is null then null else dist.name end as distributor_name,
         dist_admin.login_id as distributor_login_id,
         coalesce(parent_dist.name, dist.name) as top_distributor_name,
+        child_dist.names as child_distributor_names,
         dist.current_balance::text as current_balance,
         ba.bank_name,
         ba.account_number,
@@ -90,6 +93,12 @@ export async function getDomainManagementRows(
       left join distributors dist on dist.id = dom.distributor_id
       left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
       left join admins dist_admin on dist_admin.id = dist.admin_id
+      left join lateral (
+        select string_agg(child.name, ', ' order by child.name) as names
+        from distributors child
+        where child.parent_distributor_id = dist.id
+          and child.status = 'ACTIVE'
+      ) child_dist on parent_dist.id is null
       left join lateral (
         select bank_name, account_number, account_holder
         from bank_accounts ba
