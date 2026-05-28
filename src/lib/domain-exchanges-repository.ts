@@ -12,6 +12,7 @@ const DEFAULT_ROW_LIMIT = 200;
 type ExchangeRequestDbRow = {
   id: string;
   distributor_name: string | null;
+  child_distributor_names: string | null;
   distributor_login_id: string | null;
   top_distributor_name: string | null;
   domain_name: string | null;
@@ -55,7 +56,7 @@ function toStatus(status: ExchangeRequestDbRow["status"]): DomainExchangeRow["st
 
 function toExchangeRow(row: ExchangeRequestDbRow): DomainExchangeRow {
   const topDistributorName = row.top_distributor_name ?? "-";
-  const distributorName = row.distributor_name ?? "-";
+  const distributorName = row.distributor_name ?? row.child_distributor_names ?? "-";
 
   return {
     id: row.id,
@@ -82,14 +83,17 @@ export async function getDomainExchangeRows(
     return fallbackRows;
   }
   const scope = user
-    ? getScopedDistributorCondition(user)
+    ? user.role === "MASTER"
+      ? { sql: "", values: [] as string[] }
+      : getScopedDistributorCondition(user)
     : { sql: "", values: [] as string[] };
 
   const result = await query<ExchangeRequestDbRow>(
     `
       select
         er.id::text,
-        case when parent_dist.id is null then '-' else dist.name end as distributor_name,
+        case when parent_dist.id is null then null else dist.name end as distributor_name,
+        child_dist.names as child_distributor_names,
         dist_admin.login_id as distributor_login_id,
         coalesce(parent_dist.name, dist.name) as top_distributor_name,
         dom.domain_name,
@@ -105,6 +109,12 @@ export async function getDomainExchangeRows(
       left join distributors dist on dist.id = er.distributor_id
       left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
       left join admins dist_admin on dist_admin.id = dist.admin_id
+      left join lateral (
+        select string_agg(child.name, ', ' order by child.name) as names
+        from distributors child
+        where child.parent_distributor_id = dist.id
+          and child.status = 'ACTIVE'
+      ) child_dist on parent_dist.id is null
       where 1 = 1
         ${scope.sql}
       order by er.requested_at desc

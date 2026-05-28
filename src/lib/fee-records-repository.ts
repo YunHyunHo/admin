@@ -27,6 +27,7 @@ type FeeRecordDbRow = {
   id: string;
   top_agent: string | null;
   sub_agent: string | null;
+  child_distributor_names: string | null;
   acquisition_branch: string;
   domain: string;
   uid: string;
@@ -38,16 +39,24 @@ type FeeRecordDbRow = {
   requested_at: Date | string;
 };
 
+function getFeeRecordScope(user: SessionUser) {
+  return user.role === "MASTER"
+    ? { sql: "", values: [] as string[] }
+    : getScopedDistributorCondition(user);
+}
+
 function formatStamp(value: Date | string) {
   return formatKoreanDateTime(value);
 }
 
 function toFeeRecord(row: FeeRecordDbRow): FeeRecordRow {
+  const subAgent = row.sub_agent ?? row.child_distributor_names ?? "-";
+
   return {
     id: row.id,
     topAgent: row.top_agent ?? "마스터 관리자",
-    subAgent: row.sub_agent ?? "-",
-    acquisitionBranch: row.sub_agent ?? "-",
+    subAgent,
+    acquisitionBranch: subAgent,
     domain: row.domain,
     uid: row.uid,
     amount: Number(row.amount),
@@ -70,16 +79,20 @@ export async function getFeeRecordsForUser(
 
     return getFeeRecords(user.companyName, startDate, endDate, state, settings);
   }
-  const scope = getScopedDistributorCondition(user);
+  const scope = getFeeRecordScope(user);
   const scopeSql = scope.sql.replaceAll("$1", "$3");
+  const values = user.role === "MASTER"
+    ? [startDate, endDate]
+    : [startDate, endDate, user.id];
 
   const result = await query<FeeRecordDbRow>(
     `
       select
         cr.id::text,
         coalesce(parent_dist.name, dist.name) as top_agent,
-        case when parent_dist.id is null then '-' else dist.name end as sub_agent,
-        coalesce(case when parent_dist.id is null then dist.name else dist.name end, c.company_name) as acquisition_branch,
+        case when parent_dist.id is null then null else dist.name end as sub_agent,
+        child_dist.names as child_distributor_names,
+        coalesce(case when parent_dist.id is null then child_dist.names else dist.name end, c.company_name) as acquisition_branch,
         coalesce(d.domain_name, '-') as domain,
         cr.user_uid as uid,
         co.charge_amount::text as amount,
@@ -95,6 +108,12 @@ export async function getFeeRecordsForUser(
       left join distributors dist on dist.id = co.distributor_id
       left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
       left join admins dist_admin on dist_admin.id = dist.admin_id
+      left join lateral (
+        select string_agg(child.name, ', ' order by child.name) as names
+        from distributors child
+        where child.parent_distributor_id = dist.id
+          and child.status = 'ACTIVE'
+      ) child_dist on parent_dist.id is null
       where
         co.status in ('APPROVED', 'COMPLETED')
         and co.created_at >= $1::date
@@ -103,7 +122,7 @@ export async function getFeeRecordsForUser(
       order by co.created_at desc
       limit ${DEFAULT_ROW_LIMIT}
     `,
-    [startDate, endDate, user.id],
+    values,
   );
   const rows = result.rows.map(toFeeRecord);
 

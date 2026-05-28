@@ -26,6 +26,7 @@ type FeeRateDbRow = {
   domain_id: string | null;
   distributor_id: string | null;
   distributor_name: string | null;
+  child_distributor_names: string | null;
   top_distributor_name: string | null;
   domain_name: string | null;
   company_name: string | null;
@@ -62,7 +63,7 @@ function toSettingsRow(row: FeeRateDbRow): FeeRateSettingsRow {
     companyRate: Number(row.company_rate),
     topDistributor: row.top_distributor_name ?? "-",
     topDistributorRate: Number(row.distributor_rate),
-    distributor: row.distributor_name ?? "-",
+    distributor: row.distributor_name ?? row.child_distributor_names ?? "-",
     distributorRate: Number(row.agency_rate),
     updatedAt: formatStamp(row.updated_at),
   };
@@ -96,7 +97,10 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
     };
   }
 
-  const scope = getScopedDistributorCondition(user);
+  const scope =
+    user.role === "MASTER"
+      ? { sql: "", values: [] as string[] }
+      : getScopedDistributorCondition(user);
 
   const result = await query<FeeRateDbRow>(
     `
@@ -106,9 +110,10 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
         dist.id::text as distributor_id,
         case
           when dist.id is null then '-'
-          when parent_dist.id is null then '-'
+          when parent_dist.id is null then null
           else dist.name
         end as distributor_name,
+        child_dist.names as child_distributor_names,
         case
           when dist.id is null then '-'
           when parent_dist.id is null then dist.name
@@ -119,13 +124,22 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
         coalesce(domain_admin.name, c.company_name) as vendor_name,
         coalesce(fr.company_rate, 0.2)::text as company_rate,
         coalesce(fr.distributor_rate, 0.1)::text as distributor_rate,
-        coalesce(fr.agency_rate, case when parent_dist.id is null then 0 else 0.1 end)::text as agency_rate,
+        coalesce(
+          fr.agency_rate,
+          case when parent_dist.id is null and child_dist.names is null then 0 else 0.1 end
+        )::text as agency_rate,
         coalesce(fr.updated_at, dom.updated_at, dist.updated_at) as updated_at
       from domains dom
       join companies c on c.id = dom.company_id
       left join distributors dist on dist.id = dom.distributor_id
       left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
       left join admins dist_admin on dist_admin.id = dist.admin_id
+      left join lateral (
+        select string_agg(child.name, ', ' order by child.name) as names
+        from distributors child
+        where child.parent_distributor_id = dist.id
+          and child.status = 'ACTIVE'
+      ) child_dist on parent_dist.id is null
       left join lateral (
         select a.name
         from admin_domain_mappings adm

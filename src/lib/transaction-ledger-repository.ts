@@ -12,6 +12,7 @@ type TransactionLedgerDbRow = {
   user_uid: string;
   top_distributor_name: string | null;
   distributor_name: string | null;
+  child_distributor_names: string | null;
   domain_name: string | null;
   bank_name: string | null;
   account_number: string | null;
@@ -43,7 +44,8 @@ function toBankInfo(row: TransactionLedgerDbRow) {
 }
 
 function toLedgerRow(row: TransactionLedgerDbRow): LedgerRow {
-  const distributorName = row.distributor_name ?? "하부계정 없음";
+  const distributorName =
+    row.distributor_name ?? row.child_distributor_names ?? "하부계정 없음";
   const bankName = row.bank_name ?? "-";
   const accountNumber = row.account_number ?? "-";
   const accountHolder = row.account_holder ?? "-";
@@ -78,7 +80,9 @@ export async function getTransactionLedgerRows(
     return fallbackRows;
   }
   const scope = user
-    ? getScopedDistributorCondition(user)
+    ? user.role === "MASTER"
+      ? { sql: "", values: [] as string[] }
+      : getScopedDistributorCondition(user)
     : { sql: "", values: [] as string[] };
   const scopedSql = scope.sql.replace("$1", "$1");
 
@@ -91,7 +95,8 @@ export async function getTransactionLedgerRows(
           'CHARGE'::text as request_type,
           cr.user_uid,
           coalesce(parent_dist.name, dist.name) as top_distributor_name,
-          dist.name as distributor_name,
+          case when parent_dist.id is null then null else dist.name end as distributor_name,
+          child_dist.names as child_distributor_names,
           dom.domain_name,
           cr.bank_name,
           cr.account_number,
@@ -123,6 +128,12 @@ export async function getTransactionLedgerRows(
         left join domains dom on dom.id = cr.domain_id
         left join distributors dist on dist.id = cr.distributor_id
         left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
+        left join lateral (
+          select string_agg(child.name, ', ' order by child.name) as names
+          from distributors child
+          where child.parent_distributor_id = dist.id
+            and child.status = 'ACTIVE'
+        ) child_dist on parent_dist.id is null
         left join commission_records co on co.charge_request_id = cr.id
         left join admins dist_admin on dist_admin.id = dist.admin_id
         where 1 = 1
@@ -135,7 +146,8 @@ export async function getTransactionLedgerRows(
           'EXCHANGE'::text as request_type,
           er.user_uid,
           coalesce(parent_dist.name, dist.name) as top_distributor_name,
-          dist.name as distributor_name,
+          case when parent_dist.id is null then null else dist.name end as distributor_name,
+          child_dist.names as child_distributor_names,
           dom.domain_name,
           er.bank_name,
           er.account_number,
@@ -150,6 +162,12 @@ export async function getTransactionLedgerRows(
         join domains dom on dom.id = er.domain_id
         left join distributors dist on dist.id = er.distributor_id
         left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
+        left join lateral (
+          select string_agg(child.name, ', ' order by child.name) as names
+          from distributors child
+          where child.parent_distributor_id = dist.id
+            and child.status = 'ACTIVE'
+        ) child_dist on parent_dist.id is null
         left join admins dist_admin on dist_admin.id = dist.admin_id
         where 1 = 1
           ${scopedSql}
