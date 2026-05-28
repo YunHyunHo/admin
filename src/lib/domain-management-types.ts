@@ -12,6 +12,7 @@ export type DomainUserRow = {
 
 export type DomainRow = {
   id: string;
+  companyId?: string;
   distributorId?: string;
   headquarters: string;
   topDistributor: string;

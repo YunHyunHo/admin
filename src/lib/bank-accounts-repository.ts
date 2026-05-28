@@ -10,6 +10,7 @@ import type {
 
 type BankAccountDbRow = {
   id: string;
+  company_id: string | null;
   distributor_id: string | null;
   distributor_name: string | null;
   creator_name: string | null;
@@ -33,8 +34,9 @@ function formatStamp(value: Date | string | null) {
 function toAccountRow(row: BankAccountDbRow): AccountRow {
   return {
     id: row.id,
-    distributorId: row.distributor_id ?? undefined,
-    branchName: "본사",
+    ...(row.company_id ? { companyId: row.company_id } : {}),
+    ...(row.distributor_id ? { distributorId: row.distributor_id } : {}),
+    branchName: row.distributor_name ?? "본사",
     creator: row.creator_name ?? "마스터 관리자",
     bankName: row.bank_name,
     holder: row.account_holder,
@@ -67,6 +69,7 @@ export async function getBankAccountBoardData(user?: SessionUser) {
       `
         select
           ba.id::text,
+          ba.company_id::text,
           ba.distributor_id::text,
           d.name as distributor_name,
           owner_master.name as creator_name,
@@ -79,8 +82,8 @@ export async function getBankAccountBoardData(user?: SessionUser) {
             jsonb_agg(
               distinct jsonb_build_object(
                 'id', dom.id::text,
-                'name', coalesce(dom_company.company_name, dom.domain_name),
-                'address', dom.domain_name,
+                'name', coalesce(dom_company.company_name, nullif(dom.domain_name, ''), '-'),
+                'address', coalesce(nullif(dom.domain_name, ''), '-'),
                 'userCount', 0
               )
             ) filter (where dom.id is not null),

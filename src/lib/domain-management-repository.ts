@@ -11,6 +11,7 @@ const DEFAULT_ROW_LIMIT = 200;
 
 type DomainDbRow = {
   id: string;
+  company_id: string;
   distributor_id: string | null;
   domain_name: string | null;
   company_name: string;
@@ -42,7 +43,8 @@ function toDomainRow(row: DomainDbRow): DomainRow {
 
   return {
     id: row.id,
-    distributorId: row.distributor_id ?? undefined,
+    companyId: row.company_id,
+    ...(row.distributor_id ? { distributorId: row.distributor_id } : {}),
     headquarters: distributorName === "-" ? topDistributor : distributorName,
     topDistributor,
     distributor: distributorName,
@@ -75,6 +77,7 @@ export async function getDomainManagementRows(
     `
       select
         dom.id::text,
+        dom.company_id::text,
         dom.distributor_id::text,
         dom.domain_name,
         c.company_name,

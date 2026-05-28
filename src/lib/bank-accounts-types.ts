@@ -7,6 +7,7 @@ export type LinkedDomain = {
 
 export type AccountRow = {
   id: string;
+  companyId?: string;
   distributorId?: string;
   branchName: string;
   creator: string;

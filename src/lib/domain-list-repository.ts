@@ -19,6 +19,8 @@ type DomainMappedCompanyRow = {
 
 export type DomainListRow = {
   id: string;
+  companyId?: string;
+  distributorId?: string;
   headquarters: string;
   topDistributor: string;
   distributor: string;
@@ -131,7 +133,7 @@ export async function getDomainListBoardData(user: SessionUser) {
     ]),
   );
 
-  const listRows: DomainListRow[] = rows.map((row) => {
+  const listRows = rows.map((row) => {
     const domainAdmin = domainAdminByDomainId.get(row.id);
 
     if (!domainAdmin) {
@@ -140,6 +142,8 @@ export async function getDomainListBoardData(user: SessionUser) {
 
     return {
       id: row.id,
+      ...(row.companyId ? { companyId: row.companyId } : {}),
+      ...(row.distributorId ? { distributorId: row.distributorId } : {}),
       headquarters: "본사",
       topDistributor: row.topDistributor,
       distributor: row.distributor,
@@ -498,34 +502,42 @@ export async function linkDomainEntryAccount(input: {
     throw new Error("도메인 또는 계좌 정보를 확인해주세요.");
   }
 
-  await withTransaction(async (client) => {
-    const accountResult = await client.query<{
-      bank_name: string;
-      account_number: string;
-      account_holder: string;
-    }>(
-      `
-        select bank_name, account_number, account_holder
-        from bank_accounts
-        where id = $1::uuid
-          and is_active = true
-        limit 1
-      `,
-      [input.accountId],
-    );
+  const accountResult = await query<{
+    bank_name: string;
+    account_number: string;
+    account_holder: string;
+  }>(
+    `
+      select
+        ba.bank_name,
+        ba.account_number,
+        ba.account_holder
+      from domains dom
+      join bank_accounts ba on ba.id = $2::uuid
+      where dom.id = $1::uuid
+        and dom.status <> 'DELETED'
+        and ba.is_active = true
+        and (
+          (ba.company_id is null and ba.distributor_id is null)
+          or ba.company_id = dom.company_id
+          or ba.distributor_id = dom.distributor_id
+        )
+      limit 1
+    `,
+    [input.id, input.accountId],
+  );
 
-    const selected = accountResult.rows[0];
+  const selected = accountResult.rows[0];
 
-    if (!selected) {
-      throw new Error("선택한 계좌를 찾지 못했습니다.");
-    }
+  if (!selected) {
+    throw new Error("선택한 계좌를 이 도메인에 연결할 수 없습니다.");
+  }
 
-    await updateDomainEntryAccount({
-      id: input.id,
-      bankName: selected.bank_name,
-      accountHolder: selected.account_holder,
-      accountNumber: selected.account_number,
-    });
+  await updateDomainEntryAccount({
+    id: input.id,
+    bankName: selected.bank_name,
+    accountHolder: selected.account_holder,
+    accountNumber: selected.account_number,
   });
 }
 
