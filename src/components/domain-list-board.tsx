@@ -146,7 +146,6 @@ export function DomainListBoard({
 
     if (
       !selectedOwnerId ||
-      !url.trim() ||
       !domainName.trim() ||
       !loginId.trim() ||
       !password.trim() ||
@@ -155,7 +154,7 @@ export function DomainListBoard({
       !accountHolder.trim() ||
       !accountNumber.trim()
     ) {
-      setCreateModalMessage("모든 항목을 입력해주세요.");
+      setCreateModalMessage("URL을 제외한 모든 항목을 입력해주세요.");
       return;
     }
 
@@ -402,7 +401,7 @@ export function DomainListBoard({
                     {row.companyName}
                   </td>
                   <td className="px-4 py-5 text-center">
-                    {row.url}
+                    {row.url || "-"}
                   </td>
                   <td className="px-4 py-5">
                     <div className="mx-auto max-w-[260px] rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3 text-center text-xs leading-5 text-white/80">
@@ -512,7 +511,7 @@ export function DomainListBoard({
               <input
                 value={url}
                 onChange={(event) => setUrl(event.target.value)}
-                placeholder="URL"
+                placeholder="URL (선택)"
                 className="h-14 w-full rounded-xl border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
               />
               <input

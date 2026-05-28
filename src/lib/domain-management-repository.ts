@@ -12,7 +12,7 @@ const DEFAULT_ROW_LIMIT = 200;
 type DomainDbRow = {
   id: string;
   distributor_id: string | null;
-  domain_name: string;
+  domain_name: string | null;
   company_name: string;
   distributor_name: string | null;
   distributor_login_id: string | null;
@@ -46,7 +46,7 @@ function toDomainRow(row: DomainDbRow): DomainRow {
     distributor: distributorName,
     loginId: row.distributor_login_id ?? "-",
     companyName: row.company_name,
-    url: row.domain_name,
+    url: row.domain_name ?? "",
     balance: Number(row.current_balance ?? 0),
     bankName: row.bank_name ?? "-",
     accountNumber: row.account_number ?? "-",
@@ -66,7 +66,7 @@ export async function getDomainManagementRows(
     return fallbackRows;
   }
   const scope = user
-    ? getScopedDistributorCondition(user)
+    ? getDomainManagementScopeCondition(user)
     : { sql: "", values: [] as string[] };
 
   const result = await query<DomainDbRow>(
@@ -110,6 +110,12 @@ export async function getDomainManagementRows(
   );
 
   return result.rows.map(toDomainRow);
+}
+
+function getDomainManagementScopeCondition(user: SessionUser) {
+  return user.role === "MASTER"
+    ? { sql: "", values: [] as string[] }
+    : getScopedDistributorCondition(user);
 }
 
 export async function getDomainBoardData(fallbackRows: DomainRow[], user?: SessionUser) {

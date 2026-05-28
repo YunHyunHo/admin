@@ -37,7 +37,7 @@ export type DomainListRow = {
 
 type DomainCompanyAdminRow = {
   id: string;
-  domain_name: string;
+  domain_name: string | null;
   company_name: string;
   distributor_name: string | null;
   top_distributor_name: string | null;
@@ -62,7 +62,8 @@ type CreateDomainEntryInput = {
 };
 
 function normalizeUrl(value: string) {
-  return value.trim();
+  const normalized = value.trim();
+  return normalized === "-" ? "" : normalized;
 }
 
 const HEADQUARTERS_OWNER_ID = "HEADQUARTERS";
@@ -76,7 +77,14 @@ function isUuid(value: string | undefined) {
 }
 
 export async function getDomainListBoardData(user: SessionUser) {
-  const scope = getScopedDistributorCondition(user);
+  const scope =
+    user.role === "MASTER"
+      ? { sql: "", values: [] as string[] }
+      : getScopedDistributorCondition(user);
+  const domainAdminScope =
+    user.role === "MASTER"
+      ? { sql: "", values: [] as string[] }
+      : { sql: "and a.created_by = $1::uuid", values: [user.id] };
   const [rows, distributorOptions, mappedDomains] = await Promise.all([
     getDomainManagementRows([], user),
     query<DomainListOwnerOption>(
@@ -106,9 +114,9 @@ export async function getDomainListBoardData(user: SessionUser) {
         join admin_domain_mappings adm on adm.admin_id = a.id
         where a.role = 'DOMAIN_ADMIN'
           and a.status = 'ACTIVE'
-          and a.created_by = $1::uuid
+          ${domainAdminScope.sql}
       `,
-      [user.id],
+      domainAdminScope.values,
     ),
   ]);
   const domainAdminByDomainId = new Map(
@@ -178,10 +186,6 @@ export async function createDomainEntry(input: CreateDomainEntryInput) {
     throw new Error("도메인 이름을 입력해주세요.");
   }
 
-  if (!url) {
-    throw new Error("URL을 입력해주세요.");
-  }
-
   if (!/^[A-Za-z][A-Za-z0-9_]{3,}$/.test(loginId)) {
     throw new Error("로그인 아이디는 영문 시작, 4글자 이상이어야 합니다.");
   }
@@ -194,146 +198,187 @@ export async function createDomainEntry(input: CreateDomainEntryInput) {
     throw new Error("은행, 예금주, 계좌번호를 모두 입력해주세요.");
   }
 
-  await withTransaction(async (client) => {
-    const duplicateLogin = await client.query<{ id: string }>(
-      `
-        select id::text
-        from admins
-        where login_id = $1
-        limit 1
-      `,
-      [loginId],
-    );
-
-    if (duplicateLogin.rows[0]) {
-      throw new Error("이미 사용 중인 로그인 아이디입니다.");
-    }
-
-    const duplicateCompany = await client.query<{ id: string }>(
-      `
-        select id::text
-        from companies
-        where company_name = $1
-        limit 1
-      `,
-      [domainName],
-    );
-
-    if (duplicateCompany.rows[0]) {
-      throw new Error("이미 사용 중인 도메인 이름입니다.");
-    }
-
-    if (ownerDistributorId) {
-      const distributorResult = await client.query<{ id: string }>(
+  try {
+    await withTransaction(async (client) => {
+      const duplicateLogin = await client.query<{ id: string }>(
         `
           select id::text
-          from distributors
-          where id = $1::uuid
-            and status = 'ACTIVE'
+          from admins
+          where login_id = $1
           limit 1
         `,
-        [ownerDistributorId],
+        [loginId],
       );
 
-      if (!distributorResult.rows[0]) {
-        throw new Error("선택한 소속 계정을 찾지 못했습니다.");
+      if (duplicateLogin.rows[0]) {
+        throw new Error("이미 사용 중인 로그인 아이디입니다.");
+      }
+
+      const duplicateCompany = await client.query<{ id: string }>(
+        `
+          select id::text
+          from companies
+          where company_name = $1
+          limit 1
+        `,
+        [domainName],
+      );
+
+      if (duplicateCompany.rows[0]) {
+        throw new Error("이미 사용 중인 도메인 이름입니다.");
+      }
+
+      if (url) {
+        const duplicateUrl = await client.query<{ id: string }>(
+          `
+            select id::text
+            from domains
+            where domain_name = $1
+            limit 1
+          `,
+          [url],
+        );
+
+        if (duplicateUrl.rows[0]) {
+          throw new Error("이미 사용 중인 URL입니다.");
+        }
+      }
+
+      if (ownerDistributorId) {
+        const distributorResult = await client.query<{ id: string }>(
+          `
+            select id::text
+            from distributors
+            where id = $1::uuid
+              and status = 'ACTIVE'
+            limit 1
+          `,
+          [ownerDistributorId],
+        );
+
+        if (!distributorResult.rows[0]) {
+          throw new Error("선택한 소속 계정을 찾지 못했습니다.");
+        }
+      }
+
+      const companyResult = await client.query<{ id: string }>(
+        `
+          insert into companies (company_name, status)
+          values ($1, 'ACTIVE')
+          returning id::text
+        `,
+        [domainName],
+      );
+
+      const companyId = companyResult.rows[0]?.id;
+
+      if (!companyId) {
+        throw new Error("도메인 업체 생성에 실패했습니다.");
+      }
+
+      const passwordHash = await hashPassword(input.password);
+      const encryptedPassword = encryptVisiblePassword(input.password);
+      const adminResult = await client.query<{ id: string }>(
+        `
+          insert into admins (
+            login_id,
+            password_hash,
+            password_ciphertext,
+            name,
+            role,
+            status,
+            created_by
+          )
+          values ($1, $2, $3, $4, 'DOMAIN_ADMIN', 'ACTIVE', $5::uuid)
+          returning id::text
+        `,
+        [loginId, passwordHash, encryptedPassword, domainName, input.createdById],
+      );
+
+      const adminId = adminResult.rows[0]?.id;
+
+      if (!adminId) {
+        throw new Error("도메인 로그인 계정 생성에 실패했습니다.");
+      }
+
+      await client.query(
+        `
+          insert into admin_company_mappings (admin_id, company_id)
+          values ($1::uuid, $2::uuid)
+          on conflict (admin_id, company_id) do nothing
+        `,
+        [adminId, companyId],
+      );
+
+      const domainResult = await client.query<{ id: string }>(
+        `
+          insert into domains (domain_name, company_id, distributor_id, status)
+          values ($1, $2::uuid, $3::uuid, 'ACTIVE')
+          returning id::text
+        `,
+        [url || null, companyId, ownerDistributorId],
+      );
+
+      const domainId = domainResult.rows[0]?.id;
+
+      if (!domainId) {
+        throw new Error("도메인 생성에 실패했습니다.");
+      }
+
+      await client.query(
+        `
+          insert into admin_domain_mappings (admin_id, domain_id)
+          values ($1::uuid, $2::uuid)
+          on conflict (admin_id, domain_id) do nothing
+        `,
+        [adminId, domainId],
+      );
+
+      await client.query(
+        `
+          insert into bank_accounts (
+            company_id,
+            distributor_id,
+            bank_name,
+            account_number,
+            account_holder,
+            is_active
+          )
+          values ($1::uuid, $2::uuid, $3, $4, $5, true)
+        `,
+        [
+          companyId,
+          ownerDistributorId,
+          input.bankName.trim(),
+          input.accountNumber.trim(),
+          input.accountHolder.trim(),
+        ],
+      );
+    });
+  } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: string }).code === "23505"
+    ) {
+      const detail = "detail" in error ? String((error as { detail?: string }).detail ?? "") : "";
+
+      if (detail.includes("domains_domain_name_key")) {
+        throw new Error("이미 사용 중인 URL입니다.");
+      }
+
+      if (detail.includes("admins_login_id_key")) {
+        throw new Error("이미 사용 중인 로그인 아이디입니다.");
+      }
+
+      if (detail.includes("companies_company_name_key")) {
+        throw new Error("이미 사용 중인 도메인 이름입니다.");
       }
     }
 
-    const companyResult = await client.query<{ id: string }>(
-      `
-        insert into companies (company_name, status)
-        values ($1, 'ACTIVE')
-        returning id::text
-      `,
-      [domainName],
-    );
-
-    const companyId = companyResult.rows[0]?.id;
-
-    if (!companyId) {
-      throw new Error("도메인 업체 생성에 실패했습니다.");
-    }
-
-    const passwordHash = await hashPassword(input.password);
-    const encryptedPassword = encryptVisiblePassword(input.password);
-    const adminResult = await client.query<{ id: string }>(
-      `
-        insert into admins (
-          login_id,
-          password_hash,
-          password_ciphertext,
-          name,
-          role,
-          status,
-          created_by
-        )
-        values ($1, $2, $3, $4, 'DOMAIN_ADMIN', 'ACTIVE', $5::uuid)
-        returning id::text
-      `,
-      [loginId, passwordHash, encryptedPassword, domainName, input.createdById],
-    );
-
-    const adminId = adminResult.rows[0]?.id;
-
-    if (!adminId) {
-      throw new Error("도메인 로그인 계정 생성에 실패했습니다.");
-    }
-
-    await client.query(
-      `
-        insert into admin_company_mappings (admin_id, company_id)
-        values ($1::uuid, $2::uuid)
-        on conflict (admin_id, company_id) do nothing
-      `,
-      [adminId, companyId],
-    );
-
-    const domainResult = await client.query<{ id: string }>(
-      `
-        insert into domains (domain_name, company_id, distributor_id, status)
-        values ($1, $2::uuid, $3::uuid, 'ACTIVE')
-        returning id::text
-      `,
-      [url, companyId, ownerDistributorId],
-    );
-
-    const domainId = domainResult.rows[0]?.id;
-
-    if (!domainId) {
-      throw new Error("도메인 생성에 실패했습니다.");
-    }
-
-    await client.query(
-      `
-        insert into admin_domain_mappings (admin_id, domain_id)
-        values ($1::uuid, $2::uuid)
-        on conflict (admin_id, domain_id) do nothing
-      `,
-      [adminId, domainId],
-    );
-
-    await client.query(
-      `
-        insert into bank_accounts (
-          company_id,
-          distributor_id,
-          bank_name,
-          account_number,
-          account_holder,
-          is_active
-        )
-        values ($1::uuid, $2::uuid, $3, $4, $5, true)
-      `,
-      [
-        companyId,
-        ownerDistributorId,
-        input.bankName.trim(),
-        input.accountNumber.trim(),
-        input.accountHolder.trim(),
-      ],
-    );
-  });
+    throw error;
+  }
 }
 
 export async function updateDomainEntryStatus(input: {
