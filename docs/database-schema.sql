@@ -79,7 +79,7 @@ create table distributors (
 
 create table domains (
   id uuid primary key default gen_random_uuid(),
-  domain_name text not null unique,
+  domain_name text unique,
   company_id uuid not null references companies(id),
   distributor_id uuid references distributors(id),
   status admin_status not null default 'ACTIVE',
