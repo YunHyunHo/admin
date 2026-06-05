@@ -562,7 +562,7 @@ async function deleteDomainEntryWithAccount(id: string, hardDelete: boolean) {
           ba.bank_name,
           ba.account_number,
           ba.account_holder,
-          dist.current_balance::text as current_balance,
+          coalesce(dist.current_balance, dom.current_balance)::text as current_balance,
           dom.status::text as status,
           dom.created_at
         from domains dom

@@ -47,6 +47,7 @@ function getDatabaseUrl() {
 const indexStatements = [
   "alter type admin_role add value if not exists 'TOP_DISTRIBUTOR'",
   "alter table admins add column if not exists password_ciphertext text",
+  "alter table domains add column if not exists current_balance numeric(18, 0) not null default 0",
   "alter table exchange_requests alter column domain_id drop not null",
   "create index if not exists idx_admins_created_by_status on admins (created_by, status)",
   "create index if not exists idx_distributors_admin_status_created on distributors (admin_id, status, created_at desc)",

@@ -85,7 +85,7 @@ export async function getDomainManagementRows(
         dist_admin.login_id as distributor_login_id,
         coalesce(parent_dist.name, dist.name) as top_distributor_name,
         child_dist.names as child_distributor_names,
-        dist.current_balance::text as current_balance,
+        coalesce(dist.current_balance, dom.current_balance)::text as current_balance,
         ba.bank_name,
         ba.account_number,
         ba.account_holder,
@@ -253,77 +253,123 @@ export async function adjustDomainBalance(input: {
   await withTransaction(async (client) => {
     const domainResult = await client.query<{
       distributor_id: string | null;
+      domain_balance: string;
       current_balance: string | null;
     }>(
       `
         select
           dom.distributor_id::text,
+          dom.current_balance::text as domain_balance,
           dist.current_balance::text
         from domains dom
-        join distributors dist on dist.id = dom.distributor_id
+        left join distributors dist on dist.id = dom.distributor_id
+          and dist.status = 'ACTIVE'
         where dom.id = $1::uuid
           and dom.status <> 'DELETED'
-          and dist.status = 'ACTIVE'
         limit 1
-        for update of dom, dist
+        for update of dom
       `,
       [input.id],
     );
     const domain = domainResult.rows[0];
 
-    if (!domain?.distributor_id) {
-      throw new Error("보유금을 조정할 총판 연결 정보를 찾지 못했습니다.");
+    if (!domain) {
+      throw new Error("보유금을 조정할 도메인 정보를 찾지 못했습니다.");
     }
 
     const signedAmount =
       input.direction === "increase" ? input.amount : -input.amount;
-    const beforeBalance = Number(domain.current_balance ?? 0);
+    const hasDistributorBalance =
+      Boolean(domain.distributor_id) && domain.current_balance !== null;
+    const beforeBalance = Number(
+      hasDistributorBalance ? domain.current_balance : domain.domain_balance,
+    );
     const afterBalance = beforeBalance + signedAmount;
 
     if (afterBalance < 0) {
       throw new Error("현재 보유금보다 큰 금액은 감소할 수 없습니다.");
     }
 
+    if (hasDistributorBalance) {
+      await client.query(
+        `
+          update distributors
+          set current_balance = $2,
+              updated_at = now()
+          where id = $1::uuid
+        `,
+        [domain.distributor_id, afterBalance],
+      );
+
+      await client.query(
+        `
+          insert into distributor_balance_transactions (
+            distributor_id,
+            amount,
+            balance_before,
+            balance_after,
+            source_type,
+            source_id,
+            memo,
+            created_by
+          )
+          values (
+            $1::uuid,
+            $2,
+            $3,
+            $4,
+            'DOMAIN_BALANCE_ADJUSTMENT',
+            gen_random_uuid(),
+            $5,
+            $6::uuid
+          )
+        `,
+        [
+          domain.distributor_id,
+          signedAmount,
+          beforeBalance,
+          afterBalance,
+          input.direction === "increase" ? "도메인 보유금 추가" : "도메인 보유금 감소",
+          input.processedBy,
+        ],
+      );
+      return;
+    }
+
     await client.query(
       `
-        update distributors
+        update domains
         set current_balance = $2,
             updated_at = now()
         where id = $1::uuid
       `,
-      [domain.distributor_id, afterBalance],
+      [input.id, afterBalance],
     );
 
     await client.query(
       `
-        insert into distributor_balance_transactions (
-          distributor_id,
-          amount,
-          balance_before,
-          balance_after,
-          source_type,
-          source_id,
-          memo,
-          created_by
+        insert into admin_audit_logs (
+          admin_id,
+          action,
+          resource_type,
+          resource_id,
+          before_data,
+          after_data
         )
-        values (
-          $1::uuid,
-          $2,
-          $3,
-          $4,
-          'DOMAIN_BALANCE_ADJUSTMENT',
-          gen_random_uuid(),
-          $5,
-          $6::uuid
-        )
+        values ($1::uuid, 'domain_balance_adjustment', 'domain', $2::uuid, $3::jsonb, $4::jsonb)
       `,
       [
-        domain.distributor_id,
-        signedAmount,
-        beforeBalance,
-        afterBalance,
-        input.direction === "increase" ? "도메인 보유금 추가" : "도메인 보유금 감소",
         input.processedBy,
+        input.id,
+        JSON.stringify({ balance: beforeBalance }),
+        JSON.stringify({
+          balance: afterBalance,
+          amount: signedAmount,
+          memo:
+            input.direction === "increase"
+              ? "도메인 보유금 추가"
+              : "도메인 보유금 감소",
+        }),
       ],
     );
   });
