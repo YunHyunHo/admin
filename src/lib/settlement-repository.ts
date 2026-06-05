@@ -11,6 +11,8 @@ import type { SessionUser } from "@/lib/auth";
 type SettlementAggregateRow = {
   date: string;
   domain_name: string | null;
+  top_distributor_id: string | null;
+  distributor_id: string | null;
   top_distributor_name: string | null;
   distributor_name: string | null;
   charge_total: string;
@@ -20,8 +22,54 @@ type SettlementAggregateRow = {
   distributor_fee_total: string;
 };
 
+type ProfitSectionSeedRow = {
+  id: string;
+  title: string;
+  category: "상위총판" | "총판";
+};
+
 function toMmDd(isoDate: string) {
   return isoDate.slice(5);
+}
+
+async function getProfitSectionSeeds(user: SessionUser) {
+  const scope =
+    user.role === "MASTER"
+      ? { sql: "", values: [] as string[] }
+      : user.role === "TOP_DISTRIBUTOR"
+        ? {
+            sql: `
+              and (
+                d.admin_id = $1::uuid
+                or d.parent_distributor_id in (
+                  select own_dist.id
+                  from distributors own_dist
+                  where own_dist.admin_id = $1::uuid
+                    and own_dist.status = 'ACTIVE'
+                )
+              )
+            `,
+            values: [user.id],
+          }
+        : { sql: "and d.admin_id = $1::uuid", values: [user.id] };
+  const result = await query<ProfitSectionSeedRow>(
+    `
+      select
+        case when d.parent_distributor_id is null then 'top:' else 'dist:' end || d.id::text as id,
+        d.name as title,
+        case when d.parent_distributor_id is null then '상위총판' else '총판' end as category
+      from distributors d
+      where d.status = 'ACTIVE'
+        ${scope.sql}
+      order by
+        case when d.parent_distributor_id is null then 0 else 1 end,
+        d.created_at asc,
+        d.name asc
+    `,
+    scope.values,
+  );
+
+  return result.rows;
 }
 
 async function getCommissionAggregates(
@@ -42,8 +90,10 @@ async function getCommissionAggregates(
       select
         date::text,
         coalesce(domain_name, '-') as domain_name,
-        top_distributor_name,
-        distributor_name,
+        top_distributor_id,
+        distributor_id,
+        max(top_distributor_name) as top_distributor_name,
+        max(distributor_name) as distributor_name,
         coalesce(sum(charge_total), 0)::text as charge_total,
         coalesce(sum(exchange_total), 0)::text as exchange_total,
         coalesce(sum(company_fee_total), 0)::text as company_fee_total,
@@ -53,6 +103,8 @@ async function getCommissionAggregates(
         select
           co.created_at::date as date,
           coalesce(d.domain_name, '-') as domain_name,
+          coalesce(parent_dist.id, dist.id)::text as top_distributor_id,
+          case when parent_dist.id is null then null else dist.id::text end as distributor_id,
           coalesce(parent_dist.name, dist.name) as top_distributor_name,
           case when parent_dist.id is null then null else dist.name end as distributor_name,
           co.charge_amount as charge_total,
@@ -76,6 +128,8 @@ async function getCommissionAggregates(
         select
           er.processed_at::date as date,
           d.domain_name,
+          coalesce(parent_dist.id, dist.id)::text as top_distributor_id,
+          case when parent_dist.id is null then null else dist.id::text end as distributor_id,
           coalesce(parent_dist.name, dist.name) as top_distributor_name,
           case when parent_dist.id is null then null else dist.name end as distributor_name,
           0::numeric as charge_total,
@@ -95,7 +149,7 @@ async function getCommissionAggregates(
           and er.processed_at < ($2::date + interval '1 day')
           ${scopeSql}
       ) daily
-      group by date, domain_name, top_distributor_name, distributor_name
+      group by date, domain_name, top_distributor_id, distributor_id
       order by date asc
     `,
     values,
@@ -151,17 +205,20 @@ export async function getSettlementProfitForUser(
       };
     }
   >();
-  const addSectionRow = (
+  const ensureSection = (
     id: string,
     title: string,
     category: "본사" | "상위총판" | "총판",
-    row: (typeof rows)[number],
   ) => {
-    const section = sectionMap.get(id) ?? {
+    if (sectionMap.has(id)) {
+      return sectionMap.get(id)!;
+    }
+
+    const section = {
       id,
       title,
       category,
-      rows: [],
+      rows: [] as typeof rows,
       totals: {
         chargeTotal: 0,
         feeTotal: 0,
@@ -170,6 +227,23 @@ export async function getSettlementProfitForUser(
         payoutTotal: 0,
       },
     };
+
+    sectionMap.set(id, section);
+    return section;
+  };
+  ensureSection("headquarters", "본사", "본사");
+
+  for (const seed of await getProfitSectionSeeds(user)) {
+    ensureSection(seed.id, seed.title, seed.category);
+  }
+
+  const addSectionRow = (
+    id: string,
+    title: string,
+    category: "본사" | "상위총판" | "총판",
+    row: (typeof rows)[number],
+  ) => {
+    const section = ensureSection(id, title, category);
 
     const existingRow = section.rows.find((sectionRow) => sectionRow.date === row.date);
 
@@ -188,7 +262,6 @@ export async function getSettlementProfitForUser(
     section.totals.companyFeeTotal += row.companyFeeTotal;
     section.totals.distributorFeeTotal += row.distributorFeeTotal;
     section.totals.payoutTotal += row.payoutTotal;
-    sectionMap.set(id, section);
   };
 
   for (const row of aggregateRows) {
@@ -210,8 +283,8 @@ export async function getSettlementProfitForUser(
       distributorFeeTotal: 0,
     });
 
-    if (row.top_distributor_name) {
-      addSectionRow(`top:${row.top_distributor_name}`, row.top_distributor_name, "상위총판", {
+    if (row.top_distributor_id && row.top_distributor_name) {
+      addSectionRow(`top:${row.top_distributor_id}`, row.top_distributor_name, "상위총판", {
         ...base,
         feeTotal: topDistributorFeeTotal,
         companyFeeTotal: 0,
@@ -219,8 +292,8 @@ export async function getSettlementProfitForUser(
       });
     }
 
-    if (row.distributor_name) {
-      addSectionRow(`dist:${row.distributor_name}`, row.distributor_name, "총판", {
+    if (row.distributor_id && row.distributor_name) {
+      addSectionRow(`dist:${row.distributor_id}`, row.distributor_name, "총판", {
         ...base,
         feeTotal: distributorFeeTotal,
         companyFeeTotal: 0,
