@@ -114,27 +114,47 @@ export function getSettlementProfit(
   }
 
   const rows = [...grouped.values()].sort((a, b) => a.date.localeCompare(b.date));
+  const totals = rows.reduce(
+    (sum, row) => ({
+      chargeTotal: sum.chargeTotal + row.chargeTotal,
+      feeTotal: sum.feeTotal + row.feeTotal,
+      companyFeeTotal: sum.companyFeeTotal + row.companyFeeTotal,
+      distributorFeeTotal: sum.distributorFeeTotal + row.distributorFeeTotal,
+      payoutTotal: sum.payoutTotal + row.payoutTotal,
+    }),
+    {
+      chargeTotal: 0,
+      feeTotal: 0,
+      companyFeeTotal: 0,
+      distributorFeeTotal: 0,
+      payoutTotal: 0,
+    },
+  );
 
   return {
     domainName,
     feeRate,
     rows,
-    totals: rows.reduce(
-      (sum, row) => ({
-        chargeTotal: sum.chargeTotal + row.chargeTotal,
-        feeTotal: sum.feeTotal + row.feeTotal,
-        companyFeeTotal: sum.companyFeeTotal + row.companyFeeTotal,
-        distributorFeeTotal: sum.distributorFeeTotal + row.distributorFeeTotal,
-        payoutTotal: sum.payoutTotal + row.payoutTotal,
-      }),
+    sections: [
       {
-        chargeTotal: 0,
-        feeTotal: 0,
-        companyFeeTotal: 0,
-        distributorFeeTotal: 0,
-        payoutTotal: 0,
+        id: "headquarters",
+        title: "본사",
+        category: "본사" as const,
+        rows: rows.map((row) => ({
+          ...row,
+          feeTotal: row.companyFeeTotal,
+          distributorFeeTotal: 0,
+        })),
+        totals: {
+          chargeTotal: totals.chargeTotal,
+          feeTotal: totals.companyFeeTotal,
+          companyFeeTotal: totals.companyFeeTotal,
+          distributorFeeTotal: 0,
+          payoutTotal: totals.payoutTotal,
+        },
       },
-    ),
+    ],
+    totals,
   };
 }
 

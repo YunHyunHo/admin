@@ -25,13 +25,14 @@ export default async function SettlementProfitPage() {
     <AdminShell
       user={user}
       activeItem="settlement-profit"
-      badge="Daily Profit"
-      helperText="승인 완료된 충전 데이터 기준으로 일별 수익을 확인하는 화면입니다."
+      badge="Profit"
+      helperText="승인 완료된 충전 데이터 기준으로 본사/총판 수익을 확인하는 화면입니다."
     >
       <SettlementProfitBoard
         companyName={user.companyName}
         initialDomainName={initialProfit.domainName}
         initialRows={initialProfit.rows}
+        initialSections={initialProfit.sections}
         initialTotals={initialProfit.totals}
       />
     </AdminShell>
