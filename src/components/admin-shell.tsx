@@ -86,7 +86,7 @@ const sideMenuGroups = [
     title: "정산",
     items: [
       {
-        title: "일별 수익",
+        title: "본사/총판 수익",
         href: "/dashboard/settlement/profit",
         key: "settlement-profit",
       },
