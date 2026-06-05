@@ -63,6 +63,7 @@ async function getCommissionAggregates(
         from commission_records co
         left join domains d on d.id = co.domain_id
         left join distributors dist on dist.id = co.distributor_id
+        left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
         left join admins dist_admin on dist_admin.id = dist.admin_id
         where
           co.status in ('APPROVED', 'COMPLETED')
@@ -85,6 +86,7 @@ async function getCommissionAggregates(
         from exchange_requests er
         join domains d on d.id = er.domain_id
         left join distributors dist on dist.id = er.distributor_id
+        left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
         left join admins dist_admin on dist_admin.id = dist.admin_id
         where
           er.status in ('APPROVED', 'COMPLETED')
