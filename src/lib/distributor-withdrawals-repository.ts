@@ -240,8 +240,10 @@ export async function createDistributorWithdrawal(input: CreateDistributorWithdr
   return result.rows[0]?.id;
 }
 
-export async function approveDistributorWithdrawal(id: string, processedBy: string) {
+export async function approveDistributorWithdrawal(id: string, processedBy: SessionUser) {
   await withTransaction(async (client) => {
+    const processingScopeSql =
+      processedBy.role === "MASTER" ? "" : "and dist_admin.created_by = $2::uuid";
     const withdrawal = await client.query<ProcessingWithdrawalRow>(
       `
         select
@@ -254,10 +256,10 @@ export async function approveDistributorWithdrawal(id: string, processedBy: stri
         join distributors d on d.id = dw.distributor_id
         left join admins dist_admin on dist_admin.id = d.admin_id
         where dw.id = $1::uuid
-          and dist_admin.created_by = $2::uuid
+          ${processingScopeSql}
         for update of dw, d
       `,
-      [id, processedBy],
+      [id, processedBy.id],
     );
     const row = withdrawal.rows[0];
 
@@ -299,7 +301,7 @@ export async function approveDistributorWithdrawal(id: string, processedBy: stri
             updated_at = now()
         where id = $1::uuid
       `,
-      [id, beforeBalance, afterBalance, processedBy],
+      [id, beforeBalance, afterBalance, processedBy.id],
     );
 
     await client.query(
@@ -326,12 +328,14 @@ export async function approveDistributorWithdrawal(id: string, processedBy: stri
         )
         on conflict (source_type, source_id) do nothing
       `,
-      [row.distributor_id, -requestAmount, beforeBalance, afterBalance, id, processedBy],
+      [row.distributor_id, -requestAmount, beforeBalance, afterBalance, id, processedBy.id],
     );
   });
 }
 
-export async function rejectDistributorWithdrawal(id: string, processedBy: string) {
+export async function rejectDistributorWithdrawal(id: string, processedBy: SessionUser) {
+  const processingScopeSql =
+    processedBy.role === "MASTER" ? "" : "and dist_admin.created_by = $2::uuid";
   const result = await query<{ id: string }>(
     `
       update distributor_withdrawals dw
@@ -343,11 +347,11 @@ export async function rejectDistributorWithdrawal(id: string, processedBy: strin
       left join admins dist_admin on dist_admin.id = d.admin_id
       where dw.id = $1::uuid
         and dw.distributor_id = d.id
-        and dist_admin.created_by = $2::uuid
+        ${processingScopeSql}
         and dw.status = 'PENDING'
       returning dw.id::text
     `,
-    [id, processedBy],
+    [id, processedBy.id],
   );
 
   if (!result.rows[0]) {

@@ -139,9 +139,9 @@ export async function PATCH(request: Request) {
 
   try {
     if (payload.action === "approve") {
-      await approveDistributorWithdrawal(payload.id, user.id);
+      await approveDistributorWithdrawal(payload.id, user);
     } else {
-      await rejectDistributorWithdrawal(payload.id, user.id);
+      await rejectDistributorWithdrawal(payload.id, user);
     }
   } catch (error) {
     return NextResponse.json(
