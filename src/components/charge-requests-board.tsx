@@ -307,6 +307,11 @@ export function ChargeRequestsBoard({
     const domainName =
       domainOptions.find((domain) => domain.id === domainId)?.name ?? "";
 
+    if (!domainId) {
+      setCreateModalMessage("연결할 도메인을 선택해주세요.");
+      return;
+    }
+
     if (!depositorName || !Number.isFinite(amount) || amount <= 0) {
       setCreateModalMessage("입금자명과 신청금액을 확인해주세요.");
       return;
@@ -706,7 +711,7 @@ export function ChargeRequestsBoard({
                   onChange={(event) => setCreateDomainId(event.target.value)}
                   className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-slate-500"
                 >
-                  <option value="">수기 입력(도메인 없음)</option>
+                  <option value="">도메인 선택</option>
                   {domainOptions.map((domain) => (
                     <option key={domain.id} value={domain.id}>
                       {domain.name}

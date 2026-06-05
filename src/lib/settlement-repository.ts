@@ -13,7 +13,9 @@ type SettlementAggregateRow = {
   domain_name: string | null;
   charge_total: string;
   exchange_total: string;
-  fee_total: string;
+  company_fee_total: string;
+  top_distributor_fee_total: string;
+  distributor_fee_total: string;
 };
 
 function toMmDd(isoDate: string) {
@@ -40,14 +42,18 @@ async function getCommissionAggregates(
         coalesce(domain_name, '-') as domain_name,
         coalesce(sum(charge_total), 0)::text as charge_total,
         coalesce(sum(exchange_total), 0)::text as exchange_total,
-        coalesce(sum(fee_total), 0)::text as fee_total
+        coalesce(sum(company_fee_total), 0)::text as company_fee_total,
+        coalesce(sum(top_distributor_fee_total), 0)::text as top_distributor_fee_total,
+        coalesce(sum(distributor_fee_total), 0)::text as distributor_fee_total
       from (
         select
           co.created_at::date as date,
           coalesce(d.domain_name, '-') as domain_name,
           co.charge_amount as charge_total,
           0::numeric as exchange_total,
-          co.saved_commission as fee_total
+          co.company_fee as company_fee_total,
+          co.distributor_fee as top_distributor_fee_total,
+          greatest(co.saved_commission - co.company_fee - co.distributor_fee, 0) as distributor_fee_total
         from commission_records co
         left join domains d on d.id = co.domain_id
         left join distributors dist on dist.id = co.distributor_id
@@ -65,7 +71,9 @@ async function getCommissionAggregates(
           d.domain_name,
           0::numeric as charge_total,
           er.amount as exchange_total,
-          0::numeric as fee_total
+          0::numeric as company_fee_total,
+          0::numeric as top_distributor_fee_total,
+          0::numeric as distributor_fee_total
         from exchange_requests er
         join domains d on d.id = er.domain_id
         left join distributors dist on dist.id = er.distributor_id
@@ -103,12 +111,17 @@ export async function getSettlementProfitForUser(
   const rows = aggregateRows.map((row) => {
     const chargeTotal = Number(row.charge_total);
     const exchangeTotal = Number(row.exchange_total);
-    const feeTotal = Number(row.fee_total);
+    const companyFeeTotal = Number(row.company_fee_total);
+    const distributorFeeTotal =
+      Number(row.top_distributor_fee_total) + Number(row.distributor_fee_total);
+    const feeTotal = companyFeeTotal + distributorFeeTotal;
 
     return {
       date: toMmDd(row.date),
       chargeTotal,
       feeTotal,
+      companyFeeTotal,
+      distributorFeeTotal,
       payoutTotal: exchangeTotal,
     };
   });
@@ -121,9 +134,17 @@ export async function getSettlementProfitForUser(
       (sum, row) => ({
         chargeTotal: sum.chargeTotal + row.chargeTotal,
         feeTotal: sum.feeTotal + row.feeTotal,
+        companyFeeTotal: sum.companyFeeTotal + row.companyFeeTotal,
+        distributorFeeTotal: sum.distributorFeeTotal + row.distributorFeeTotal,
         payoutTotal: sum.payoutTotal + row.payoutTotal,
       }),
-      { chargeTotal: 0, feeTotal: 0, payoutTotal: 0 },
+      {
+        chargeTotal: 0,
+        feeTotal: 0,
+        companyFeeTotal: 0,
+        distributorFeeTotal: 0,
+        payoutTotal: 0,
+      },
     ),
   };
 }
@@ -145,12 +166,17 @@ export async function getDomainSettlementForUser(
   const rows = aggregateRows.map((row) => {
     const charge = Number(row.charge_total);
     const exchange = Number(row.exchange_total);
-    const distributor = Number(row.fee_total);
+    const company = Number(row.company_fee_total);
+    const topDistributor = Number(row.top_distributor_fee_total);
+    const distributor = Number(row.distributor_fee_total);
 
     return {
       date: row.date,
+      domainName: row.domain_name ?? "-",
       charge,
       exchange,
+      company,
+      topDistributor,
       distributor,
     };
   });
@@ -162,9 +188,17 @@ export async function getDomainSettlementForUser(
       (sum, row) => ({
         charge: sum.charge + row.charge,
         exchange: sum.exchange + row.exchange,
+        company: sum.company + row.company,
+        topDistributor: sum.topDistributor + row.topDistributor,
         distributor: sum.distributor + row.distributor,
       }),
-      { charge: 0, exchange: 0, distributor: 0 },
+      {
+        charge: 0,
+        exchange: 0,
+        company: 0,
+        topDistributor: 0,
+        distributor: 0,
+      },
     ),
   };
 }

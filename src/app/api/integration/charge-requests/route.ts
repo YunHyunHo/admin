@@ -10,6 +10,7 @@ export const runtime = "nodejs";
 
 type IntegrationChargePayload = {
   externalId?: string;
+  domainId?: string;
   domainName?: string;
   depositorName?: string;
   amount?: number;
@@ -32,15 +33,16 @@ export async function POST(request: Request) {
   }
 
   const payload = (await request.json()) as IntegrationChargePayload;
+  const domainId = payload.domainId?.trim();
   const domainName = payload.domainName?.trim();
   const depositorName = payload.depositorName?.trim() ?? "";
   const amount = Number(payload.amount);
   const bankName = payload.bankName?.trim() ?? "";
   const accountNumber = payload.accountNumber?.trim() ?? "";
 
-  if (!domainName) {
+  if (!domainId && !domainName) {
     return NextResponse.json(
-      { message: "연동 도메인명을 확인해주세요." },
+      { message: "연동 도메인 정보를 확인해주세요." },
       { status: 400 },
     );
   }
@@ -60,6 +62,7 @@ export async function POST(request: Request) {
       amount,
       bankName,
       accountNumber,
+      domainId,
       domainName,
       rawPayload: payload,
     });

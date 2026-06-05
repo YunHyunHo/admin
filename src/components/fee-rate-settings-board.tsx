@@ -329,7 +329,7 @@ export function FeeRateSettingsBoard({
           </label>
 
           <div className="overflow-x-auto rounded-[26px] border border-white/8 bg-black/18">
-            <table className="w-full min-w-[1480px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[1600px] border-collapse text-left text-sm">
               <thead className="bg-black/52 text-white/72">
                 <tr>
                   {[
@@ -338,6 +338,7 @@ export function FeeRateSettingsBoard({
                     "본사",
                     "상위총판",
                     "총판",
+                    "총판 합계",
                     "수정일",
                   ].map((header, index) => (
                     <th
@@ -454,6 +455,10 @@ export function FeeRateSettingsBoard({
                             </button>
                           </div>
                         )}
+                      </td>
+                      <td className="px-4 py-4 text-center font-semibold text-white">
+                        {(draft.topDistributorRate + draft.distributorRate).toFixed(2)}
+                        %
                       </td>
                       <td className="px-4 py-4 text-center text-white/52">
                         {row.updatedAt}

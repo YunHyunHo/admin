@@ -12,8 +12,11 @@ type DomainSettlementBoardProps = {
 
 type DomainSettlementRow = {
   date: string;
+  domainName: string;
   charge: number;
   exchange: number;
+  company: number;
+  topDistributor: number;
   distributor: number;
 };
 
@@ -23,6 +26,8 @@ type DomainSettlementResponse = {
   total: {
     charge: number;
     exchange: number;
+    company: number;
+    topDistributor: number;
     distributor: number;
   };
 };
@@ -97,11 +102,15 @@ export function DomainSettlementBoard({
         (sum, row) => ({
           charge: sum.charge + row.charge,
           exchange: sum.exchange + row.exchange,
+          company: sum.company + row.company,
+          topDistributor: sum.topDistributor + row.topDistributor,
           distributor: sum.distributor + row.distributor,
         }),
         {
           charge: 0,
           exchange: 0,
+          company: 0,
+          topDistributor: 0,
           distributor: 0,
         },
       ),
@@ -112,15 +121,6 @@ export function DomainSettlementBoard({
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE,
   );
-  const splitCommission = (value: number) => {
-    const topDistributor = Math.floor(value / 2);
-
-    return {
-      topDistributor,
-      distributor: value - topDistributor,
-    };
-  };
-
   async function loadRows(nextStartDate: string, nextEndDate: string) {
     try {
       const response = await fetch(
@@ -227,78 +227,83 @@ export function DomainSettlementBoard({
             <table className="min-w-full table-fixed text-sm">
               <thead>
                 <tr className="border-b border-white/40 text-white">
-                  <th className="w-1/6 border-r border-white/40 px-3 py-1.5 text-center font-semibold">
+                  <th className="w-[14%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
                     날짜
                   </th>
-                  <th className="w-1/6 border-r border-white/40 px-3 py-1.5 text-center font-semibold">
+                  <th className="w-[18%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
+                    도메인
+                  </th>
+                  <th className="w-[14%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
                     충전
                   </th>
-                  <th className="w-1/6 border-r border-white/40 px-3 py-1.5 text-center font-semibold">
+                  <th className="w-[14%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
                     수수료
                   </th>
-                  <th className="w-1/6 border-r border-white/40 px-3 py-1.5 text-center font-semibold">
+                  <th className="w-[14%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
                     환전(도메인)
                   </th>
-                  <th className="w-1/6 border-r border-white/40 px-3 py-1.5 text-center font-semibold">
+                  <th className="w-[13%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
                     상위총판
                   </th>
-                  <th className="w-1/6 px-3 py-1.5 text-center font-semibold">
+                  <th className="w-[13%] px-3 py-1.5 text-center font-semibold">
                     총판
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {visibleRows.map((row) => {
-                  const commission = splitCommission(row.distributor);
-
-                  return (
-                    <tr
-                      key={`${domainName}-${row.date}`}
-                      className="border-b border-white/30 text-white/90"
-                    >
-                      <td className="border-r border-white/30 px-3 py-1.5 text-center">
-                        {toDisplayDate(row.date)}
-                      </td>
-                      <td className="border-r border-white/30 px-3 py-1.5 text-right">
-                        {formatSettlementValue(row.charge)}
-                      </td>
-                      <td className="border-r border-white/30 px-3 py-1.5 text-right">
-                        {formatSettlementValue(row.distributor)}
-                      </td>
-                      <td className="border-r border-white/30 px-3 py-1.5 text-right">
-                        {formatSettlementValue(row.exchange)}
-                      </td>
-                      <td className="border-r border-white/30 px-3 py-1.5 text-right">
-                        {formatSettlementValue(commission.topDistributor)}
-                      </td>
-                      <td className="px-3 py-1.5 text-right">
-                        {formatSettlementValue(commission.distributor, true)}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {visibleRows.map((row) => (
+                  <tr
+                    key={`${domainName}-${row.domainName}-${row.date}`}
+                    className="border-b border-white/30 text-white/90"
+                  >
+                    <td className="border-r border-white/30 px-3 py-1.5 text-center">
+                      {toDisplayDate(row.date)}
+                    </td>
+                    <td className="border-r border-white/30 px-3 py-1.5 text-center">
+                      {row.domainName}
+                    </td>
+                    <td className="border-r border-white/30 px-3 py-1.5 text-right">
+                      {formatSettlementValue(row.charge)}
+                    </td>
+                    <td className="border-r border-white/30 px-3 py-1.5 text-right">
+                      {formatSettlementValue(
+                        row.company + row.topDistributor + row.distributor,
+                      )}
+                    </td>
+                    <td className="border-r border-white/30 px-3 py-1.5 text-right">
+                      {formatSettlementValue(row.exchange)}
+                    </td>
+                    <td className="border-r border-white/30 px-3 py-1.5 text-right">
+                      {formatSettlementValue(row.topDistributor)}
+                    </td>
+                    <td className="px-3 py-1.5 text-right">
+                      {formatSettlementValue(row.distributor, true)}
+                    </td>
+                  </tr>
+                ))}
                 <tr className="bg-white/10 font-semibold text-white">
                   <td className="border-r border-white/30 px-3 py-1.5 text-center">
                     합계
+                  </td>
+                  <td className="border-r border-white/30 px-3 py-1.5 text-center">
+                    전체
                   </td>
                   <td className="border-r border-white/30 px-3 py-1.5 text-right">
                     {formatSettlementValue(total.charge)}
                   </td>
                   <td className="border-r border-white/30 px-3 py-1.5 text-right">
-                    {formatSettlementValue(total.distributor)}
+                    {formatSettlementValue(
+                      total.company + total.topDistributor + total.distributor,
+                    )}
                   </td>
                   <td className="border-r border-white/30 px-3 py-1.5 text-right">
                     {formatSettlementValue(total.exchange)}
                   </td>
                   <td className="border-r border-white/30 px-3 py-1.5 text-right">
-                    {formatSettlementValue(
-                      splitCommission(total.distributor).topDistributor,
-                    )}
+                    {formatSettlementValue(total.topDistributor)}
                   </td>
                   <td className="px-3 py-1.5 text-right">
-                    {formatSettlementValue(
-                      splitCommission(total.distributor).distributor,
-                    )}
+                    {formatSettlementValue(total.distributor)}
                   </td>
                 </tr>
               </tbody>

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import { hasDatabaseUrl } from "@/lib/db";
 import {
+  adjustDomainBalance,
   createDomain,
   deleteDomain,
   getDomainBoardData,
@@ -19,10 +20,12 @@ type CreateDomainPayload = {
 
 type PatchDomainPayload = {
   id?: string;
-  action?: "update" | "toggle-status" | "delete";
+  action?: "update" | "toggle-status" | "delete" | "adjust-balance";
   domainName?: string;
   distributorId?: string;
   depositEnabled?: boolean;
+  balanceDirection?: "increase" | "decrease";
+  amount?: number;
 };
 
 function isWritableRole(role: string | undefined) {
@@ -105,9 +108,11 @@ export async function POST(request: Request) {
       loginId: "-",
       companyName: domainName,
       url: domainName,
+      balance: 0,
       bankName: "-",
       accountNumber: "-",
       accountHolder: "-",
+      accountLinked: false,
       depositEnabled: true,
       createdAt: "-",
       users: [],
@@ -146,6 +151,13 @@ export async function PATCH(request: Request) {
     try {
       if (payload.action === "delete") {
         await deleteDomain(payload.id);
+      } else if (payload.action === "adjust-balance") {
+        await adjustDomainBalance({
+          id: payload.id,
+          amount: Number(payload.amount),
+          direction: payload.balanceDirection === "decrease" ? "decrease" : "increase",
+          processedBy: user.id,
+        });
       } else {
         await updateDomain({
           id: payload.id,
@@ -176,6 +188,8 @@ export async function PATCH(request: Request) {
       message:
         payload.action === "delete"
           ? "도메인이 삭제되었습니다."
+          : payload.action === "adjust-balance"
+            ? "보유금이 조정되었습니다."
           : "도메인이 수정되었습니다.",
     });
   }
@@ -184,6 +198,8 @@ export async function PATCH(request: Request) {
     message:
       payload.action === "delete"
         ? "도메인이 삭제되었습니다."
+        : payload.action === "adjust-balance"
+          ? "보유금이 조정되었습니다."
         : "도메인이 수정되었습니다.",
   });
 }

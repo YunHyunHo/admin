@@ -11,6 +11,8 @@ type SettlementProfitBoardProps = {
   initialTotals: {
     chargeTotal: number;
     feeTotal: number;
+    companyFeeTotal: number;
+    distributorFeeTotal: number;
     payoutTotal: number;
   };
 };
@@ -19,6 +21,8 @@ type DailyProfitRow = {
   date: string;
   chargeTotal: number;
   feeTotal: number;
+  companyFeeTotal: number;
+  distributorFeeTotal: number;
   payoutTotal: number;
 };
 
@@ -28,6 +32,8 @@ type SettlementProfitResponse = {
   totals: {
     chargeTotal: number;
     feeTotal: number;
+    companyFeeTotal: number;
+    distributorFeeTotal: number;
     payoutTotal: number;
   };
 };
@@ -107,6 +113,8 @@ function fillRowsByDate(
         date: key,
         chargeTotal: 0,
         feeTotal: 0,
+        companyFeeTotal: 0,
+        distributorFeeTotal: 0,
         payoutTotal: 0,
       }
     );
@@ -154,7 +162,13 @@ export function SettlementProfitBoard({
       setMessage("서버 API 기준 데이터입니다.");
     } catch (error) {
       setProfitRows([]);
-      setTotals({ chargeTotal: 0, feeTotal: 0, payoutTotal: 0 });
+      setTotals({
+        chargeTotal: 0,
+        feeTotal: 0,
+        companyFeeTotal: 0,
+        distributorFeeTotal: 0,
+        payoutTotal: 0,
+      });
       setPage(1);
       setMessage(error instanceof Error ? error.message : "조회에 실패했습니다.");
     }
@@ -236,7 +250,7 @@ export function SettlementProfitBoard({
             <table className="min-w-full border-collapse text-left text-sm">
               <thead className="bg-black/18 text-white">
                 <tr>
-                  {["날짜", "충전", "수수료", "환전(도메인)"].map((head) => (
+                  {["날짜", "충전", "수수료", "본사", "총판", "환전(도메인)"].map((head) => (
                     <th
                       key={head}
                       className="border border-white/30 px-4 py-2 text-center font-semibold"
@@ -263,6 +277,12 @@ export function SettlementProfitBoard({
                         {formatKoreanWon(row.feeTotal)}
                       </td>
                       <td className="border border-white/30 px-4 py-2 text-right">
+                        {formatKoreanWon(row.companyFeeTotal)}
+                      </td>
+                      <td className="border border-white/30 px-4 py-2 text-right">
+                        {formatKoreanWon(row.distributorFeeTotal)}
+                      </td>
+                      <td className="border border-white/30 px-4 py-2 text-right">
                         {formatKoreanWon(row.payoutTotal)}
                       </td>
                     </tr>
@@ -270,7 +290,7 @@ export function SettlementProfitBoard({
                 ) : (
                   <tr>
                     <td
-                      colSpan={4}
+                      colSpan={6}
                       className="border border-white/30 px-4 py-10 text-center text-sm text-white/42"
                     >
                       선택한 기간에 승인된 정산 데이터가 없습니다.
@@ -284,6 +304,12 @@ export function SettlementProfitBoard({
                   </td>
                   <td className="border border-white/30 px-4 py-2 text-right">
                     {formatKoreanWon(totals.feeTotal)}
+                  </td>
+                  <td className="border border-white/30 px-4 py-2 text-right">
+                    {formatKoreanWon(totals.companyFeeTotal)}
+                  </td>
+                  <td className="border border-white/30 px-4 py-2 text-right">
+                    {formatKoreanWon(totals.distributorFeeTotal)}
                   </td>
                   <td className="border border-white/30 px-4 py-2 text-right">
                     {formatKoreanWon(totals.payoutTotal)}

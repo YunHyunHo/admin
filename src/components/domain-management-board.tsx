@@ -92,6 +92,13 @@ export function DomainManagementBoard({
   const [distributorName, setDistributorName] = useState("");
   const [isSavingDomain, setIsSavingDomain] = useState(false);
   const [domainModalMessage, setDomainModalMessage] = useState("");
+  const [balanceModal, setBalanceModal] = useState<{
+    row: DomainRow;
+    direction: "increase" | "decrease";
+  } | null>(null);
+  const [balanceAmount, setBalanceAmount] = useState("");
+  const [balanceModalMessage, setBalanceModalMessage] = useState("");
+  const [isSavingBalance, setIsSavingBalance] = useState(false);
 
   const domainPageCount = Math.max(
     1,
@@ -133,6 +140,18 @@ export function DomainManagementBoard({
     setDomainName("");
     setDistributorId("");
     setDistributorName("");
+  }
+
+  function openBalanceModal(row: DomainRow, direction: "increase" | "decrease") {
+    setBalanceModal({ row, direction });
+    setBalanceAmount("");
+    setBalanceModalMessage("");
+  }
+
+  function closeBalanceModal() {
+    setBalanceModal(null);
+    setBalanceAmount("");
+    setBalanceModalMessage("");
   }
 
   function applyDomainResponse(payload: {
@@ -267,6 +286,46 @@ export function DomainManagementBoard({
     applyDomainResponse(data);
   }
 
+  async function saveBalanceAdjustment() {
+    if (!balanceModal || isSavingBalance) {
+      return;
+    }
+
+    const amount = Number(balanceAmount.replaceAll(",", ""));
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setBalanceModalMessage("조정할 보유금액을 입력해주세요.");
+      return;
+    }
+
+    setIsSavingBalance(true);
+    setBalanceModalMessage("");
+
+    try {
+      const response = await fetch("/api/domains", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: balanceModal.row.id,
+          action: "adjust-balance",
+          balanceDirection: balanceModal.direction,
+          amount,
+        }),
+      });
+      const data = (await response.json()) as { rows?: DomainRow[]; message?: string };
+
+      if (!response.ok) {
+        setBalanceModalMessage(data.message ?? "보유금 조정 중 오류가 발생했습니다.");
+        return;
+      }
+
+      applyDomainResponse(data);
+      closeBalanceModal();
+    } finally {
+      setIsSavingBalance(false);
+    }
+  }
+
   return (
     <section className="rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
       <div className="flex flex-col gap-3 border-b border-white/8 px-5 py-6 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
@@ -341,7 +400,27 @@ export function DomainManagementBoard({
                   </td>
                   <td className="px-4 py-5 text-center">{row.url}</td>
                   <td className="px-4 py-5 text-right font-semibold text-white">
-                    {formatKoreanWon(row.balance)}
+                    <div className="flex flex-col items-end gap-2">
+                      <span>{formatKoreanWon(row.balance)}</span>
+                      {canManageDomains ? (
+                        <div className="flex gap-1">
+                          <button
+                            type="button"
+                            onClick={() => openBalanceModal(row, "increase")}
+                            className="rounded-lg bg-emerald-500/18 px-2 py-1 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-500/28"
+                          >
+                            추가
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openBalanceModal(row, "decrease")}
+                            className="rounded-lg bg-amber-500/18 px-2 py-1 text-xs font-semibold text-amber-100 transition hover:bg-amber-500/28"
+                          >
+                            감소
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
                   </td>
                   <td className="px-4 py-5 text-center">
                     <span
@@ -516,6 +595,51 @@ export function DomainManagementBoard({
               <button
                 type="button"
                 onClick={closeDomainModal}
+                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {balanceModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-[420px] rounded-[28px] border border-white/10 bg-white p-6 text-slate-950 shadow-[0_28px_120px_rgba(0,0,0,0.58)]">
+            <h3 className="text-xl font-semibold tracking-[-0.03em]">
+              보유금 {balanceModal.direction === "increase" ? "추가" : "감소"}
+            </h3>
+            <p className="mt-2 text-sm text-slate-500">
+              {balanceModal.row.companyName} · 현재 {formatKoreanWon(balanceModal.row.balance)}
+            </p>
+
+            <div className="mt-7 space-y-4">
+              <ModalFeedback message={balanceModalMessage} />
+              <label className="block">
+                <span className="sr-only">보유금액</span>
+                <input
+                  value={balanceAmount}
+                  onChange={(event) => setBalanceAmount(event.target.value)}
+                  placeholder="조정 금액"
+                  inputMode="numeric"
+                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
+                />
+              </label>
+            </div>
+
+            <div className="mt-10 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={saveBalanceAdjustment}
+                disabled={isSavingBalance}
+                className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {isSavingBalance ? "처리 중" : "저장"}
+              </button>
+              <button
+                type="button"
+                onClick={closeBalanceModal}
                 className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
               >
                 취소

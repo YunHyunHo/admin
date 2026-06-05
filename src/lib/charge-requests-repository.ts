@@ -258,41 +258,10 @@ async function ensureDbScope(input: { domainId?: string | null; domainName?: str
   const domainValue = input.domainId ?? input.domainName;
   const domainPredicate = input.domainId
     ? "dom.id = $2::uuid"
-    : "dom.domain_name = $2";
+    : "(dom.domain_name = $2 or c.company_name = $2)";
 
   if (!domainValue) {
-    if (input.user.role === "DOMAIN_ADMIN") {
-      throw new Error("연결할 도메인을 선택해주세요.");
-    }
-
-    const distributorResult = await query<{
-      company_id: string;
-      distributor_id: string;
-    }>(
-      `
-        select
-          dist.company_id::text,
-          dist.id::text as distributor_id
-        from distributors dist
-        left join admins dist_admin on dist_admin.id = dist.admin_id
-        where dist.status = 'ACTIVE'
-          ${scope.sql}
-        order by dist.created_at desc
-        limit 1
-      `,
-      scope.values,
-    );
-    const distributor = distributorResult.rows[0];
-
-    if (!distributor) {
-      throw new Error("충전신청을 연결할 하부계정을 찾을 수 없습니다.");
-    }
-
-    return {
-      companyId: distributor.company_id,
-      domainId: null,
-      distributorId: distributor.distributor_id,
-    };
+    throw new Error("연결할 도메인을 선택해주세요.");
   }
 
   const existingDomain = await query<{
@@ -306,6 +275,7 @@ async function ensureDbScope(input: { domainId?: string | null; domainName?: str
         dom.id::text as domain_id,
         dom.distributor_id::text
       from domains dom
+      join companies c on c.id = dom.company_id
       join distributors dist on dist.id = dom.distributor_id
       left join admins dist_admin on dist_admin.id = dist.admin_id
       where ${domainPredicate} and dom.status <> 'DELETED'
@@ -336,7 +306,7 @@ async function ensureIntegrationDbScope(input: {
   const domainValue = input.domainId ?? input.domainName;
   const domainPredicate = input.domainId
     ? "dom.id = $1::uuid"
-    : "dom.domain_name = $1";
+    : "(dom.domain_name = $1 or c.company_name = $1)";
 
   if (!domainValue && input.distributorId) {
     const distributorResult = await query<{
@@ -382,6 +352,7 @@ async function ensureIntegrationDbScope(input: {
         dom.id::text as domain_id,
         dom.distributor_id::text
       from domains dom
+      join companies c on c.id = dom.company_id
       join distributors dist on dist.id = dom.distributor_id
       where ${domainPredicate}
         and dom.status = 'ACTIVE'

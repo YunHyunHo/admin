@@ -79,7 +79,14 @@ export function getSettlementProfit(
   const feeRate = getFeeRateByCompanyFromSettings(companyName, settings);
   const grouped = new Map<
     string,
-    { date: string; chargeTotal: number; feeTotal: number; payoutTotal: number }
+    {
+      date: string;
+      chargeTotal: number;
+      feeTotal: number;
+      companyFeeTotal: number;
+      distributorFeeTotal: number;
+      payoutTotal: number;
+    }
   >();
 
   for (const request of getApprovedRequestsByCompany(companyName, state)) {
@@ -94,11 +101,14 @@ export function getSettlementProfit(
       date,
       chargeTotal: 0,
       feeTotal: 0,
+      companyFeeTotal: 0,
+      distributorFeeTotal: 0,
       payoutTotal: 0,
     };
 
     current.chargeTotal += amount;
     current.feeTotal += fee;
+    current.companyFeeTotal += fee;
     current.payoutTotal += amount - fee;
     grouped.set(date, current);
   }
@@ -113,9 +123,17 @@ export function getSettlementProfit(
       (sum, row) => ({
         chargeTotal: sum.chargeTotal + row.chargeTotal,
         feeTotal: sum.feeTotal + row.feeTotal,
+        companyFeeTotal: sum.companyFeeTotal + row.companyFeeTotal,
+        distributorFeeTotal: sum.distributorFeeTotal + row.distributorFeeTotal,
         payoutTotal: sum.payoutTotal + row.payoutTotal,
       }),
-      { chargeTotal: 0, feeTotal: 0, payoutTotal: 0 },
+      {
+        chargeTotal: 0,
+        feeTotal: 0,
+        companyFeeTotal: 0,
+        distributorFeeTotal: 0,
+        payoutTotal: 0,
+      },
     ),
   };
 }
@@ -138,9 +156,12 @@ export function getDomainSettlement(
 
     return {
       date,
+      domainName,
       charge,
       exchange: Math.max(0, charge - distributor),
-      distributor,
+      company: distributor,
+      topDistributor: 0,
+      distributor: 0,
     };
   });
 
@@ -151,9 +172,11 @@ export function getDomainSettlement(
       (sum, row) => ({
         charge: sum.charge + row.charge,
         exchange: sum.exchange + row.exchange,
+        company: sum.company + row.company,
+        topDistributor: sum.topDistributor + row.topDistributor,
         distributor: sum.distributor + row.distributor,
       }),
-      { charge: 0, exchange: 0, distributor: 0 },
+      { charge: 0, exchange: 0, company: 0, topDistributor: 0, distributor: 0 },
     ),
   };
 }

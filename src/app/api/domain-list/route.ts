@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getSessionUser } from "@/lib/auth";
+import { adjustDomainBalance } from "@/lib/domain-management-repository";
 import {
   createDomainEntry,
   deleteDomainEntry,
@@ -26,12 +27,19 @@ type CreateDomainEntryPayload = {
 
 type PatchDomainEntryPayload = {
   id?: string;
-  action?: "toggle-status" | "delete" | "update-account" | "link-account";
+  action?:
+    | "toggle-status"
+    | "delete"
+    | "update-account"
+    | "link-account"
+    | "adjust-balance";
   depositEnabled?: boolean;
   bankName?: string;
   accountHolder?: string;
   accountNumber?: string;
   accountId?: string;
+  balanceDirection?: "increase" | "decrease";
+  amount?: number;
 };
 
 function canWrite(role: string | undefined) {
@@ -124,6 +132,13 @@ export async function PATCH(request: Request) {
   try {
     if (payload.action === "delete") {
       await deleteDomainEntry(payload.id);
+    } else if (payload.action === "adjust-balance") {
+      await adjustDomainBalance({
+        id: payload.id,
+        amount: Number(payload.amount),
+        direction: payload.balanceDirection === "decrease" ? "decrease" : "increase",
+        processedBy: user.id,
+      });
     } else if (payload.action === "link-account") {
       await linkDomainEntryAccount({
         id: payload.id,
@@ -157,6 +172,8 @@ export async function PATCH(request: Request) {
       message:
         payload.action === "delete"
           ? "도메인이 삭제되었습니다."
+          : payload.action === "adjust-balance"
+            ? "보유금이 조정되었습니다."
           : payload.action === "link-account"
             ? "계좌가 연동되었습니다."
           : payload.action === "update-account"

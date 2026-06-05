@@ -1,4 +1,4 @@
-import { hasDatabaseUrl, query } from "@/lib/db";
+import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
 import { formatKoreanDateTime } from "@/lib/korean-time";
 import { getScopedDistributorCondition } from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
@@ -238,6 +238,95 @@ export async function updateDomain(input: {
         : null,
     ],
   );
+}
+
+export async function adjustDomainBalance(input: {
+  id: string;
+  amount: number;
+  direction: "increase" | "decrease";
+  processedBy: string;
+}) {
+  if (!Number.isFinite(input.amount) || input.amount <= 0) {
+    throw new Error("보유금 조정 금액을 확인해주세요.");
+  }
+
+  await withTransaction(async (client) => {
+    const domainResult = await client.query<{
+      distributor_id: string | null;
+      current_balance: string | null;
+    }>(
+      `
+        select
+          dom.distributor_id::text,
+          dist.current_balance::text
+        from domains dom
+        join distributors dist on dist.id = dom.distributor_id
+        where dom.id = $1::uuid
+          and dom.status <> 'DELETED'
+          and dist.status = 'ACTIVE'
+        limit 1
+        for update of dom, dist
+      `,
+      [input.id],
+    );
+    const domain = domainResult.rows[0];
+
+    if (!domain?.distributor_id) {
+      throw new Error("보유금을 조정할 총판 연결 정보를 찾지 못했습니다.");
+    }
+
+    const signedAmount =
+      input.direction === "increase" ? input.amount : -input.amount;
+    const beforeBalance = Number(domain.current_balance ?? 0);
+    const afterBalance = beforeBalance + signedAmount;
+
+    if (afterBalance < 0) {
+      throw new Error("현재 보유금보다 큰 금액은 감소할 수 없습니다.");
+    }
+
+    await client.query(
+      `
+        update distributors
+        set current_balance = $2,
+            updated_at = now()
+        where id = $1::uuid
+      `,
+      [domain.distributor_id, afterBalance],
+    );
+
+    await client.query(
+      `
+        insert into distributor_balance_transactions (
+          distributor_id,
+          amount,
+          balance_before,
+          balance_after,
+          source_type,
+          source_id,
+          memo,
+          created_by
+        )
+        values (
+          $1::uuid,
+          $2,
+          $3,
+          $4,
+          'DOMAIN_BALANCE_ADJUSTMENT',
+          gen_random_uuid(),
+          $5,
+          $6::uuid
+        )
+      `,
+      [
+        domain.distributor_id,
+        signedAmount,
+        beforeBalance,
+        afterBalance,
+        input.direction === "increase" ? "도메인 보유금 추가" : "도메인 보유금 감소",
+        input.processedBy,
+      ],
+    );
+  });
 }
 
 export async function deleteDomain(id: string) {

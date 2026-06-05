@@ -90,6 +90,13 @@ export function DomainListBoard({
   const [selectedLinkAccountId, setSelectedLinkAccountId] = useState("");
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(false);
   const [isLinkingAccount, setIsLinkingAccount] = useState(false);
+  const [balanceModalRow, setBalanceModalRow] = useState<DomainListRow | null>(null);
+  const [balanceDirection, setBalanceDirection] = useState<"increase" | "decrease">(
+    "increase",
+  );
+  const [balanceAmount, setBalanceAmount] = useState("");
+  const [balanceModalMessage, setBalanceModalMessage] = useState("");
+  const [isAdjustingBalance, setIsAdjustingBalance] = useState(false);
 
   const pageCount = Math.max(1, Math.ceil(rows.length / rowsPerPage));
   const visibleRows = useMemo(
@@ -149,6 +156,21 @@ export function DomainListBoard({
     setSelectedLinkAccountId("");
     setIsLoadingAccounts(false);
     setIsLinkingAccount(false);
+  }
+
+  function openBalanceModal(row: DomainListRow, direction: "increase" | "decrease") {
+    setBalanceModalRow(row);
+    setBalanceDirection(direction);
+    setBalanceAmount("");
+    setBalanceModalMessage("");
+  }
+
+  function closeBalanceModal() {
+    setBalanceModalRow(null);
+    setBalanceDirection("increase");
+    setBalanceAmount("");
+    setBalanceModalMessage("");
+    setIsAdjustingBalance(false);
   }
 
   function applyPayload(data: ApiResponse) {
@@ -320,6 +342,48 @@ export function DomainListBoard({
     }
   }
 
+  async function handleAdjustBalance() {
+    if (!balanceModalRow || isAdjustingBalance) {
+      return;
+    }
+
+    const amount = Number(balanceAmount.replaceAll(",", ""));
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setBalanceModalMessage("조정할 보유금액을 입력해주세요.");
+      return;
+    }
+
+    setIsAdjustingBalance(true);
+    setBalanceModalMessage("");
+
+    try {
+      const response = await fetch("/api/domain-list", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: balanceModalRow.id,
+          action: "adjust-balance",
+          balanceDirection,
+          amount,
+        }),
+      });
+      const text = await response.text();
+      const data = safeParseJson(text);
+
+      if (!response.ok || !("rows" in data)) {
+        setBalanceModalMessage(data.message ?? "보유금 조정에 실패했습니다.");
+        return;
+      }
+
+      applyPayload(data);
+      setMessage(data.message ?? "보유금이 조정되었습니다.");
+      closeBalanceModal();
+    } finally {
+      setIsAdjustingBalance(false);
+    }
+  }
+
   return (
     <section className="rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
       <div className="flex flex-col gap-3 border-b border-white/8 px-5 py-6 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
@@ -431,7 +495,27 @@ export function DomainListBoard({
                     </div>
                   </td>
                   <td className="px-4 py-5 text-center font-semibold text-white">
-                    {formatKoreanWon(row.balance)}
+                    <div className="flex flex-col items-center gap-2">
+                      <span>{formatKoreanWon(row.balance)}</span>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => openBalanceModal(row, "increase")}
+                          disabled={processingId === row.id}
+                          className="rounded-lg bg-emerald-500/18 px-2 py-1 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-500/28 disabled:cursor-not-allowed disabled:bg-white/6 disabled:text-white/34"
+                        >
+                          추가
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openBalanceModal(row, "decrease")}
+                          disabled={processingId === row.id}
+                          className="rounded-lg bg-amber-500/18 px-2 py-1 text-xs font-semibold text-amber-100 transition hover:bg-amber-500/28 disabled:cursor-not-allowed disabled:bg-white/6 disabled:text-white/34"
+                        >
+                          감소
+                        </button>
+                      </div>
+                    </div>
                   </td>
                   <td className="px-4 py-5 text-center">
                     <span
@@ -598,6 +682,48 @@ export function DomainListBoard({
               <button
                 type="button"
                 onClick={closeCreateModal}
+                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {balanceModalRow ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-[430px] rounded-[28px] border border-white/10 bg-white p-6 text-slate-950 shadow-[0_28px_120px_rgba(0,0,0,0.58)]">
+            <h3 className="text-2xl font-semibold tracking-[-0.04em]">
+              보유금 {balanceDirection === "increase" ? "추가" : "감소"}
+            </h3>
+            <p className="mt-2 text-sm text-slate-500">
+              {balanceModalRow.companyName} · 현재 {formatKoreanWon(balanceModalRow.balance)}
+            </p>
+
+            <div className="mt-7 space-y-5">
+              <ModalFeedback message={balanceModalMessage} />
+              <input
+                value={balanceAmount}
+                onChange={(event) => setBalanceAmount(event.target.value)}
+                placeholder="조정 금액"
+                inputMode="numeric"
+                className="h-14 w-full rounded-xl border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
+              />
+            </div>
+
+            <div className="mt-12 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={handleAdjustBalance}
+                disabled={isAdjustingBalance}
+                className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {isAdjustingBalance ? "처리 중" : "저장"}
+              </button>
+              <button
+                type="button"
+                onClick={closeBalanceModal}
                 className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
               >
                 취소
