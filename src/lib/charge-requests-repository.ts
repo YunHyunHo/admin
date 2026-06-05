@@ -202,7 +202,7 @@ async function getDbChargeRequests(user: SessionUser) {
         cr.requested_at,
         cr.processed_at,
         c.company_name,
-        d.domain_name,
+        coalesce(nullif(d.domain_name, ''), c.company_name) as domain_name,
         coalesce(parent_dist.name, dist.name) as top_distributor_name,
         case when parent_dist.id is null then null else dist.name end as distributor_name,
         child_dist.names as child_distributor_names

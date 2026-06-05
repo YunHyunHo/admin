@@ -93,7 +93,7 @@ export async function getFeeRecordsForUser(
         case when parent_dist.id is null then null else dist.name end as sub_agent,
         child_dist.names as child_distributor_names,
         coalesce(case when parent_dist.id is null then child_dist.names else dist.name end, c.company_name) as acquisition_branch,
-        coalesce(d.domain_name, '-') as domain,
+        coalesce(nullif(d.domain_name, ''), c.company_name, '-') as domain,
         cr.user_uid as uid,
         co.charge_amount::text as amount,
         co.commission_rate::text as fee_rate,

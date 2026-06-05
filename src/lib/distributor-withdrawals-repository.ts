@@ -338,8 +338,6 @@ export async function approveDistributorWithdrawal(id: string, processedBy: Sess
 export async function rejectDistributorWithdrawal(id: string, processedBy: SessionUser) {
   const processingScopeSql =
     processedBy.role === "MASTER" ? "" : "and dist_admin.created_by = $2::uuid";
-  const processingValues =
-    processedBy.role === "MASTER" ? [id] : [id, processedBy.id];
   const result = await query<{ id: string }>(
     `
       update distributor_withdrawals dw
@@ -355,7 +353,7 @@ export async function rejectDistributorWithdrawal(id: string, processedBy: Sessi
         and dw.status = 'PENDING'
       returning dw.id::text
     `,
-    processingValues,
+    [id, processedBy.id],
   );
 
   if (!result.rows[0]) {

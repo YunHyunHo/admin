@@ -102,7 +102,7 @@ async function getCommissionAggregates(
       from (
         select
           co.created_at::date as date,
-          coalesce(d.domain_name, '-') as domain_name,
+          coalesce(nullif(d.domain_name, ''), c.company_name, '-') as domain_name,
           coalesce(parent_dist.id, dist.id)::text as top_distributor_id,
           case when parent_dist.id is null then null else dist.id::text end as distributor_id,
           coalesce(parent_dist.name, dist.name) as top_distributor_name,
@@ -113,6 +113,7 @@ async function getCommissionAggregates(
           co.distributor_fee as top_distributor_fee_total,
           greatest(co.saved_commission - co.company_fee - co.distributor_fee, 0) as distributor_fee_total
         from commission_records co
+        join companies c on c.id = co.company_id
         left join domains d on d.id = co.domain_id
         left join distributors dist on dist.id = co.distributor_id
         left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
@@ -127,7 +128,7 @@ async function getCommissionAggregates(
 
         select
           er.processed_at::date as date,
-          d.domain_name,
+          coalesce(nullif(d.domain_name, ''), c.company_name, '-') as domain_name,
           coalesce(parent_dist.id, dist.id)::text as top_distributor_id,
           case when parent_dist.id is null then null else dist.id::text end as distributor_id,
           coalesce(parent_dist.name, dist.name) as top_distributor_name,
@@ -138,6 +139,7 @@ async function getCommissionAggregates(
           0::numeric as top_distributor_fee_total,
           0::numeric as distributor_fee_total
         from exchange_requests er
+        join companies c on c.id = er.company_id
         join domains d on d.id = er.domain_id
         left join distributors dist on dist.id = er.distributor_id
         left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
