@@ -157,10 +157,22 @@ export async function PATCH(request: Request) {
       );
     }
 
-    if (payload.action === "approve") {
-      await approveDomainExchange(payload.id, user.id);
-    } else {
-      await rejectDomainExchange(payload.id, user.id);
+    try {
+      if (payload.action === "approve") {
+        await approveDomainExchange(payload.id, user.id);
+      } else {
+        await rejectDomainExchange(payload.id, user.id);
+      }
+    } catch (error) {
+      return NextResponse.json(
+        {
+          message:
+            error instanceof Error
+              ? error.message
+              : "환전 요청 처리 중 오류가 발생했습니다.",
+        },
+        { status: 400 },
+      );
     }
 
     return NextResponse.json({

@@ -1,4 +1,4 @@
-import { hasDatabaseUrl, query } from "@/lib/db";
+import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
 import { formatKoreanDateTime } from "@/lib/korean-time";
 import { getScopedDistributorCondition } from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
@@ -328,21 +328,145 @@ export async function createDomainExchange(
 }
 
 export async function approveDomainExchange(id: string, processedBy: string) {
-  await query(
-    `
-      update exchange_requests
-      set status = 'APPROVED',
-          processed_at = coalesce(processed_at, now()),
-          processed_by = $2::uuid,
-          updated_at = now()
-      where id = $1::uuid and status = 'PENDING'
-    `,
-    [id, processedBy],
-  );
+  await withTransaction(async (client) => {
+    const exchangeResult = await client.query<{
+      id: string;
+      domain_id: string | null;
+      distributor_id: string | null;
+      amount: string;
+      distributor_balance: string | null;
+      domain_balance: string | null;
+    }>(
+      `
+        select
+          er.id::text,
+          er.domain_id::text,
+          er.distributor_id::text,
+          er.amount::text,
+          dist.current_balance::text as distributor_balance,
+          dom.current_balance::text as domain_balance
+        from exchange_requests er
+        left join distributors dist on dist.id = er.distributor_id
+        left join domains dom on dom.id = er.domain_id
+        where er.id = $1::uuid
+          and er.status = 'PENDING'
+        for update of er, dist, dom
+      `,
+      [id],
+    );
+    const exchange = exchangeResult.rows[0];
+
+    if (!exchange) {
+      throw new Error("처리할 대기 환전 요청을 찾을 수 없습니다.");
+    }
+
+    const requestAmount = Number(exchange.amount);
+    const hasDistributorBalance =
+      Boolean(exchange.distributor_id) && exchange.distributor_balance !== null;
+    const beforeBalance = Number(
+      hasDistributorBalance
+        ? exchange.distributor_balance
+        : exchange.domain_balance ?? 0,
+    );
+    const afterBalance = beforeBalance - requestAmount;
+
+    if (afterBalance < 0) {
+      throw new Error("보유금보다 큰 환전 요청은 승인할 수 없습니다.");
+    }
+
+    if (hasDistributorBalance) {
+      await client.query(
+        `
+          update distributors
+          set current_balance = $2,
+              updated_at = now()
+          where id = $1::uuid
+        `,
+        [exchange.distributor_id, afterBalance],
+      );
+
+      await client.query(
+        `
+          insert into distributor_balance_transactions (
+            distributor_id,
+            amount,
+            balance_before,
+            balance_after,
+            source_type,
+            source_id,
+            memo,
+            created_by
+          )
+          values (
+            $1::uuid,
+            $2,
+            $3,
+            $4,
+            'DOMAIN_EXCHANGE',
+            $5::uuid,
+            '도메인 환전 승인',
+            $6::uuid
+          )
+          on conflict (source_type, source_id) do nothing
+        `,
+        [
+          exchange.distributor_id,
+          -requestAmount,
+          beforeBalance,
+          afterBalance,
+          id,
+          processedBy,
+        ],
+      );
+    } else if (exchange.domain_id) {
+      await client.query(
+        `
+          update domains
+          set current_balance = $2,
+              updated_at = now()
+          where id = $1::uuid
+        `,
+        [exchange.domain_id, afterBalance],
+      );
+
+      await client.query(
+        `
+          insert into admin_audit_logs (
+            admin_id,
+            action,
+            resource_type,
+            resource_id,
+            before_data,
+            after_data
+          )
+          values ($1::uuid, 'domain_exchange_approved', 'domain', $2::uuid, $3::jsonb, $4::jsonb)
+        `,
+        [
+          processedBy,
+          exchange.domain_id,
+          JSON.stringify({ balance: beforeBalance }),
+          JSON.stringify({ balance: afterBalance, amount: -requestAmount }),
+        ],
+      );
+    }
+
+    await client.query(
+      `
+        update exchange_requests
+        set status = 'APPROVED',
+            processed_at = coalesce(processed_at, now()),
+            processed_by = $2::uuid,
+            updated_at = now()
+        where id = $1::uuid
+          and status = 'PENDING'
+      `,
+      [id, processedBy],
+    );
+  });
 }
 
 export async function rejectDomainExchange(id: string, processedBy: string) {
-  await query(
+  const result = await query<{ id: string }>(
     `
       update exchange_requests
       set status = 'REJECTED',
@@ -350,7 +474,12 @@ export async function rejectDomainExchange(id: string, processedBy: string) {
           processed_by = $2::uuid,
           updated_at = now()
       where id = $1::uuid and status = 'PENDING'
+      returning id::text
     `,
     [id, processedBy],
   );
+
+  if (!result.rows[0]) {
+    throw new Error("처리할 대기 환전 요청을 찾을 수 없습니다.");
+  }
 }
