@@ -334,23 +334,17 @@ export async function approveDomainExchange(id: string, processedBy: string) {
       domain_id: string | null;
       distributor_id: string | null;
       amount: string;
-      distributor_balance: string | null;
-      domain_balance: string | null;
     }>(
       `
         select
           er.id::text,
           er.domain_id::text,
           er.distributor_id::text,
-          er.amount::text,
-          dist.current_balance::text as distributor_balance,
-          dom.current_balance::text as domain_balance
+          er.amount::text
         from exchange_requests er
-        left join distributors dist on dist.id = er.distributor_id
-        left join domains dom on dom.id = er.domain_id
         where er.id = $1::uuid
           and er.status = 'PENDING'
-        for update of er, dist, dom
+        for update of er
       `,
       [id],
     );
@@ -361,12 +355,37 @@ export async function approveDomainExchange(id: string, processedBy: string) {
     }
 
     const requestAmount = Number(exchange.amount);
+    const distributorBalance = exchange.distributor_id
+      ? (
+          await client.query<{ current_balance: string }>(
+            `
+              select current_balance::text
+              from distributors
+              where id = $1::uuid
+              for update
+            `,
+            [exchange.distributor_id],
+          )
+        ).rows[0]?.current_balance
+      : null;
+    const domainBalance =
+      !distributorBalance && exchange.domain_id
+        ? (
+            await client.query<{ current_balance: string }>(
+              `
+                select current_balance::text
+                from domains
+                where id = $1::uuid
+                for update
+              `,
+              [exchange.domain_id],
+            )
+          ).rows[0]?.current_balance
+        : null;
     const hasDistributorBalance =
-      Boolean(exchange.distributor_id) && exchange.distributor_balance !== null;
+      Boolean(exchange.distributor_id) && distributorBalance !== null && distributorBalance !== undefined;
     const beforeBalance = Number(
-      hasDistributorBalance
-        ? exchange.distributor_balance
-        : exchange.domain_balance ?? 0,
+      hasDistributorBalance ? distributorBalance : domainBalance ?? 0,
     );
     const afterBalance = beforeBalance - requestAmount;
 
