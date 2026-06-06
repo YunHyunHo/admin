@@ -44,6 +44,11 @@ type ChargeRequestRow = {
   child_distributor_names: string | null;
 };
 
+type ChargeRequestAccountRow = {
+  bank_name: string | null;
+  account_number: string | null;
+};
+
 type CreateChargeRequestInput = {
   externalId?: string;
   userId: string;
@@ -194,8 +199,8 @@ async function getDbChargeRequests(user: SessionUser) {
       select
         cr.id::text,
         cr.user_uid,
-        cr.bank_name,
-        cr.account_number,
+        coalesce(nullif(cr.bank_name, ''), charge_account.bank_name) as bank_name,
+        coalesce(nullif(cr.account_number, ''), charge_account.account_number) as account_number,
         cr.depositor,
         cr.amount::text,
         cr.status::text as status,
@@ -213,6 +218,33 @@ async function getDbChargeRequests(user: SessionUser) {
       left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
       left join admins dist_admin on dist_admin.id = dist.admin_id
       left join lateral (
+        select ba.bank_name, ba.account_number
+        from bank_accounts ba
+        where ba.is_active = true
+          and (
+            (
+              ba.company_id = cr.company_id
+              and (
+                ba.distributor_id = cr.distributor_id
+                or ba.distributor_id is null
+              )
+            )
+            or (
+              ba.distributor_id = cr.distributor_id
+              and ba.company_id is null
+            )
+          )
+        order by
+          case
+            when ba.company_id = cr.company_id and ba.distributor_id = cr.distributor_id then 0
+            when ba.company_id = cr.company_id and ba.distributor_id is null then 1
+            when ba.distributor_id = cr.distributor_id then 2
+            else 3
+          end,
+          ba.created_at desc
+        limit 1
+      ) charge_account on true
+      left join lateral (
         select string_agg(child.name, ', ' order by child.name) as names
         from distributors child
         where child.parent_distributor_id = dist.id
@@ -227,6 +259,45 @@ async function getDbChargeRequests(user: SessionUser) {
   );
 
   return splitRows(result.rows);
+}
+
+async function getLinkedChargeRequestAccount(input: {
+  companyId: string;
+  distributorId: string | null;
+}) {
+  const result = await query<ChargeRequestAccountRow>(
+    `
+      select ba.bank_name, ba.account_number
+      from bank_accounts ba
+      where ba.is_active = true
+        and (
+          (
+            ba.company_id = $1::uuid
+            and (
+              ba.distributor_id = $2::uuid
+              or ba.distributor_id is null
+            )
+          )
+          or (
+            $2::uuid is not null
+            and ba.distributor_id = $2::uuid
+            and ba.company_id is null
+          )
+        )
+      order by
+        case
+          when ba.company_id = $1::uuid and ba.distributor_id = $2::uuid then 0
+          when ba.company_id = $1::uuid and ba.distributor_id is null then 1
+          when ba.distributor_id = $2::uuid then 2
+          else 3
+        end,
+        ba.created_at desc
+      limit 1
+    `,
+    [input.companyId, input.distributorId],
+  );
+
+  return result.rows[0] ?? null;
 }
 
 export async function getChargeRequestsForUser(user: SessionUser) {
@@ -380,6 +451,18 @@ async function insertChargeRequest(input: CreateChargeRequestInput & {
   domainId: string | null;
   distributorId: string | null;
 }) {
+  const inputBankName = input.bankName?.trim() || null;
+  const inputAccountNumber = input.accountNumber?.trim() || null;
+  const linkedAccount =
+    inputBankName && inputAccountNumber
+      ? null
+      : await getLinkedChargeRequestAccount({
+          companyId: input.companyId,
+          distributorId: input.distributorId,
+        });
+  const bankName = inputBankName ?? linkedAccount?.bank_name ?? null;
+  const accountNumber = inputAccountNumber ?? linkedAccount?.account_number ?? null;
+
   const result = await query<{ id: string }>(
     `
       insert into charge_requests (
@@ -418,8 +501,8 @@ async function insertChargeRequest(input: CreateChargeRequestInput & {
       input.domainId,
       input.distributorId,
       input.userId,
-      input.bankName ?? null,
-      input.accountNumber ?? null,
+      bankName,
+      accountNumber,
       input.depositor ?? null,
       input.amount,
       JSON.stringify(input.rawPayload ?? input),
