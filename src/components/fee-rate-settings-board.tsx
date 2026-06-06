@@ -338,6 +338,7 @@ export function FeeRateSettingsBoard({
                     "본사",
                     "상위총판",
                     "총판",
+                    "총판",
                     "총판 합계",
                     "수정일",
                   ].map((header, index) => (
@@ -423,6 +424,9 @@ export function FeeRateSettingsBoard({
                             </button>
                           </div>
                         )}
+                      </td>
+                      <td className="px-4 py-4 text-center font-semibold text-white">
+                        {row.distributor}
                       </td>
                       <td className="px-4 py-4 text-center font-semibold text-white">
                         {row.distributor === "-" ? (
