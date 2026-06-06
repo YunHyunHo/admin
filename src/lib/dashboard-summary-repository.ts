@@ -2,6 +2,7 @@ import { getDashboardSummary } from "@/lib/mock-report-service";
 import { getAdminSettingsFromCookie } from "@/lib/settings-cookie";
 import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
 import { hasDatabaseUrl, query } from "@/lib/db";
+import { ensureFeeRateSchema } from "@/lib/fee-rate-schema";
 import { getCurrentKoreanDayRange } from "@/lib/korean-time";
 import { getScopedDistributorCondition } from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
@@ -20,6 +21,7 @@ type FeeRateRow = {
   company_rate: string;
   distributor_rate: string;
   agency_rate: string;
+  sub_distributor_rate: string;
 };
 
 type DashboardPartnerSummaryRow = {
@@ -72,6 +74,8 @@ export async function getDashboardSummaryForUser(user: SessionUser) {
       )`
     : "";
 
+  await ensureFeeRateSchema();
+
   const [summaryResult, feeRateResult] = await Promise.all([
     query<DashboardSummaryRow>(
       `
@@ -100,7 +104,11 @@ export async function getDashboardSummaryForUser(user: SessionUser) {
     ),
     query<FeeRateRow>(
       `
-        select fee.company_rate::text, fee.distributor_rate::text, fee.agency_rate::text
+        select
+          fee.company_rate::text,
+          fee.distributor_rate::text,
+          fee.agency_rate::text,
+          coalesce(fee.sub_distributor_rate, 0)::text as sub_distributor_rate
         from fee_rates fee
         left join distributors dist on dist.id = fee.distributor_id
         left join admins dist_admin on dist_admin.id = dist.admin_id
@@ -117,7 +125,8 @@ export async function getDashboardSummaryForUser(user: SessionUser) {
   const feeRate = feeRateResult.rows[0]
     ? Number(feeRateResult.rows[0].company_rate) +
       Number(feeRateResult.rows[0].distributor_rate) +
-      Number(feeRateResult.rows[0].agency_rate)
+      Number(feeRateResult.rows[0].agency_rate) +
+      Number(feeRateResult.rows[0].sub_distributor_rate)
     : 0.4;
 
   return {

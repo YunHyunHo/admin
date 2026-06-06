@@ -45,22 +45,28 @@ export async function POST(request: Request) {
     companyRate?: number | string;
     topDistributorRate?: number | string;
     distributorRate?: number | string;
+    subDistributorRate?: number | string;
   };
   const companyRate = Number(body.companyRate);
   const topDistributorRate = Number(body.topDistributorRate);
   const distributorRate = Number(body.distributorRate);
-  const totalRate = companyRate + topDistributorRate + distributorRate;
+  const subDistributorRate = Number(body.subDistributorRate ?? 0);
+  const totalRate =
+    companyRate + topDistributorRate + distributorRate + subDistributorRate;
 
   if (
     !Number.isFinite(companyRate) ||
     !Number.isFinite(topDistributorRate) ||
     !Number.isFinite(distributorRate) ||
+    !Number.isFinite(subDistributorRate) ||
     companyRate < 0 ||
     topDistributorRate < 0 ||
     distributorRate < 0 ||
+    subDistributorRate < 0 ||
     companyRate > 100 ||
     topDistributorRate > 100 ||
-    distributorRate > 100
+    distributorRate > 100 ||
+    subDistributorRate > 100
   ) {
     return NextResponse.json(
       { message: "수수료 요율 값을 확인해주세요." },
@@ -76,6 +82,7 @@ export async function POST(request: Request) {
       companyRate,
       topDistributorRate,
       distributorRate,
+      subDistributorRate,
     });
 
     return NextResponse.json({

@@ -138,10 +138,11 @@ async function seedBaseData(client) {
         company_rate,
         distributor_rate,
         agency_rate,
+        sub_distributor_rate,
         starts_at,
         created_by
       )
-      select $1, 0.4, 0, 0, now(), $2
+      select $1, 0.4, 0, 0, 0, now(), $2
       where not exists (
         select 1
         from fee_rates

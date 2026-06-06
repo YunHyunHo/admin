@@ -105,6 +105,7 @@ create table fee_rates (
   company_rate numeric(8, 4) not null default 0,
   distributor_rate numeric(8, 4) not null default 0,
   agency_rate numeric(8, 4) not null default 0,
+  sub_distributor_rate numeric(8, 4) not null default 0,
   starts_at timestamptz not null default now(),
   ends_at timestamptz,
   created_by uuid references admins(id),
@@ -112,7 +113,8 @@ create table fee_rates (
   updated_at timestamptz not null default now(),
   check (company_rate >= 0),
   check (distributor_rate >= 0),
-  check (agency_rate >= 0)
+  check (agency_rate >= 0),
+  check (sub_distributor_rate >= 0)
 );
 
 create table bank_accounts (

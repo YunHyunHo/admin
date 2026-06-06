@@ -6,6 +6,7 @@ import {
   type ProcessedRequest,
 } from "@/lib/charge-utils";
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
+import { ensureFeeRateSchema } from "@/lib/fee-rate-schema";
 import { formatKoreanDateTime } from "@/lib/korean-time";
 import { getScopedDistributorCondition } from "@/lib/master-scope";
 import {
@@ -671,13 +672,20 @@ export async function processDbChargeRequest(input: {
       return updateResult;
     }
 
+    await ensureFeeRateSchema(client);
+
     const feeRateResult = await client.query<{
       company_rate: string;
       distributor_rate: string;
       agency_rate: string;
+      sub_distributor_rate: string;
     }>(
       `
-        select company_rate::text, distributor_rate::text, agency_rate::text
+        select
+          company_rate::text,
+          distributor_rate::text,
+          agency_rate::text,
+          coalesce(sub_distributor_rate, 0)::text as sub_distributor_rate
         from fee_rates
         where
           starts_at <= now()
@@ -714,7 +722,9 @@ export async function processDbChargeRequest(input: {
     const agencyRate = Number(
       feeRates?.agency_rate ?? (hasSubDistributor ? "0.1" : "0"),
     );
-    const totalRate = companyRate + distributorRate + agencyRate;
+    const subDistributorRate = Number(feeRates?.sub_distributor_rate ?? "0");
+    const totalRate =
+      companyRate + distributorRate + agencyRate + subDistributorRate;
     const companyFee = Math.floor(amount * (companyRate / 100));
     const distributorFee = Math.floor(amount * (distributorRate / 100));
     const savedCommission = Math.floor(amount * (totalRate / 100));

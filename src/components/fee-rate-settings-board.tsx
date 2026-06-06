@@ -19,6 +19,7 @@ type FeeRateRow = {
   topDistributorRate: number;
   distributor: string;
   distributorRate: number;
+  subDistributorRate: number;
   updatedAt: string;
 };
 
@@ -36,7 +37,12 @@ type FeeRateSettingsBoardProps = {
 };
 
 const rowsPerPage = 10;
-const rateKeys = ["companyRate", "topDistributorRate", "distributorRate"] as const;
+const rateKeys = [
+  "companyRate",
+  "topDistributorRate",
+  "distributorRate",
+  "subDistributorRate",
+] as const;
 
 type RateKey = (typeof rateKeys)[number];
 type DraftRates = Pick<FeeRateRow, RateKey>;
@@ -68,6 +74,7 @@ function getDraftRates(row: FeeRateRow): DraftRates {
     companyRate: row.companyRate,
     topDistributorRate: row.topDistributorRate,
     distributorRate: row.distributorRate,
+    subDistributorRate: row.subDistributorRate,
   };
 }
 
@@ -229,6 +236,10 @@ export function FeeRateSettingsBoard({
         key === undefined || key === "distributorRate"
           ? draft.distributorRate
           : row.distributorRate,
+      subDistributorRate:
+        key === undefined || key === "subDistributorRate"
+          ? draft.subDistributorRate
+          : row.subDistributorRate,
     };
 
     setSavingId(row.id);
@@ -245,6 +256,7 @@ export function FeeRateSettingsBoard({
           companyRate: nextDraft.companyRate,
           topDistributorRate: nextDraft.topDistributorRate,
           distributorRate: nextDraft.distributorRate,
+          subDistributorRate: nextDraft.subDistributorRate,
         }),
       });
       const data = (await response.json()) as {
@@ -272,7 +284,8 @@ export function FeeRateSettingsBoard({
                     (
                       nextDraft.companyRate +
                       nextDraft.topDistributorRate +
-                      nextDraft.distributorRate
+                      nextDraft.distributorRate +
+                      nextDraft.subDistributorRate
                     ).toFixed(2),
                   ),
                   updatedAt: getNowStamp(),
@@ -370,7 +383,8 @@ export function FeeRateSettingsBoard({
                         {(
                           draft.companyRate +
                           draft.topDistributorRate +
-                          draft.distributorRate
+                          draft.distributorRate +
+                          draft.subDistributorRate
                         ).toFixed(2)}
                         %
                       </td>
@@ -426,9 +440,6 @@ export function FeeRateSettingsBoard({
                         )}
                       </td>
                       <td className="px-4 py-4 text-center font-semibold text-white">
-                        {row.distributor}
-                      </td>
-                      <td className="px-4 py-4 text-center font-semibold text-white">
                         {row.distributor === "-" ? (
                           <div className="flex items-center justify-center gap-2">
                             <span>-</span>
@@ -461,7 +472,43 @@ export function FeeRateSettingsBoard({
                         )}
                       </td>
                       <td className="px-4 py-4 text-center font-semibold text-white">
-                        {(draft.topDistributorRate + draft.distributorRate).toFixed(2)}
+                        {row.distributor === "-" ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <span>-</span>
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(row, "distributor")}
+                              className="rounded-xl bg-white/14 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
+                            >
+                              수정
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center gap-2">
+                            <span>{row.distributor}</span>
+                            <RateInput
+                              value={draft.subDistributorRate}
+                              disabled={!canManageFeeRates}
+                              onChange={(value) =>
+                                updateDraftRate(row.id, "subDistributorRate", value)
+                              }
+                            />
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(row, "distributor")}
+                              className="rounded-xl bg-white/14 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
+                            >
+                              수정
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-4 text-center font-semibold text-white">
+                        {(
+                          draft.topDistributorRate +
+                          draft.distributorRate +
+                          draft.subDistributorRate
+                        ).toFixed(2)}
                         %
                       </td>
                       <td className="px-4 py-4 text-center text-white/52">

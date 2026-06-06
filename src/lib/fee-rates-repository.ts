@@ -1,5 +1,6 @@
 import { getFeeRateByCompanyFromSettings } from "@/lib/charge-utils";
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
+import { ensureFeeRateSchema } from "@/lib/fee-rate-schema";
 import { formatKoreanDateTime } from "@/lib/korean-time";
 import { getScopedDistributorCondition } from "@/lib/master-scope";
 import { getAdminSettingsFromCookie } from "@/lib/settings-cookie";
@@ -19,6 +20,7 @@ export type FeeRateSettingsRow = {
   topDistributorRate: number;
   distributor: string;
   distributorRate: number;
+  subDistributorRate: number;
   updatedAt: string;
 };
 
@@ -43,6 +45,7 @@ type FeeRateDbRow = {
   company_rate: string;
   distributor_rate: string;
   agency_rate: string;
+  sub_distributor_rate: string;
   updated_at: Date | string;
 };
 
@@ -51,12 +54,16 @@ function formatStamp(value: Date | string) {
 }
 
 function getTotalRate(
-  row: Pick<FeeRateDbRow, "company_rate" | "distributor_rate" | "agency_rate">,
+  row: Pick<
+    FeeRateDbRow,
+    "company_rate" | "distributor_rate" | "agency_rate" | "sub_distributor_rate"
+  >,
 ) {
   return (
     Number(row.company_rate) +
     Number(row.distributor_rate) +
-    Number(row.agency_rate)
+    Number(row.agency_rate) +
+    Number(row.sub_distributor_rate)
   );
 }
 
@@ -75,6 +82,7 @@ function toSettingsRow(row: FeeRateDbRow): FeeRateSettingsRow {
     topDistributorRate: Number(row.distributor_rate),
     distributor: row.distributor_name ?? row.child_distributor_names ?? "-",
     distributorRate: Number(row.agency_rate),
+    subDistributorRate: Number(row.sub_distributor_rate),
     updatedAt: formatStamp(row.updated_at),
   };
 }
@@ -102,11 +110,14 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
           topDistributorRate: 0,
           distributor: "-",
           distributorRate: 0,
+          subDistributorRate: 0,
           updatedAt: "local",
         },
       ],
     };
   }
+
+  await ensureFeeRateSchema();
 
   const scope =
     user.role === "MASTER"
@@ -140,6 +151,7 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
           fr.agency_rate,
           case when parent_dist.id is null and child_dist.names is null then 0 else 0.1 end
         )::text as agency_rate,
+        coalesce(fr.sub_distributor_rate, 0)::text as sub_distributor_rate,
         coalesce(fr.updated_at, dom.updated_at, dist.updated_at) as updated_at
       from domains dom
       join companies c on c.id = dom.company_id
@@ -273,6 +285,7 @@ export async function saveFeeRateSettings(input: {
   companyRate: number;
   topDistributorRate: number;
   distributorRate: number;
+  subDistributorRate: number;
 }) {
   if (!hasDatabaseUrl()) {
     return;
@@ -283,6 +296,8 @@ export async function saveFeeRateSettings(input: {
   }
 
   await withTransaction(async (client) => {
+    await ensureFeeRateSchema(client);
+
     const domainResult = await client.query<{
       company_id: string;
       distributor_id: string | null;
@@ -339,10 +354,11 @@ export async function saveFeeRateSettings(input: {
           company_rate,
           distributor_rate,
           agency_rate,
+          sub_distributor_rate,
           starts_at,
           created_by
         )
-        values ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, now(), $7::uuid)
+        values ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, now(), $8::uuid)
       `,
       [
         target.company_id,
@@ -351,6 +367,7 @@ export async function saveFeeRateSettings(input: {
         input.companyRate,
         input.topDistributorRate,
         input.distributorRate,
+        input.subDistributorRate,
         input.user.id,
       ],
     );
