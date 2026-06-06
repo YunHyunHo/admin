@@ -301,3 +301,32 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
     balanceTotal: Number(row.balance_total),
   }));
 }
+
+export function sortDashboardPartnerSummaries(
+  items: DashboardPartnerSummary[],
+): DashboardPartnerSummary[] {
+  return [...items].sort((left, right) => {
+    const leftHasActivity = Number(
+      left.balanceTotal > 0 ||
+        left.chargeTotal > 0 ||
+        left.exchangeTotal > 0 ||
+        left.feeTotal > 0,
+    );
+    const rightHasActivity = Number(
+      right.balanceTotal > 0 ||
+        right.chargeTotal > 0 ||
+        right.exchangeTotal > 0 ||
+        right.feeTotal > 0,
+    );
+
+    return (
+      rightHasActivity - leftHasActivity ||
+      right.balanceTotal - left.balanceTotal ||
+      right.chargeTotal - left.chargeTotal ||
+      right.exchangeTotal - left.exchangeTotal ||
+      right.feeTotal - left.feeTotal ||
+      (left.type === right.type ? 0 : left.type === "DISTRIBUTOR" ? -1 : 1) ||
+      left.name.localeCompare(right.name, "ko")
+    );
+  });
+}

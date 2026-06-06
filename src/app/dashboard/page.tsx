@@ -5,39 +5,9 @@ import { DashboardHistoryPanels } from "@/components/dashboard-history-panels";
 import { getSessionUser } from "@/lib/auth";
 import {
   getDashboardPartnerSummariesForUser,
-  type DashboardPartnerSummary,
+  sortDashboardPartnerSummaries,
 } from "@/lib/dashboard-summary-repository";
 import { getTransactionLedgerRows } from "@/lib/transaction-ledger-repository";
-
-
-function sortPartnerSummaries(
-  items: DashboardPartnerSummary[],
-): DashboardPartnerSummary[] {
-  return [...items].sort((left, right) => {
-    const leftHasActivity = Number(
-      left.balanceTotal > 0 ||
-        left.chargeTotal > 0 ||
-        left.exchangeTotal > 0 ||
-        left.feeTotal > 0,
-    );
-    const rightHasActivity = Number(
-      right.balanceTotal > 0 ||
-        right.chargeTotal > 0 ||
-        right.exchangeTotal > 0 ||
-        right.feeTotal > 0,
-    );
-
-    return (
-      rightHasActivity - leftHasActivity ||
-      right.balanceTotal - left.balanceTotal ||
-      right.chargeTotal - left.chargeTotal ||
-      right.exchangeTotal - left.exchangeTotal ||
-      right.feeTotal - left.feeTotal ||
-      (left.type === right.type ? 0 : left.type === "DISTRIBUTOR" ? -1 : 1) ||
-      left.name.localeCompare(right.name, "ko")
-    );
-  });
-}
 
 export default async function DashboardPage() {
   const user = await getSessionUser();
@@ -50,7 +20,7 @@ export default async function DashboardPage() {
     getTransactionLedgerRows([], user),
     getDashboardPartnerSummariesForUser(user),
   ]);
-  const prioritizedPartnerSummaries = sortPartnerSummaries(partnerSummaries);
+  const prioritizedPartnerSummaries = sortDashboardPartnerSummaries(partnerSummaries);
 
   const linkedApiCount = prioritizedPartnerSummaries.filter(
     (item) => item.hasActiveDomain,
@@ -64,7 +34,12 @@ export default async function DashboardPage() {
       item.feeTotal > 0,
   ).length;
   return (
-    <AdminShell user={user} activeItem="dashboard-home" helperText="">
+    <AdminShell
+      user={user}
+      activeItem="dashboard-home"
+      helperText=""
+      partnerSummaries={prioritizedPartnerSummaries}
+    >
       <div className="space-y-5">
         <section className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.28)] sm:p-6">
           <div>
