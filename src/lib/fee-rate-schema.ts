@@ -13,6 +13,10 @@ export async function ensureFeeRateSchema(client?: Pick<PoolClient, "query">) {
 
   await runner.query(`
     alter table fee_rates
+    add column if not exists sub_distributor_id uuid references distributors(id)
+  `);
+  await runner.query(`
+    alter table fee_rates
     add column if not exists sub_distributor_rate numeric(8, 4) not null default 0
   `);
   await runner.query(`

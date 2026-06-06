@@ -102,6 +102,7 @@ create table fee_rates (
   company_id uuid references companies(id),
   domain_id uuid references domains(id),
   distributor_id uuid references distributors(id),
+  sub_distributor_id uuid references distributors(id),
   company_rate numeric(8, 4) not null default 0,
   distributor_rate numeric(8, 4) not null default 0,
   agency_rate numeric(8, 4) not null default 0,

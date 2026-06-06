@@ -11,6 +11,7 @@ export type FeeRateSettingsRow = {
   domainId?: string;
   distributorId?: string;
   topDistributorId?: string;
+  subDistributorId?: string;
   vendorName: string;
   domainName: string;
   totalRate: number;
@@ -20,6 +21,7 @@ export type FeeRateSettingsRow = {
   topDistributorRate: number;
   distributor: string;
   distributorRate: number;
+  subDistributor: string;
   subDistributorRate: number;
   updatedAt: string;
 };
@@ -36,9 +38,11 @@ type FeeRateDbRow = {
   domain_id: string | null;
   distributor_id: string | null;
   top_distributor_id: string | null;
+  sub_distributor_id: string | null;
   distributor_name: string | null;
   child_distributor_names: string | null;
   top_distributor_name: string | null;
+  sub_distributor_name: string | null;
   domain_name: string | null;
   company_name: string | null;
   vendor_name: string | null;
@@ -73,6 +77,7 @@ function toSettingsRow(row: FeeRateDbRow): FeeRateSettingsRow {
     domainId: row.domain_id ?? undefined,
     distributorId: row.distributor_id ?? undefined,
     topDistributorId: row.top_distributor_id ?? undefined,
+    subDistributorId: row.sub_distributor_id ?? undefined,
     vendorName: row.vendor_name ?? row.company_name ?? "-",
     domainName: row.domain_name ?? "-",
     totalRate: Number(getTotalRate(row).toFixed(2)),
@@ -82,6 +87,7 @@ function toSettingsRow(row: FeeRateDbRow): FeeRateSettingsRow {
     topDistributorRate: Number(row.distributor_rate),
     distributor: row.distributor_name ?? row.child_distributor_names ?? "-",
     distributorRate: Number(row.agency_rate),
+    subDistributor: row.sub_distributor_name ?? "-",
     subDistributorRate: Number(row.sub_distributor_rate),
     updatedAt: formatStamp(row.updated_at),
   };
@@ -101,6 +107,7 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
           id: "FEE-FALLBACK",
           domainId: undefined,
           distributorId: undefined,
+          subDistributorId: undefined,
           vendorName: user.companyName,
           domainName: "도메인",
           totalRate: feeRate,
@@ -110,6 +117,7 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
           topDistributorRate: 0,
           distributor: "-",
           distributorRate: 0,
+          subDistributor: "-",
           subDistributorRate: 0,
           updatedAt: "local",
         },
@@ -131,12 +139,14 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
         dom.id::text as domain_id,
         dist.id::text as distributor_id,
         coalesce(parent_dist.id, dist.id)::text as top_distributor_id,
+        fr.sub_distributor_id::text as sub_distributor_id,
         case
           when dist.id is null then '-'
           when parent_dist.id is null then null
           else dist.name
         end as distributor_name,
         child_dist.names as child_distributor_names,
+        coalesce(sub_dist.name, '-') as sub_distributor_name,
         case
           when dist.id is null then '-'
           when parent_dist.id is null then dist.name
@@ -185,6 +195,9 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
           fee.created_at desc
         limit 1
       ) fr on true
+      left join distributors sub_dist
+        on sub_dist.id = fr.sub_distributor_id
+        and sub_dist.status = 'ACTIVE'
       where dom.status <> 'DELETED'
         and (dist.id is null or dist.status = 'ACTIVE')
         and domain_admin.name is not null
@@ -225,6 +238,7 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
 export async function updateFeeRateDomainDistributor(input: {
   domainId?: string;
   distributorId?: string;
+  target?: "topDistributor" | "distributor" | "subDistributor";
 }) {
   if (!hasDatabaseUrl()) {
     return;
@@ -235,6 +249,8 @@ export async function updateFeeRateDomainDistributor(input: {
   }
 
   await withTransaction(async (client) => {
+    await ensureFeeRateSchema(client);
+
     const distributorResult = await client.query<{ id: string }>(
       `
         select id::text
@@ -248,6 +264,75 @@ export async function updateFeeRateDomainDistributor(input: {
 
     if (!distributorResult.rows[0]) {
       throw new Error("선택한 총판 정보를 찾을 수 없습니다.");
+    }
+
+    if (input.target === "subDistributor") {
+      const domainResult = await client.query<{
+        company_id: string;
+        distributor_id: string | null;
+        fee_id: string | null;
+      }>(
+        `
+          select
+            dom.company_id::text,
+            dom.distributor_id::text,
+            (
+              select fee.id::text
+              from fee_rates fee
+              where fee.domain_id = dom.id
+                and fee.starts_at <= now()
+                and (fee.ends_at is null or fee.ends_at > now())
+              order by fee.starts_at desc, fee.created_at desc
+              limit 1
+            ) as fee_id
+          from domains dom
+          where dom.id = $1::uuid
+            and dom.status <> 'DELETED'
+          limit 1
+        `,
+        [input.domainId],
+      );
+      const domain = domainResult.rows[0];
+
+      if (!domain?.company_id) {
+        throw new Error("변경할 도메인을 찾을 수 없습니다.");
+      }
+
+      if (domain.fee_id) {
+        await client.query(
+          `
+            update fee_rates
+            set sub_distributor_id = $2::uuid, updated_at = now()
+            where id = $1::uuid
+          `,
+          [domain.fee_id, input.distributorId],
+        );
+        return;
+      }
+
+      await client.query(
+        `
+          insert into fee_rates (
+            company_id,
+            domain_id,
+            distributor_id,
+            sub_distributor_id,
+            company_rate,
+            distributor_rate,
+            agency_rate,
+            sub_distributor_rate,
+            starts_at
+          )
+          values ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 0.2, 0.1, 0.1, 0, now())
+        `,
+        [
+          domain.company_id,
+          input.domainId,
+          domain.distributor_id,
+          input.distributorId,
+        ],
+      );
+      return;
     }
 
     const domainResult = await client.query<{ id: string }>(
@@ -267,8 +352,8 @@ export async function updateFeeRateDomainDistributor(input: {
 
     await client.query(
       `
-        update fee_rates
-        set distributor_id = $2::uuid, updated_at = now()
+          update fee_rates
+          set distributor_id = $2::uuid, updated_at = now()
         where domain_id = $1::uuid
           and starts_at <= now()
           and (ends_at is null or ends_at > now())
@@ -303,6 +388,7 @@ export async function saveFeeRateSettings(input: {
       distributor_id: string | null;
       domain_id: string | null;
       fee_id: string | null;
+      sub_distributor_id: string | null;
     }>(
       `
         select
@@ -317,7 +403,16 @@ export async function saveFeeRateSettings(input: {
               and (fee.ends_at is null or fee.ends_at > now())
             order by fee.starts_at desc, fee.created_at desc
             limit 1
-          ) as fee_id
+          ) as fee_id,
+          (
+            select fee.sub_distributor_id::text
+            from fee_rates fee
+            where fee.domain_id = dom.id
+              and fee.starts_at <= now()
+              and (fee.ends_at is null or fee.ends_at > now())
+            order by fee.starts_at desc, fee.created_at desc
+            limit 1
+          ) as sub_distributor_id
         from domains dom
         where dom.id = $1::uuid
           and dom.status <> 'DELETED'
@@ -351,6 +446,7 @@ export async function saveFeeRateSettings(input: {
           company_id,
           domain_id,
           distributor_id,
+          sub_distributor_id,
           company_rate,
           distributor_rate,
           agency_rate,
@@ -358,12 +454,13 @@ export async function saveFeeRateSettings(input: {
           starts_at,
           created_by
         )
-        values ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, now(), $8::uuid)
+        values ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, $8, now(), $9::uuid)
       `,
       [
         target.company_id,
         input.domainId,
         target.distributor_id,
+        target.sub_distributor_id,
         input.companyRate,
         input.topDistributorRate,
         input.distributorRate,

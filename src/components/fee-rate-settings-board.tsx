@@ -10,6 +10,7 @@ type FeeRateRow = {
   domainId?: string;
   distributorId?: string;
   topDistributorId?: string;
+  subDistributorId?: string;
   vendorName: string;
   domainName: string;
   totalRate: number;
@@ -19,6 +20,7 @@ type FeeRateRow = {
   topDistributorRate: number;
   distributor: string;
   distributorRate: number;
+  subDistributor: string;
   subDistributorRate: number;
   updatedAt: string;
 };
@@ -46,7 +48,7 @@ const rateKeys = [
 
 type RateKey = (typeof rateKeys)[number];
 type DraftRates = Pick<FeeRateRow, RateKey>;
-type EditTarget = "company" | "topDistributor" | "distributor";
+type EditTarget = "company" | "topDistributor" | "distributor" | "subDistributor";
 
 type EditModalState = {
   rowId: string;
@@ -114,7 +116,13 @@ export function FeeRateSettingsBoard({
     }
 
     return rows.filter((row) =>
-      [row.vendorName, row.domainName, row.topDistributor, row.distributor]
+      [
+        row.vendorName,
+        row.domainName,
+        row.topDistributor,
+        row.distributor,
+        row.subDistributor,
+      ]
         .join(" ")
         .toLowerCase()
         .includes(keyword),
@@ -144,9 +152,11 @@ export function FeeRateSettingsBoard({
         ? "HEADQUARTERS"
         : target === "topDistributor"
           ? (row.topDistributorId ?? "")
-          : row.distributorId && row.distributorId !== row.topDistributorId
-            ? row.distributorId
-            : "";
+          : target === "subDistributor"
+            ? (row.subDistributorId ?? "")
+            : row.distributorId && row.distributorId !== row.topDistributorId
+              ? row.distributorId
+              : "";
 
     setEditModal({ rowId: row.id, target });
     setModalSelection(selected === "-" ? "" : selected);
@@ -193,6 +203,7 @@ export function FeeRateSettingsBoard({
         body: JSON.stringify({
           domainId: row.domainId,
           distributorId: modalSelection,
+          target: editModal.target,
         }),
       });
       const data = (await response.json()) as {
@@ -472,12 +483,12 @@ export function FeeRateSettingsBoard({
                         )}
                       </td>
                       <td className="px-4 py-4 text-center font-semibold text-white">
-                        {row.distributor === "-" ? (
+                        {row.subDistributor === "-" ? (
                           <div className="flex items-center justify-center gap-2">
                             <span>-</span>
                             <button
                               type="button"
-                              onClick={() => openEditModal(row, "distributor")}
+                              onClick={() => openEditModal(row, "subDistributor")}
                               className="rounded-xl bg-white/14 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
                             >
                               수정
@@ -485,7 +496,7 @@ export function FeeRateSettingsBoard({
                           </div>
                         ) : (
                           <div className="flex items-center justify-center gap-2">
-                            <span>{row.distributor}</span>
+                            <span>{row.subDistributor}</span>
                             <RateInput
                               value={draft.subDistributorRate}
                               disabled={!canManageFeeRates}
@@ -495,7 +506,7 @@ export function FeeRateSettingsBoard({
                             />
                             <button
                               type="button"
-                              onClick={() => openEditModal(row, "distributor")}
+                              onClick={() => openEditModal(row, "subDistributor")}
                               className="rounded-xl bg-white/14 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
                             >
                               수정
@@ -631,6 +642,8 @@ function EditTargetModal({
       ? "본사 변경"
       : target === "topDistributor"
         ? "상위총판 변경"
+        : target === "subDistributor"
+          ? "총판 변경"
         : "총판 변경";
 
   const options = getTargetOptions(row, target, distributorOptions);

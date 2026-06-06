@@ -126,12 +126,14 @@ export async function PATCH(request: Request) {
   const body = (await request.json()) as {
     domainId?: string;
     distributorId?: string;
+    target?: "topDistributor" | "distributor" | "subDistributor";
   };
 
   try {
     await updateFeeRateDomainDistributor({
       domainId: body.domainId,
       distributorId: body.distributorId,
+      target: body.target,
     });
   } catch (error) {
     return NextResponse.json(
