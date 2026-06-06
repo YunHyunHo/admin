@@ -39,7 +39,7 @@ export function GlobalDashboardSummaryPanel({
 }: {
   partnerSummaries: DashboardPartnerSummary[];
 }) {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
   const totals = useMemo(
     () => getSummaryTotals(partnerSummaries),
     [partnerSummaries],

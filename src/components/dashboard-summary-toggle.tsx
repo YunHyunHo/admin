@@ -5,7 +5,7 @@ import { useState } from "react";
 const summaryToggleEvent = "dashboard-summary-toggle";
 
 export function DashboardSummaryToggle() {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
 
   function handleToggle() {
     setIsOpen((current) => {
