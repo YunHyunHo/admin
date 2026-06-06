@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { logoutAction } from "@/app/actions/auth";
 import type { SessionUser } from "@/lib/auth";
+import { DashboardSummaryToggle } from "@/components/dashboard-summary-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const sideMenuGroups = [
@@ -298,7 +299,8 @@ export function AdminShell({
                     );
                   })}
                 </nav>
-                <div className="absolute right-4 top-4 sm:right-6 lg:static">
+                <div className="absolute right-4 top-4 flex items-center gap-2 sm:right-6 lg:static">
+                  {activeItem === "dashboard-home" ? <DashboardSummaryToggle /> : null}
                   <ThemeToggle />
                 </div>
               </div>
