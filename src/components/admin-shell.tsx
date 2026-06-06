@@ -112,6 +112,24 @@ const masterOnlyMenuKeys = new Set([
   "admins",
 ]);
 
+const quickActions = [
+  {
+    title: "충전",
+    href: "/dashboard/transactions/charges",
+    key: "charges",
+  },
+  {
+    title: "환전",
+    href: "/dashboard/domains/exchanges",
+    key: "domain-exchanges",
+  },
+  {
+    title: "총판환전",
+    href: "/dashboard/settlement/distributor-withdrawals",
+    key: "distributor-withdrawals",
+  },
+];
+
 type AdminShellProps = {
   user: SessionUser;
   activeItem: string;
@@ -232,8 +250,8 @@ export function AdminShell({
           </aside>
 
           <section className="flex min-h-screen min-w-0 flex-1 flex-col">
-            <header className="border-b border-white/8 bg-black/18 backdrop-blur-xl">
-              <div className="flex min-h-[72px] items-center justify-between gap-3 px-4 sm:px-6">
+            <header className="sticky top-0 z-30 border-b border-white/8 bg-[#0b0d12]/92 shadow-[0_16px_42px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+              <div className="flex min-h-[72px] flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex shrink-0 items-center gap-2">
                   <button
                     type="button"
@@ -242,14 +260,47 @@ export function AdminShell({
                   >
                     ☰
                   </button>
+                  <div className="min-w-0 lg:hidden">
+                    <p className="truncate text-sm font-medium text-white/88">
+                      {user.companyName}
+                    </p>
+                    <p className="mt-1 text-xs text-white/42">
+                      {user.username}
+                    </p>
+                  </div>
                 </div>
-                <div className="min-w-0">
+                <div className="hidden min-w-0 lg:block">
                   <p className="truncate text-sm font-medium text-white/88">
                     {user.companyName}
                   </p>
                   <p className="mt-1 text-xs text-white/42">{user.username}</p>
                 </div>
-                <ThemeToggle />
+                <nav
+                  aria-label="거래 바로가기"
+                  className="flex min-w-0 flex-1 flex-wrap items-center gap-2 lg:justify-center"
+                >
+                  {quickActions.map((action) => {
+                    const isActive = action.key === activeItem;
+
+                    return (
+                      <Link
+                        key={action.key}
+                        href={action.href}
+                        aria-current={isActive ? "page" : undefined}
+                        className={`inline-flex h-10 min-w-[5.5rem] items-center justify-center rounded-2xl border px-4 text-sm font-semibold transition sm:min-w-[6.25rem] ${
+                          isActive
+                            ? "border-cyan-300/34 bg-cyan-400/16 text-cyan-50 shadow-[0_0_0_1px_rgba(103,232,249,0.10)]"
+                            : "border-white/10 bg-white/[0.04] text-white/78 hover:border-white/18 hover:bg-white/[0.08] hover:text-white"
+                        }`}
+                      >
+                        {action.title}
+                      </Link>
+                    );
+                  })}
+                </nav>
+                <div className="absolute right-4 top-4 sm:right-6 lg:static">
+                  <ThemeToggle />
+                </div>
               </div>
             </header>
 
