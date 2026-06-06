@@ -8,6 +8,8 @@ import type { LedgerRow } from "@/lib/transaction-ledger-types";
 
 const ROWS_PER_PAGE = 10;
 
+const metricLabels = ["충전", "수수료", "환전", "보유"] as const;
+
 function getPartnerTypeLabel(type: DashboardPartnerSummary["type"]) {
   switch (type) {
     case "TOP_DISTRIBUTOR":
@@ -17,6 +19,32 @@ function getPartnerTypeLabel(type: DashboardPartnerSummary["type"]) {
     default:
       return type;
   }
+}
+
+function getSummaryTotals(items: DashboardPartnerSummary[]) {
+  return items.reduce(
+    (sum, item) => ({
+      chargeTotal: sum.chargeTotal + item.chargeTotal,
+      feeTotal: sum.feeTotal + item.feeTotal,
+      exchangeTotal: sum.exchangeTotal + item.exchangeTotal,
+      balanceTotal: sum.balanceTotal + item.balanceTotal,
+    }),
+    {
+      chargeTotal: 0,
+      feeTotal: 0,
+      exchangeTotal: 0,
+      balanceTotal: 0,
+    },
+  );
+}
+
+function getMetricValues(item: DashboardPartnerSummary) {
+  return [
+    item.chargeTotal,
+    item.feeTotal,
+    item.exchangeTotal,
+    item.balanceTotal,
+  ];
 }
 
 function PaginationControls({
@@ -61,6 +89,7 @@ export function DashboardHistoryPanels({
 }) {
   const [partnerPage, setPartnerPage] = useState(1);
   const [transactionPage, setTransactionPage] = useState(1);
+  const [isSummaryOpen, setIsSummaryOpen] = useState(true);
 
   const partnerPageCount = Math.max(
     1,
@@ -87,9 +116,90 @@ export function DashboardHistoryPanels({
       ),
     [recentTransactions, transactionPage],
   );
+  const totals = useMemo(
+    () => getSummaryTotals(partnerSummaries),
+    [partnerSummaries],
+  );
+  const totalValues = [
+    totals.chargeTotal,
+    totals.feeTotal,
+    totals.exchangeTotal,
+    totals.balanceTotal,
+  ];
 
   return (
     <>
+      <section className="mt-5 overflow-hidden border border-white/10 bg-white/[0.025]">
+        <div className="flex flex-col border-b border-white/10 bg-black/26 lg:flex-row">
+          <div className="flex shrink-0 items-stretch border-b border-white/10 lg:border-b-0 lg:border-r">
+            <button
+              type="button"
+              onClick={() => setIsSummaryOpen((current) => !current)}
+              aria-expanded={isSummaryOpen}
+              className="grid h-[72px] w-[4.5rem] place-items-center border-r border-white/10 text-2xl font-semibold text-white/88 transition hover:bg-white/[0.06]"
+            >
+              ☰
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsSummaryOpen((current) => !current)}
+              className="grid h-[72px] w-[5rem] place-items-center text-2xl font-semibold text-white/88 transition hover:bg-white/[0.06]"
+              aria-label={isSummaryOpen ? "거래 요약 닫기" : "거래 요약 열기"}
+            >
+              {isSummaryOpen ? "⌃" : "⌄"}
+            </button>
+          </div>
+
+          <div className="grid min-w-0 flex-1 grid-cols-2 sm:grid-cols-4 lg:max-w-[760px]">
+            {metricLabels.map((label, index) => (
+              <div
+                key={`summary-total-${label}`}
+                className="min-h-[72px] border-r border-white/10 px-3 py-3 text-center last:border-r-0"
+              >
+                <p className="text-sm font-semibold text-white/70">{label}</p>
+                <p className="mt-2 truncate text-base font-bold text-white">
+                  {formatKoreanWon(totalValues[index])}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {isSummaryOpen ? (
+          <div className="grid bg-[#242424] lg:grid-cols-2">
+            {partnerSummaries.length ? (
+              partnerSummaries.map((item) => (
+                <div
+                  key={`summary-grid-${item.id}`}
+                  className="grid min-h-[60px] grid-cols-[minmax(7rem,1fr)_repeat(4,minmax(5.5rem,1fr))] border-b border-r border-black/60 text-center text-sm text-white"
+                >
+                  <div className="flex items-center justify-center border-r border-black/60 bg-white/[0.055] px-2 font-semibold">
+                    <span className="line-clamp-2 break-keep">{item.name}</span>
+                  </div>
+                  {getMetricValues(item).map((value, index) => (
+                    <div
+                      key={`${item.id}-${metricLabels[index]}`}
+                      className="grid grid-rows-2 border-r border-black/60 last:border-r-0"
+                    >
+                      <div className="flex items-center justify-center border-b border-black/60 bg-white/[0.045] px-2 font-semibold">
+                        {metricLabels[index]}
+                      </div>
+                      <div className="flex min-w-0 items-center justify-center px-2 font-bold">
+                        <span className="truncate">{formatKoreanWon(value)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))
+            ) : (
+              <div className="px-4 py-10 text-center text-sm text-white/42 lg:col-span-2">
+                표시할 하청/업체 현황이 없습니다.
+              </div>
+            )}
+          </div>
+        ) : null}
+      </section>
+
       <div className="mt-5 hidden overflow-hidden rounded-2xl border border-white/8 xl:block">
         <div className="overflow-x-auto">
           <table className="min-w-full text-center text-sm">
