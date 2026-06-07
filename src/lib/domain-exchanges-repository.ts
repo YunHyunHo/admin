@@ -34,6 +34,7 @@ type CreateDomainExchangeInput = {
   accountNumber?: string;
   rawPayload?: unknown;
   domainId?: string | null;
+  domainName?: string;
 };
 
 export type DomainExchangeCreateContext = {
@@ -269,15 +270,73 @@ async function findExchangeScope(domainId: string | null | undefined, user: Sess
   return domainScope;
 }
 
-export async function createDomainExchange(
-  input: CreateDomainExchangeInput & { user: SessionUser },
-) {
-  const scope = await findExchangeScope(input.domainId, input.user);
+async function findIntegrationExchangeScope(input: {
+  domainId?: string | null;
+  domainName?: string;
+}) {
+  const domainId = input.domainId?.trim();
+  const domainName = input.domainName?.trim();
 
-  if (input.amount > Number(scope.current_balance)) {
-    throw new Error("보유 수수료보다 큰 금액은 신청할 수 없습니다.");
+  if (!domainId && !domainName) {
+    throw new Error("환전신청을 연결할 도메인 정보가 필요합니다.");
   }
 
+  const result = await query<{
+    company_id: string;
+    domain_id: string;
+    distributor_id: string | null;
+    distributor_balance: string | null;
+    domain_balance: string;
+  }>(
+    `
+      select
+        dom.company_id::text,
+        dom.id::text as domain_id,
+        dom.distributor_id::text,
+        dist.current_balance::text as distributor_balance,
+        dom.current_balance::text as domain_balance
+      from domains dom
+      join companies c on c.id = dom.company_id
+      left join distributors dist on dist.id = dom.distributor_id
+      where dom.status <> 'DELETED'
+        and (dist.id is null or dist.status = 'ACTIVE')
+        and (
+          ($1::uuid is not null and dom.id = $1::uuid)
+          or (
+            $1::uuid is null
+            and $2::text is not null
+            and (
+              dom.domain_name = $2
+              or c.company_name = $2
+            )
+          )
+        )
+      order by dom.created_at desc
+      limit 1
+    `,
+    [domainId ?? null, domainName ?? null],
+  );
+  const scope = result.rows[0];
+
+  if (!scope) {
+    throw new Error("환전신청을 연결할 도메인을 찾을 수 없습니다.");
+  }
+
+  return {
+    company_id: scope.company_id,
+    domain_id: scope.domain_id,
+    distributor_id: scope.distributor_id,
+    current_balance: scope.distributor_balance ?? scope.domain_balance,
+  };
+}
+
+async function insertExchangeRequest(
+  input: CreateDomainExchangeInput & {
+    companyId: string;
+    domainId: string | null;
+    distributorId: string | null;
+  },
+) {
   const result = await query<{ id: string }>(
     `
       insert into exchange_requests (
@@ -312,9 +371,9 @@ export async function createDomainExchange(
     `,
     [
       input.externalId ?? null,
-      scope.company_id,
-      scope.domain_id,
-      scope.distributor_id,
+      input.companyId,
+      input.domainId,
+      input.distributorId,
       input.userId,
       input.bankName ?? null,
       input.accountHolder ?? null,
@@ -325,6 +384,42 @@ export async function createDomainExchange(
   );
 
   return result.rows[0]?.id;
+}
+
+export async function createDomainExchange(
+  input: CreateDomainExchangeInput & { user: SessionUser },
+) {
+  const scope = await findExchangeScope(input.domainId, input.user);
+
+  if (input.amount > Number(scope.current_balance)) {
+    throw new Error("보유 수수료보다 큰 금액은 신청할 수 없습니다.");
+  }
+
+  return insertExchangeRequest({
+    ...input,
+    companyId: scope.company_id,
+    domainId: scope.domain_id,
+    distributorId: scope.distributor_id,
+  });
+}
+
+export async function createIntegrationDomainExchange(input: CreateDomainExchangeInput) {
+  if (!hasDatabaseUrl()) {
+    throw new Error("DB 연결 환경에서만 연동 API를 사용할 수 있습니다.");
+  }
+
+  const scope = await findIntegrationExchangeScope(input);
+
+  if (input.amount > Number(scope.current_balance)) {
+    throw new Error("보유 수수료보다 큰 금액은 신청할 수 없습니다.");
+  }
+
+  return insertExchangeRequest({
+    ...input,
+    companyId: scope.company_id,
+    domainId: scope.domain_id,
+    distributorId: scope.distributor_id,
+  });
 }
 
 export async function approveDomainExchange(id: string, processedBy: string) {
