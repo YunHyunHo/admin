@@ -5,6 +5,7 @@ import {
   getIntegrationChargeDomainOptions,
 } from "@/lib/charge-requests-repository";
 import { hasDatabaseUrl } from "@/lib/db";
+import { getIntegrationChargeHistory } from "@/lib/integration-domain-history";
 
 export const runtime = "nodejs";
 
@@ -18,7 +19,38 @@ type IntegrationChargePayload = {
   accountNumber?: string;
 };
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const domainId = searchParams.get("domainId");
+  const domainName = searchParams.get("domainName");
+
+  if (domainId || domainName) {
+    try {
+      return NextResponse.json(
+        await getIntegrationChargeHistory({
+          domainId,
+          domainName,
+          page: searchParams.get("page"),
+          pageSize: searchParams.get("pageSize"),
+          from: searchParams.get("from"),
+          to: searchParams.get("to"),
+          status: searchParams.get("status"),
+        }),
+      );
+    } catch (error) {
+      return NextResponse.json(
+        {
+          ok: false,
+          message:
+            error instanceof Error
+              ? error.message
+              : "충전신청 내역 조회 중 오류가 발생했습니다.",
+        },
+        { status: 400 },
+      );
+    }
+  }
+
   return NextResponse.json({
     domains: await getIntegrationChargeDomainOptions(),
   });
