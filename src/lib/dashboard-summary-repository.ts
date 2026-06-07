@@ -4,7 +4,11 @@ import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
 import { hasDatabaseUrl, query } from "@/lib/db";
 import { ensureFeeRateSchema } from "@/lib/fee-rate-schema";
 import { getCurrentKoreanDayRange } from "@/lib/korean-time";
-import { getScopedDistributorCondition } from "@/lib/master-scope";
+import {
+  getManagedCompanyIds,
+  getScopedDataCondition,
+  getScopedDistributorCondition,
+} from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
 
 type DashboardSummaryRow = {
@@ -28,7 +32,7 @@ type DashboardPartnerSummaryRow = {
   entity_id: string;
   entity_name: string;
   entity_login_id: string | null;
-  entity_type: "DISTRIBUTOR" | "TOP_DISTRIBUTOR";
+  entity_type: "DISTRIBUTOR" | "TOP_DISTRIBUTOR" | "COMPANY";
   has_active_domain: boolean;
   charge_total: string;
   fee_total: string;
@@ -40,7 +44,7 @@ export type DashboardPartnerSummary = {
   id: string;
   name: string;
   loginId: string;
-  type: "DISTRIBUTOR" | "TOP_DISTRIBUTOR";
+  type: "DISTRIBUTOR" | "TOP_DISTRIBUTOR" | "COMPANY";
   hasActiveDomain: boolean;
   chargeTotal: number;
   feeTotal: number;
@@ -55,24 +59,48 @@ export async function getDashboardSummaryForUser(user: SessionUser) {
 
     return getDashboardSummary(user.companyName, state, settings);
   }
-  const scope =
-    user.role === "MASTER"
-      ? { sql: "", values: [] as string[] }
-      : getScopedDistributorCondition(user);
-  const balanceScopeSql =
-    user.role === "MASTER"
-      ? ""
-      : getScopedDistributorCondition(
-          user,
-          "balance_dist",
-          "balance_dist_admin",
-        ).sql;
-  const feeRateScopeSql = scope.sql
-    ? `and (
-        fee.distributor_id is null
-        or (${scope.sql.replace("and ", "")})
-      )`
-    : "";
+  const scope = await getScopedDataCondition(user, {
+    company: "cr",
+    distributor: "dist",
+    distributorAdmin: "dist_admin",
+  });
+  const balanceScope =
+    user.role === "DOMAIN_ADMIN"
+      ? {
+          sql: "and balance_dom.company_id = any($1::uuid[])",
+          values: [await getManagedCompanyIds(user.id)] as unknown[],
+        }
+      : user.role === "MASTER"
+        ? { sql: "", values: [] as unknown[] }
+        : getScopedDistributorCondition(
+            user,
+            "balance_dist",
+            "balance_dist_admin",
+          );
+  const feeRateScopeSql =
+    user.role === "DOMAIN_ADMIN"
+      ? scope.sql.replaceAll("cr.", "fee.")
+      : scope.sql
+        ? `and (
+            fee.distributor_id is null
+            or (${scope.sql.replace("and ", "")})
+          )`
+        : "";
+  const balanceTotalSql =
+    user.role === "DOMAIN_ADMIN"
+      ? `
+          select sum(balance_dom.current_balance)
+          from domains balance_dom
+          where balance_dom.status <> 'DELETED'
+            ${balanceScope.sql}
+        `
+      : `
+          select sum(balance_dist.current_balance)
+          from distributors balance_dist
+          left join admins balance_dist_admin on balance_dist_admin.id = balance_dist.admin_id
+          where balance_dist.status = 'ACTIVE'
+            ${balanceScope.sql}
+        `;
 
   await ensureFeeRateSchema();
 
@@ -86,13 +114,7 @@ export async function getDashboardSummaryForUser(user: SessionUser) {
           count(*) filter (where cr.status in ('REJECTED', 'CANCELED'))::text as rejected_count,
           coalesce(sum(cr.amount) filter (where cr.status = 'PENDING'), 0)::text as pending_charge_total,
           coalesce(sum(cr.amount) filter (where cr.status in ('APPROVED', 'COMPLETED')), 0)::text as approved_charge_total,
-          coalesce((
-            select sum(balance_dist.current_balance)
-            from distributors balance_dist
-            left join admins balance_dist_admin on balance_dist_admin.id = balance_dist.admin_id
-            where balance_dist.status = 'ACTIVE'
-              ${balanceScopeSql}
-          ), 0)::text as fee_total
+          coalesce((${balanceTotalSql}), 0)::text as fee_total
         from charge_requests cr
         left join domains d on d.id = cr.domain_id
         left join distributors dist on dist.id = cr.distributor_id
@@ -144,6 +166,10 @@ export async function getDashboardSummaryForUser(user: SessionUser) {
 export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
   if (!hasDatabaseUrl()) {
     return [] satisfies DashboardPartnerSummary[];
+  }
+
+  if (user.role === "DOMAIN_ADMIN") {
+    return getDashboardCompanySummariesForDomainAdmin(user);
   }
 
   const dashboardScope =
@@ -296,6 +322,80 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
       order by entity.entity_name asc
     `,
     [startDate, endDateExclusive, ...dashboardScope.values],
+  );
+
+  return result.rows.map((row) => ({
+    id: row.entity_id,
+    name: row.entity_name,
+    loginId: row.entity_login_id ?? "-",
+    type: row.entity_type,
+    hasActiveDomain: row.has_active_domain,
+    chargeTotal: Number(row.charge_total),
+    feeTotal: Number(row.fee_total),
+    exchangeTotal: Number(row.exchange_total),
+    balanceTotal: Number(row.balance_total),
+  }));
+}
+
+async function getDashboardCompanySummariesForDomainAdmin(user: SessionUser) {
+  const companyIds = await getManagedCompanyIds(user.id);
+
+  if (!companyIds.length) {
+    return [] satisfies DashboardPartnerSummary[];
+  }
+
+  const { startDate, endDateExclusive } = getCurrentKoreanDayRange();
+  const result = await query<DashboardPartnerSummaryRow>(
+    `
+      select
+        concat('company:', c.id::text) as entity_id,
+        c.company_name as entity_name,
+        $4::text as entity_login_id,
+        'COMPANY'::text as entity_type,
+        exists (
+          select 1
+          from domains dom
+          where dom.company_id = c.id
+            and dom.status <> 'DELETED'
+        ) as has_active_domain,
+        coalesce((
+          select sum(cr.amount)
+          from charge_requests cr
+          where cr.company_id = c.id
+            and cr.status in ('APPROVED', 'COMPLETED')
+            and cr.processed_at is not null
+            and (cr.processed_at at time zone 'Asia/Seoul') >= $2::date
+            and (cr.processed_at at time zone 'Asia/Seoul') < $3::date
+        ), 0)::text as charge_total,
+        coalesce((
+          select sum(co.saved_commission)
+          from commission_records co
+          where co.company_id = c.id
+            and co.status in ('APPROVED', 'COMPLETED')
+            and (co.created_at at time zone 'Asia/Seoul') >= $2::date
+            and (co.created_at at time zone 'Asia/Seoul') < $3::date
+        ), 0)::text as fee_total,
+        coalesce((
+          select sum(er.amount)
+          from exchange_requests er
+          where er.company_id = c.id
+            and er.status in ('APPROVED', 'COMPLETED')
+            and er.processed_at is not null
+            and (er.processed_at at time zone 'Asia/Seoul') >= $2::date
+            and (er.processed_at at time zone 'Asia/Seoul') < $3::date
+        ), 0)::text as exchange_total,
+        coalesce((
+          select sum(dom.current_balance)
+          from domains dom
+          where dom.company_id = c.id
+            and dom.status <> 'DELETED'
+        ), 0)::text as balance_total
+      from companies c
+      where c.id = any($1::uuid[])
+        and c.status = 'ACTIVE'
+      order by c.company_name asc
+    `,
+    [companyIds, startDate, endDateExclusive, user.loginId],
   );
 
   return result.rows.map((row) => ({

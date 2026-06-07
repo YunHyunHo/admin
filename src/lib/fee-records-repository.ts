@@ -1,7 +1,7 @@
 import { getFeeRecords } from "@/lib/mock-report-service";
 import { hasDatabaseUrl, query } from "@/lib/db";
 import { formatKoreanDateTime } from "@/lib/korean-time";
-import { getScopedDistributorCondition } from "@/lib/master-scope";
+import { getScopedDataCondition, type ScopedClause } from "@/lib/master-scope";
 import { getAdminSettingsFromCookie } from "@/lib/settings-cookie";
 import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
 import type { SessionUser } from "@/lib/auth";
@@ -39,10 +39,12 @@ type FeeRecordDbRow = {
   requested_at: Date | string;
 };
 
-function getFeeRecordScope(user: SessionUser) {
-  return user.role === "MASTER"
-    ? { sql: "", values: [] as string[] }
-    : getScopedDistributorCondition(user);
+async function getFeeRecordScope(user: SessionUser): Promise<ScopedClause> {
+  return getScopedDataCondition(user, {
+    company: "co",
+    distributor: "dist",
+    distributorAdmin: "dist_admin",
+  });
 }
 
 function formatStamp(value: Date | string) {
@@ -79,7 +81,7 @@ export async function getFeeRecordsForUser(
 
     return getFeeRecords(user.companyName, startDate, endDate, state, settings);
   }
-  const scope = getFeeRecordScope(user);
+  const scope = await getFeeRecordScope(user);
   const scopeSql = scope.sql.replaceAll("$1", "$3");
   const values = user.role === "MASTER"
     ? [startDate, endDate]

@@ -1,6 +1,6 @@
 import { hasDatabaseUrl, query } from "@/lib/db";
 import { formatKoreanDateTime } from "@/lib/korean-time";
-import { getScopedDistributorCondition } from "@/lib/master-scope";
+import { getScopedDataCondition } from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
 import type { LedgerRow, TransactionStatus } from "@/lib/transaction-ledger-types";
 
@@ -79,12 +79,20 @@ export async function getTransactionLedgerRows(
   if (!hasDatabaseUrl()) {
     return fallbackRows;
   }
-  const scope = user
-    ? user.role === "MASTER"
-      ? { sql: "", values: [] as string[] }
-      : getScopedDistributorCondition(user)
+  const chargeScope = user
+    ? await getScopedDataCondition(user, {
+        company: "cr",
+        distributor: "dist",
+        distributorAdmin: "dist_admin",
+      })
     : { sql: "", values: [] as string[] };
-  const scopedSql = scope.sql.replace("$1", "$1");
+  const exchangeScope = user
+    ? await getScopedDataCondition(user, {
+        company: "er",
+        distributor: "dist",
+        distributorAdmin: "dist_admin",
+      })
+    : { sql: "", values: [] as string[] };
 
   const result = await query<TransactionLedgerDbRow>(
     `
@@ -158,7 +166,7 @@ export async function getTransactionLedgerRows(
         left join commission_records co on co.charge_request_id = cr.id
         left join admins dist_admin on dist_admin.id = dist.admin_id
         where 1 = 1
-          ${scopedSql}
+          ${chargeScope.sql}
 
         union all
 
@@ -191,12 +199,12 @@ export async function getTransactionLedgerRows(
         ) child_dist on parent_dist.id is null
         left join admins dist_admin on dist_admin.id = dist.admin_id
         where 1 = 1
-          ${scopedSql}
+          ${exchangeScope.sql}
       ) ledger
       order by requested_at desc
       limit ${DEFAULT_ROW_LIMIT}
     `,
-    scope.values,
+    chargeScope.values.length ? chargeScope.values : exchangeScope.values,
   );
 
   return result.rows.map(toLedgerRow);

@@ -5,7 +5,7 @@ import {
 import { getAdminSettingsFromCookie } from "@/lib/settings-cookie";
 import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
 import { hasDatabaseUrl, query } from "@/lib/db";
-import { getScopedDistributorCondition } from "@/lib/master-scope";
+import { getScopedDataCondition } from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
 
 type SettlementAggregateRow = {
@@ -77,14 +77,22 @@ async function getCommissionAggregates(
   startDate: string,
   endDate: string,
 ) {
-  const scope =
-    user.role === "MASTER"
-      ? { sql: "", values: [] as string[] }
-      : getScopedDistributorCondition(user);
-  const scopeSql = scope.sql.replaceAll("$1", "$3");
-  const values = user.role === "MASTER"
-    ? [startDate, endDate]
-    : [startDate, endDate, user.id];
+  const commissionScope = await getScopedDataCondition(user, {
+    company: "co",
+    distributor: "dist",
+    distributorAdmin: "dist_admin",
+  });
+  const exchangeScope = await getScopedDataCondition(user, {
+    company: "er",
+    distributor: "dist",
+    distributorAdmin: "dist_admin",
+  });
+  const commissionScopeSql = commissionScope.sql.replaceAll("$1", "$3");
+  const exchangeScopeSql = exchangeScope.sql.replaceAll("$1", "$3");
+  const scopedValues = commissionScope.values.length
+    ? commissionScope.values
+    : exchangeScope.values;
+  const values = [startDate, endDate, ...scopedValues];
   const result = await query<SettlementAggregateRow>(
     `
       select
@@ -122,7 +130,7 @@ async function getCommissionAggregates(
           co.status in ('APPROVED', 'COMPLETED')
           and co.created_at >= $1::date
           and co.created_at < ($2::date + interval '1 day')
-          ${scopeSql}
+          ${commissionScopeSql}
 
         union all
 
@@ -149,7 +157,7 @@ async function getCommissionAggregates(
           and er.processed_at is not null
           and er.processed_at >= $1::date
           and er.processed_at < ($2::date + interval '1 day')
-          ${scopeSql}
+          ${exchangeScopeSql}
       ) daily
       group by date, domain_name, top_distributor_id, distributor_id
       order by date asc

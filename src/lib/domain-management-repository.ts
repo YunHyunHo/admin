@@ -1,6 +1,6 @@
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
 import { formatKoreanDateTime } from "@/lib/korean-time";
-import { getScopedDistributorCondition } from "@/lib/master-scope";
+import { getScopedDataCondition, type ScopedClause } from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
 import type {
   DomainDistributorOption,
@@ -70,7 +70,7 @@ export async function getDomainManagementRows(
     return fallbackRows;
   }
   const scope = user
-    ? getDomainManagementScopeCondition(user)
+    ? await getDomainManagementScopeCondition(user)
     : { sql: "", values: [] as string[] };
 
   const result = await query<DomainDbRow>(
@@ -124,10 +124,12 @@ export async function getDomainManagementRows(
   return result.rows.map(toDomainRow);
 }
 
-function getDomainManagementScopeCondition(user: SessionUser) {
-  return user.role === "MASTER"
-    ? { sql: "", values: [] as string[] }
-    : getScopedDistributorCondition(user);
+function getDomainManagementScopeCondition(user: SessionUser): Promise<ScopedClause> {
+  return getScopedDataCondition(user, {
+    company: "dom",
+    distributor: "dist",
+    distributorAdmin: "dist_admin",
+  });
 }
 
 export async function getDomainBoardData(fallbackRows: DomainRow[], user?: SessionUser) {
@@ -138,6 +140,11 @@ export async function getDomainBoardData(fallbackRows: DomainRow[], user?: Sessi
     };
   }
 
+  const distributorScope = user
+    ? user.role === "DOMAIN_ADMIN"
+      ? { sql: "and 1 = 0", values: [] as string[] }
+      : await getDomainManagementScopeCondition(user)
+    : { sql: "", values: [] as string[] };
   const [rows, distributorOptions] = await Promise.all([
     getDomainManagementRows(fallbackRows, user),
     query<DistributorOptionDbRow>(
@@ -146,11 +153,11 @@ export async function getDomainBoardData(fallbackRows: DomainRow[], user?: Sessi
         from distributors dist
         left join admins dist_admin on dist_admin.id = dist.admin_id
         where dist.status = 'ACTIVE'
-          ${user ? getDomainManagementScopeCondition(user).sql : ""}
+          ${distributorScope.sql}
         order by name asc
         limit ${DEFAULT_ROW_LIMIT}
       `,
-      user ? getDomainManagementScopeCondition(user).values : [],
+      distributorScope.values,
     ),
   ]);
 

@@ -1,6 +1,6 @@
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
 import { formatKoreanDateTime } from "@/lib/korean-time";
-import { getScopedDistributorCondition } from "@/lib/master-scope";
+import { getScopedDataCondition } from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
 import type {
   DomainExchangeOption,
@@ -84,9 +84,11 @@ export async function getDomainExchangeRows(
     return fallbackRows;
   }
   const scope = user
-    ? user.role === "MASTER"
-      ? { sql: "", values: [] as string[] }
-      : getScopedDistributorCondition(user)
+    ? await getScopedDataCondition(user, {
+        company: "er",
+        distributor: "dist",
+        distributorAdmin: "dist_admin",
+      })
     : { sql: "", values: [] as string[] };
 
   const result = await query<ExchangeRequestDbRow>(

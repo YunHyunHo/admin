@@ -86,7 +86,9 @@ export async function getDomainListBoardData(user: SessionUser) {
   const domainAdminScope =
     user.role === "MASTER"
       ? { sql: "", values: [] as string[] }
-      : { sql: "and a.created_by = $1::uuid", values: [user.id] };
+      : user.role === "DOMAIN_ADMIN"
+        ? { sql: "and a.id = $1::uuid", values: [user.id] }
+        : { sql: "and a.created_by = $1::uuid", values: [user.id] };
   const [rows, distributorOptions, mappedDomains] = await Promise.all([
     getDomainManagementRows([], user),
     query<DomainListOwnerOption>(
