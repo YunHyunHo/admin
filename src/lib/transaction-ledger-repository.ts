@@ -54,7 +54,7 @@ function toLedgerRow(row: TransactionLedgerDbRow): LedgerRow {
     id: `${row.request_type}-${row.id}`,
     transactionType: row.request_type === "CHARGE" ? "충전" : "환전",
     branch: distributorName,
-    userId: row.request_type === "EXCHANGE" ? "업체 환전" : row.user_uid,
+    userId: row.user_uid,
     topDistributor: row.top_distributor_name ?? distributorName,
     distributor: distributorName,
     domain: row.domain_name ?? "-",

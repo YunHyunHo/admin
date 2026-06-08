@@ -11,9 +11,9 @@ const DEFAULT_ROW_LIMIT = 200;
 
 type ExchangeRequestDbRow = {
   id: string;
+  user_uid: string | null;
   distributor_name: string | null;
   child_distributor_names: string | null;
-  distributor_login_id: string | null;
   top_distributor_name: string | null;
   domain_name: string | null;
   bank_name: string | null;
@@ -64,7 +64,7 @@ function toExchangeRow(row: ExchangeRequestDbRow): DomainExchangeRow {
     branch: distributorName === "-" ? topDistributorName : distributorName,
     topDistributor: topDistributorName,
     distributor: distributorName,
-    loginId: row.distributor_login_id ?? "-",
+    loginId: row.user_uid ?? "-",
     domain: row.domain_name ?? "-",
     bankName: row.bank_name ?? "-",
     accountHolder: row.account_holder ?? "-",
@@ -95,9 +95,9 @@ export async function getDomainExchangeRows(
     `
       select
         er.id::text,
+        er.user_uid,
         case when parent_dist.id is null then null else dist.name end as distributor_name,
         child_dist.names as child_distributor_names,
-        dist_admin.login_id as distributor_login_id,
         coalesce(parent_dist.name, dist.name) as top_distributor_name,
         dom.domain_name,
         er.bank_name,
