@@ -12,12 +12,12 @@ export default async function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-[#07070c] px-5 py-8 text-white">
-      <div className="mx-auto grid min-h-[calc(100vh-4rem)] w-full max-w-6xl overflow-hidden rounded-[2rem] border border-white/8 bg-[#0d0d15] shadow-[0_30px_100px_rgba(0,0,0,0.38)] lg:grid-cols-[1fr_0.86fr]">
-        <section className="hidden border-r border-white/8 bg-[radial-gradient(circle_at_26%_20%,_rgba(255,45,104,0.28),_transparent_28%),linear-gradient(155deg,_#100b15_0%,_#151827_48%,_#25111a_100%)] p-10 lg:flex lg:flex-col lg:justify-between">
+    <main className="min-h-screen bg-[#080a0f] px-5 py-8 text-white">
+      <div className="mx-auto grid min-h-[calc(100vh-4rem)] w-full max-w-6xl overflow-hidden rounded-[2rem] border border-white/8 bg-[#0d1017] shadow-[0_30px_100px_rgba(0,0,0,0.34)] lg:grid-cols-[1fr_0.86fr]">
+        <section className="hidden border-r border-white/8 bg-[linear-gradient(155deg,_#101827_0%,_#142637_44%,_#1f2b27_100%)] p-10 lg:flex lg:flex-col lg:justify-between">
           <div>
             <div className="flex items-center gap-4">
-              <div className="grid h-16 w-16 place-items-center overflow-hidden rounded-2xl border border-white/12 bg-white shadow-[0_18px_50px_rgba(255,45,104,0.16)]">
+              <div className="grid h-16 w-16 place-items-center overflow-hidden rounded-2xl border border-white/12 bg-white shadow-[0_18px_50px_rgba(6,182,212,0.16)]">
                 <Image
                   src="/winpay-logo.png"
                   alt="WinPay"
@@ -28,7 +28,7 @@ export default async function Home() {
                 />
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.32em] text-rose-200/70">
+                <p className="text-xs font-semibold uppercase tracking-[0.32em] text-cyan-200/70">
                   WinPay
                 </p>
                 <h1 className="mt-2 text-4xl font-semibold tracking-[-0.04em]">
@@ -59,7 +59,7 @@ export default async function Home() {
                 />
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-rose-200/70">
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200/70">
                   WinPay
                 </p>
                 <h1 className="mt-1 text-2xl font-semibold tracking-[-0.04em]">
@@ -70,7 +70,7 @@ export default async function Home() {
 
             <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-7 shadow-[0_24px_70px_rgba(0,0,0,0.28)] backdrop-blur sm:p-8">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-rose-200/70">
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200/70">
                   WinPay Access
                 </p>
                 <h2 className="mt-3 text-3xl font-semibold tracking-[-0.04em]">
