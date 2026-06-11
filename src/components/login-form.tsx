@@ -14,7 +14,7 @@ function SubmitButton() {
     <button
       type="submit"
       disabled={pending}
-      className="flex h-13 w-full items-center justify-center rounded-2xl bg-cyan-300 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:bg-white/20 disabled:text-white/45"
+      className="flex h-13 w-full items-center justify-center rounded-2xl bg-[#ff2d68] text-sm font-semibold text-white shadow-[0_16px_36px_rgba(255,45,104,0.2)] transition hover:bg-[#ff477b] disabled:cursor-not-allowed disabled:bg-white/20 disabled:text-white/45 disabled:shadow-none"
     >
       {pending ? "로그인 확인 중..." : "로그인"}
     </button>
@@ -32,7 +32,7 @@ export function LoginForm() {
           type="text"
           name="username"
           placeholder="아이디를 입력해주세요"
-          className="h-13 w-full rounded-2xl border border-white/10 bg-black/22 px-4 text-sm text-white outline-none transition placeholder:text-white/28 focus:border-cyan-300/70 focus:bg-black/28 focus:ring-4 focus:ring-cyan-300/10"
+          className="h-13 w-full rounded-2xl border border-white/10 bg-black/22 px-4 text-sm text-white outline-none transition placeholder:text-white/28 focus:border-rose-300/70 focus:bg-black/28 focus:ring-4 focus:ring-rose-300/10"
         />
       </label>
 
@@ -42,7 +42,7 @@ export function LoginForm() {
           type="password"
           name="password"
           placeholder="비밀번호를 입력해주세요"
-          className="h-13 w-full rounded-2xl border border-white/10 bg-black/22 px-4 text-sm text-white outline-none transition placeholder:text-white/28 focus:border-cyan-300/70 focus:bg-black/28 focus:ring-4 focus:ring-cyan-300/10"
+          className="h-13 w-full rounded-2xl border border-white/10 bg-black/22 px-4 text-sm text-white outline-none transition placeholder:text-white/28 focus:border-rose-300/70 focus:bg-black/28 focus:ring-4 focus:ring-rose-300/10"
         />
       </label>
 

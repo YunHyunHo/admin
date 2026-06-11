@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "LAYLOW Admin",
-  description: "LAYLOW 관리자 로그인",
+  title: "WinPay Admin",
+  description: "WinPay 관리자 로그인",
 };
 
 export default function RootLayout({
