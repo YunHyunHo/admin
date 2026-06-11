@@ -258,8 +258,12 @@ export function ChargeRequestsBoard({
     void syncRequests();
 
     const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+
       void syncRequests();
-    }, 5000);
+    }, 10000);
 
     return () => {
       isCancelled = true;

@@ -5,6 +5,10 @@ import { query } from "@/lib/db";
 let schemaReady = false;
 
 export async function ensureFeeRateSchema(client?: Pick<PoolClient, "query">) {
+  if (!client && process.env.NODE_ENV === "production") {
+    return;
+  }
+
   if (schemaReady) {
     return;
   }

@@ -7,7 +7,6 @@ import {
   getIssuedAdminAccountsFromCookie,
   getManagedCompanyOptions,
   getNowStamp,
-  getPublicAdminAccounts,
   normalizeManagedCompanies,
   setIssuedAdminAccountsCookie,
   updatePersistedAdminAccount,
@@ -67,10 +66,15 @@ export async function GET() {
       return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
     }
 
+    const [allAccounts, managedCompanies] = await Promise.all([
+      getAllAdminAccounts(user),
+      getManagedCompanyOptions(),
+    ]);
+
     return NextResponse.json({
-      accounts: await getPublicAdminAccounts(user),
-      detailedAccounts: isWritableRole(user.role) ? await getAllAdminAccounts(user) : [],
-      managedCompanies: await getManagedCompanyOptions(),
+      accounts: toPublicList(allAccounts),
+      detailedAccounts: isWritableRole(user.role) ? allAccounts : [],
+      managedCompanies,
     });
   } catch (error) {
     return NextResponse.json(
@@ -183,9 +187,11 @@ export async function POST(request: Request) {
         parentAdminId: parentAdminId || undefined,
       });
 
+      const updatedAccounts = await getAllAdminAccounts(user);
+
       return NextResponse.json({
-        accounts: await getPublicAdminAccounts(user),
-        detailedAccounts: await getAllAdminAccounts(user),
+        accounts: toPublicList(updatedAccounts),
+        detailedAccounts: updatedAccounts,
         managedCompanies: managedCompanyOptions,
         message: `${loginId} 계정이 생성되었습니다.`,
       });
@@ -282,11 +288,15 @@ export async function PATCH(request: Request) {
       action: payload.action,
       managedCompanies: payload.managedCompanies,
     });
+    const [updatedAccounts, managedCompanies] = await Promise.all([
+      getAllAdminAccounts(user),
+      getManagedCompanyOptions(),
+    ]);
 
     return NextResponse.json({
-      accounts: await getPublicAdminAccounts(user),
-      detailedAccounts: await getAllAdminAccounts(user),
-      managedCompanies: await getManagedCompanyOptions(),
+      accounts: toPublicList(updatedAccounts),
+      detailedAccounts: updatedAccounts,
+      managedCompanies,
       message:
         payload.action === "delete"
           ? `${targetAccount.loginId} 계정이 삭제되었습니다.`

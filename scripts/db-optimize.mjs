@@ -64,6 +64,16 @@ const indexStatements = [
   "create index if not exists idx_commission_records_status_created on commission_records (status, created_at desc)",
   "create index if not exists idx_commission_records_domain_created on commission_records (domain_id, created_at desc)",
   "create index if not exists idx_distributor_withdrawals_distributor_requested on distributor_withdrawals (distributor_id, requested_at desc)",
+  "create index if not exists idx_admin_company_mappings_company_admin on admin_company_mappings (company_id, admin_id)",
+  "create index if not exists idx_admin_domain_mappings_domain_admin on admin_domain_mappings (domain_id, admin_id)",
+  "create index if not exists idx_distributors_parent_status_name on distributors (parent_distributor_id, status, name)",
+  "create index if not exists idx_fee_rates_domain_current on fee_rates (domain_id, starts_at desc, created_at desc)",
+  "create index if not exists idx_fee_rates_distributor_current on fee_rates (distributor_id, starts_at desc, created_at desc)",
+  "create index if not exists idx_fee_rates_sub_distributor_current on fee_rates (sub_distributor_id, starts_at desc, created_at desc)",
+  "create index if not exists idx_charge_requests_status_processed_kst on charge_requests (status, ((processed_at at time zone 'Asia/Seoul'))) where processed_at is not null",
+  "create index if not exists idx_exchange_requests_status_processed_kst on exchange_requests (status, ((processed_at at time zone 'Asia/Seoul'))) where processed_at is not null",
+  "create index if not exists idx_commission_records_status_created_kst on commission_records (status, ((created_at at time zone 'Asia/Seoul')))",
+  "create index if not exists idx_distributor_withdrawals_status_processed_kst on distributor_withdrawals (status, ((processed_at at time zone 'Asia/Seoul'))) where processed_at is not null",
   `
     update distributors d
     set level = case when a.role = 'TOP_DISTRIBUTOR' then 'TOP_DISTRIBUTOR' else 'DISTRIBUTOR' end,
