@@ -333,7 +333,7 @@ async function ensureDbScope(input: { domainId?: string | null; domainName?: str
     : "(dom.domain_name = $2 or c.company_name = $2)";
 
   if (!domainValue) {
-    throw new Error("연결할 도메인을 선택해주세요.");
+    return getManualChargeScope(input.user);
   }
 
   const existingDomain = await query<{
@@ -367,6 +367,80 @@ async function ensureDbScope(input: { domainId?: string | null; domainName?: str
     companyId: domain.company_id,
     domainId: domain.domain_id,
     distributorId: domain.distributor_id,
+  };
+}
+
+async function getManualChargeScope(user: SessionUser) {
+  if (user.role === "DOMAIN_ADMIN") {
+    const companyIds = await getManagedCompanyIds(user.id);
+
+    if (!companyIds.length) {
+      throw new Error("수동 충전신청을 연결할 업체를 먼저 설정해주세요.");
+    }
+
+    return {
+      companyId: companyIds[0],
+      domainId: null,
+      distributorId: null,
+    };
+  }
+
+  if (user.role === "MASTER") {
+    const result = await query<{
+      company_id: string;
+      distributor_id: string | null;
+    }>(
+      `
+        select
+          c.id::text as company_id,
+          dist.id::text as distributor_id
+        from companies c
+        left join distributors dist on dist.company_id = c.id
+          and dist.status = 'ACTIVE'
+        where c.status = 'ACTIVE'
+        order by dist.created_at desc nulls last, c.created_at desc
+        limit 1
+      `,
+    );
+    const scope = result.rows[0];
+
+    if (!scope) {
+      throw new Error("수동 충전신청을 연결할 활성 업체를 찾지 못했습니다.");
+    }
+
+    return {
+      companyId: scope.company_id,
+      domainId: null,
+      distributorId: scope.distributor_id,
+    };
+  }
+
+  const result = await query<{
+    company_id: string;
+    distributor_id: string;
+  }>(
+    `
+      select
+        dist.company_id::text,
+        dist.id::text as distributor_id
+      from distributors dist
+      where dist.admin_id = $1::uuid
+        and dist.status = 'ACTIVE'
+      order by dist.created_at desc
+      limit 1
+    `,
+    [user.id],
+  );
+  const scope = result.rows[0];
+
+  if (!scope) {
+    throw new Error("수동 충전신청을 연결할 총판 정보를 찾지 못했습니다.");
+  }
+
+  return {
+    companyId: scope.company_id,
+    domainId: null,
+    distributorId: scope.distributor_id,
   };
 }
 
@@ -728,6 +802,7 @@ export async function processDbChargeRequest(input: {
     const companyFee = Math.floor(amount * (companyRate / 100));
     const distributorFee = Math.floor(amount * (distributorRate / 100));
     const savedCommission = Math.floor(amount * (totalRate / 100));
+    const netChargeAmount = amount - savedCommission;
 
     await client.query(
       `
@@ -769,6 +844,56 @@ export async function processDbChargeRequest(input: {
         savedCommission,
       ],
     );
+
+    if (updated.domain_id && netChargeAmount > 0) {
+      const domainBalanceResult = await client.query<{
+        current_balance: string;
+      }>(
+        `
+          select current_balance::text
+          from domains
+          where id = $1::uuid
+          for update
+        `,
+        [updated.domain_id],
+      );
+      const beforeBalance = Number(
+        domainBalanceResult.rows[0]?.current_balance ?? 0,
+      );
+      const afterBalance = beforeBalance + netChargeAmount;
+
+      await client.query(
+        `
+          update domains
+          set current_balance = $2, updated_at = now()
+          where id = $1::uuid
+        `,
+        [updated.domain_id, afterBalance],
+      );
+      await client.query(
+        `
+          insert into admin_audit_logs (
+            admin_id,
+            action,
+            resource_type,
+            resource_id,
+            before_data,
+            after_data
+          )
+          values ($1::uuid, 'charge_request_approved', 'domain', $2::uuid, $3::jsonb, $4::jsonb)
+        `,
+        [
+          input.processedBy,
+          updated.domain_id,
+          JSON.stringify({ balance: beforeBalance }),
+          JSON.stringify({
+            balance: afterBalance,
+            amount: netChargeAmount,
+            chargeRequestId: updated.id,
+          }),
+        ],
+      );
+    }
 
     if (distributorId && savedCommission > 0) {
       const balanceResult = await client.query<{

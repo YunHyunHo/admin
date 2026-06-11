@@ -32,6 +32,7 @@ export type AdminAccountRecord = {
   createdBy: string | null;
   parentAdminId?: string | null;
   parentDistributorName?: string | null;
+  currentBalance: number;
   lastLoginAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -57,6 +58,7 @@ type DbAdminRow = {
   has_domain_mapping: boolean;
   parent_admin_id: string | null;
   parent_distributor_name: string | null;
+  current_balance: string | null;
 };
 
 const hiddenPasswordMessage = "저장된 비밀번호를 확인할 수 없습니다.";
@@ -154,6 +156,7 @@ export function getMasterAccount(): AdminAccountRecord {
     apiLabel: "전체 API 관리",
     managedCompanies: managedCompanyOptions,
     createdBy: null,
+    currentBalance: 0,
     lastLoginAt: null,
     createdAt: "05-03 00:00:00",
     updatedAt: "05-03 00:00:00",
@@ -226,6 +229,7 @@ function toAdminAccountRecord(
     createdBy: row.created_by,
     parentAdminId: row.parent_admin_id,
     parentDistributorName: row.parent_distributor_name,
+    currentBalance: Number(row.current_balance ?? 0),
     lastLoginAt: formatStamp(row.last_login_at),
     createdAt: formatStamp(row.created_at) ?? getNowStamp(),
     updatedAt: formatStamp(row.updated_at) ?? getNowStamp(),
@@ -275,6 +279,7 @@ async function getDbAdminAccounts(user?: Pick<SessionUser, "id" | "role"> | null
             owner_dist.name
           )
         ) as parent_distributor_name,
+        max(dist.current_balance)::text as current_balance,
         coalesce(
           array_remove(array_agg(c.company_name order by c.company_name), null),
           array[]::text[]
@@ -444,6 +449,7 @@ export function createIssuedAdminAccount(input: {
     createdBy: input.role === "MASTER" ? null : input.createdBy,
     parentAdminId: input.parentAdminId ?? null,
     parentDistributorName: input.parentDistributorName ?? null,
+    currentBalance: 0,
     lastLoginAt: null,
     createdAt: now,
     updatedAt: now,
@@ -524,7 +530,7 @@ export async function createPersistedAdminAccount(input: {
       )
     ).rows[0]?.id ?? null;
 
-  if (!primaryCompanyId) {
+  if (!primaryCompanyId && normalizedCompanies.length) {
     const createdCompany = await query<{ id: string }>(
       `
         insert into companies (company_name, status)
@@ -536,16 +542,18 @@ export async function createPersistedAdminAccount(input: {
     primaryCompanyId = createdCompany.rows[0]?.id ?? null;
   }
 
-  await query(
-    `
-      insert into admin_company_mappings (admin_id, company_id)
-      select $1::uuid, id
-      from companies
-      where company_name = any($2::text[])
-      on conflict (admin_id, company_id) do nothing
-    `,
-    [adminId, normalizedCompanies],
-  );
+  if (normalizedCompanies.length) {
+    await query(
+      `
+        insert into admin_company_mappings (admin_id, company_id)
+        select $1::uuid, id
+        from companies
+        where company_name = any($2::text[])
+        on conflict (admin_id, company_id) do nothing
+      `,
+      [adminId, normalizedCompanies],
+    );
+  }
 
   if (primaryCompanyId && input.role !== "MASTER") {
     let parentDistributorId: string | null = null;

@@ -16,6 +16,7 @@ type DistributorRow = {
   lastLoginAt: string | null;
   createdAt: string;
   status: "ACTIVE" | "SUSPENDED";
+  currentBalance: number;
 };
 
 type ApiResponse =
@@ -26,6 +27,10 @@ type ApiResponse =
   | { message?: string };
 
 const rowsPerPage = 10;
+
+function formatKoreanWon(value: number) {
+  return `${value.toLocaleString("ko-KR")} 원`;
+}
 
 function toRows(accounts: AdminAccountRecord[]): DistributorRow[] {
   return accounts
@@ -46,6 +51,7 @@ function toRows(accounts: AdminAccountRecord[]): DistributorRow[] {
       lastLoginAt: account.lastLoginAt,
       createdAt: account.createdAt,
       status: account.status,
+      currentBalance: account.currentBalance,
     }));
 }
 
@@ -270,10 +276,10 @@ export function DistributorsBoard({
         </label>
 
         <div className="min-h-[620px] overflow-x-auto rounded-[26px] border border-white/8 bg-black/18">
-          <table className="w-full min-w-[1120px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[1240px] border-collapse text-left text-sm">
             <thead className="bg-black/52 text-white/72">
               <tr>
-                {["관리자/아이디", "비밀번호", "상위총판", "총판", "관리 업체", "상태", "최근 로그인", "생성일", "삭제"].map(
+                {["관리자/아이디", "비밀번호", "상위총판", "총판", "관리 업체", "보유금액", "상태", "최근 로그인", "생성일", "삭제"].map(
                   (header) => (
                     <th
                       key={header}
@@ -315,6 +321,9 @@ export function DistributorsBoard({
                     >
                       {row.managedAccountNames.length}개
                     </button>
+                  </td>
+                  <td className="px-4 py-4 text-right font-semibold text-white">
+                    {formatKoreanWon(row.currentBalance)}
                   </td>
                   <td className="px-4 py-4 text-center">
                     <span className="mr-2 font-semibold text-sky-400">

@@ -5,6 +5,7 @@ import {
 import { getAdminSettingsFromCookie } from "@/lib/settings-cookie";
 import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
 import { hasDatabaseUrl, query } from "@/lib/db";
+import { KOREA_TIME_ZONE } from "@/lib/korean-time";
 import { getScopedDataCondition } from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
 
@@ -109,7 +110,7 @@ async function getCommissionAggregates(
         coalesce(sum(distributor_fee_total), 0)::text as distributor_fee_total
       from (
         select
-          co.created_at::date as date,
+          (coalesce(cr.processed_at, co.created_at) at time zone '${KOREA_TIME_ZONE}')::date as date,
           coalesce(nullif(d.domain_name, ''), c.company_name, '-') as domain_name,
           coalesce(parent_dist.id, dist.id)::text as top_distributor_id,
           case when parent_dist.id is null then null else dist.id::text end as distributor_id,
@@ -121,6 +122,7 @@ async function getCommissionAggregates(
           co.distributor_fee as top_distributor_fee_total,
           greatest(co.saved_commission - co.company_fee - co.distributor_fee, 0) as distributor_fee_total
         from commission_records co
+        join charge_requests cr on cr.id = co.charge_request_id
         join companies c on c.id = co.company_id
         left join domains d on d.id = co.domain_id
         left join distributors dist on dist.id = co.distributor_id
@@ -128,14 +130,14 @@ async function getCommissionAggregates(
         left join admins dist_admin on dist_admin.id = dist.admin_id
         where
           co.status in ('APPROVED', 'COMPLETED')
-          and co.created_at >= $1::date
-          and co.created_at < ($2::date + interval '1 day')
+          and (coalesce(cr.processed_at, co.created_at) at time zone '${KOREA_TIME_ZONE}')::date >= $1::date
+          and (coalesce(cr.processed_at, co.created_at) at time zone '${KOREA_TIME_ZONE}')::date <= $2::date
           ${commissionScopeSql}
 
         union all
 
         select
-          er.processed_at::date as date,
+          (er.processed_at at time zone '${KOREA_TIME_ZONE}')::date as date,
           coalesce(nullif(d.domain_name, ''), c.company_name, '-') as domain_name,
           coalesce(parent_dist.id, dist.id)::text as top_distributor_id,
           case when parent_dist.id is null then null else dist.id::text end as distributor_id,
@@ -155,8 +157,8 @@ async function getCommissionAggregates(
         where
           er.status in ('APPROVED', 'COMPLETED')
           and er.processed_at is not null
-          and er.processed_at >= $1::date
-          and er.processed_at < ($2::date + interval '1 day')
+          and (er.processed_at at time zone '${KOREA_TIME_ZONE}')::date >= $1::date
+          and (er.processed_at at time zone '${KOREA_TIME_ZONE}')::date <= $2::date
           ${exchangeScopeSql}
       ) daily
       group by date, domain_name, top_distributor_id, distributor_id

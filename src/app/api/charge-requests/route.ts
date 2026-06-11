@@ -77,13 +77,6 @@ export async function POST(request: Request) {
     const domainId = body.domainId?.trim() ?? "";
     const amount = Number(body.amount);
 
-    if (!domainId && !body.domainName?.trim()) {
-      return NextResponse.json(
-        { message: "연결할 도메인을 선택해주세요." },
-        { status: 400 },
-      );
-    }
-
     if (!userId || !Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json(
         { message: "입금자명과 신청금액을 확인해주세요." },

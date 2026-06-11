@@ -155,6 +155,15 @@ export function ChargeRequestsBoard({
     new Set(initialPendingRequests.map((request) => request.id)),
   );
 
+  function resetCreateForm() {
+    setCreateDomainId("");
+    setCreateDepositorName("");
+    setCreateAmount("");
+    setCreateBankName("");
+    setCreateAccountNumber("");
+    setCreateModalMessage("");
+  }
+
   const playNoticeSound = useCallback(async () => {
     if (!noticeAudioRef.current) {
       noticeAudioRef.current = new Audio(chargeNoticeSoundPath);
@@ -307,11 +316,6 @@ export function ChargeRequestsBoard({
     const domainName =
       domainOptions.find((domain) => domain.id === domainId)?.name ?? "";
 
-    if (!domainId) {
-      setCreateModalMessage("연결할 도메인을 선택해주세요.");
-      return;
-    }
-
     if (!depositorName || !Number.isFinite(amount) || amount <= 0) {
       setCreateModalMessage("입금자명과 신청금액을 확인해주세요.");
       return;
@@ -320,7 +324,7 @@ export function ChargeRequestsBoard({
     setIsLoading(true);
     setIsCreatingRequest(true);
     setCreateModalMessage("");
-    setMessage("테스트 충전신청을 생성하는 중입니다.");
+    setMessage("충전신청을 생성하는 중입니다.");
 
     try {
       applyServerData(
@@ -335,12 +339,9 @@ export function ChargeRequestsBoard({
           domainName,
         }),
       );
-      setCreateDepositorName("");
-      setCreateAmount("");
-      setCreateBankName("");
-      setCreateAccountNumber("");
+      resetCreateForm();
       setIsCreateModalOpen(false);
-      setMessage("테스트 충전신청이 생성되었습니다.");
+      setMessage("충전신청이 생성되었습니다.");
     } catch (error) {
       setCreateModalMessage(
         error instanceof Error ? error.message : "충전신청 생성에 실패했습니다.",
@@ -454,7 +455,7 @@ export function ChargeRequestsBoard({
                   <button
                     type="button"
                     onClick={() => {
-                      setCreateModalMessage("");
+                      resetCreateForm();
                       setIsCreateModalOpen(true);
                     }}
                     disabled={isLoading}
@@ -699,7 +700,7 @@ export function ChargeRequestsBoard({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 backdrop-blur-sm">
           <div className="w-full max-w-[560px] rounded-[28px] border border-white/10 bg-white p-6 text-slate-950 shadow-[0_28px_120px_rgba(0,0,0,0.58)]">
             <h3 className="text-xl font-semibold tracking-[-0.03em]">
-              테스트 충전신청 생성
+              충전신청 생성
             </h3>
 
             <div className="mt-7 space-y-4">
@@ -711,7 +712,7 @@ export function ChargeRequestsBoard({
                   onChange={(event) => setCreateDomainId(event.target.value)}
                   className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-slate-500"
                 >
-                  <option value="">도메인 선택</option>
+                  <option value="">도메인 없이 생성</option>
                   {domainOptions.map((domain) => (
                     <option key={domain.id} value={domain.id}>
                       {domain.name}
@@ -774,7 +775,7 @@ export function ChargeRequestsBoard({
               <button
                 type="button"
                 onClick={() => {
-                  setCreateModalMessage("");
+                  resetCreateForm();
                   setIsCreateModalOpen(false);
                 }}
                 className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"

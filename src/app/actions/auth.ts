@@ -47,6 +47,7 @@ export async function loginAction(
     apiLabel: account.apiLabel,
     managedCompanies: account.managedCompanies,
     createdBy: account.createdBy,
+    currentBalance: account.currentBalance,
     lastLoginAt: account.lastLoginAt,
     createdAt: account.createdAt,
     updatedAt: account.updatedAt,

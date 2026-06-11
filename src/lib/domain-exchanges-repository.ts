@@ -252,7 +252,7 @@ async function findExchangeScope(domainId: string | null | undefined, user: Sess
         dom.company_id::text,
         dom.id::text as domain_id,
         dom.distributor_id::text,
-        dist.current_balance::text
+        dom.current_balance::text
       from domains dom
       join distributors dist on dist.id = dom.distributor_id
       where dom.id = $1::uuid
@@ -328,7 +328,7 @@ async function findIntegrationExchangeScope(input: {
     company_id: scope.company_id,
     domain_id: scope.domain_id,
     distributor_id: scope.distributor_id,
-    current_balance: scope.distributor_balance ?? scope.domain_balance,
+    current_balance: scope.domain_balance,
   };
 }
 
@@ -452,21 +452,8 @@ export async function approveDomainExchange(id: string, processedBy: string) {
     }
 
     const requestAmount = Number(exchange.amount);
-    const distributorBalance = exchange.distributor_id
-      ? (
-          await client.query<{ current_balance: string }>(
-            `
-              select current_balance::text
-              from distributors
-              where id = $1::uuid
-              for update
-            `,
-            [exchange.distributor_id],
-          )
-        ).rows[0]?.current_balance
-      : null;
     const domainBalance =
-      !distributorBalance && exchange.domain_id
+      exchange.domain_id
         ? (
             await client.query<{ current_balance: string }>(
               `
@@ -476,6 +463,20 @@ export async function approveDomainExchange(id: string, processedBy: string) {
                 for update
               `,
               [exchange.domain_id],
+            )
+          ).rows[0]?.current_balance
+        : null;
+    const distributorBalance =
+      !domainBalance && exchange.distributor_id
+        ? (
+            await client.query<{ current_balance: string }>(
+              `
+                select current_balance::text
+                from distributors
+                where id = $1::uuid
+                for update
+              `,
+              [exchange.distributor_id],
             )
           ).rows[0]?.current_balance
         : null;

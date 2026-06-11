@@ -15,6 +15,7 @@ type TopDistributorRow = {
   createdAt: string;
   status: "ACTIVE" | "SUSPENDED";
   distributorsCount: number;
+  currentBalance: number;
 };
 
 type ApiResponse =
@@ -25,6 +26,10 @@ type ApiResponse =
   | { message?: string };
 
 const rowsPerPage = 10;
+
+function formatKoreanWon(value: number) {
+  return `${value.toLocaleString("ko-KR")} 원`;
+}
 
 function toRows(accounts: AdminAccountRecord[]): TopDistributorRow[] {
   return accounts
@@ -49,6 +54,7 @@ function toRows(accounts: AdminAccountRecord[]): TopDistributorRow[] {
         createdAt: account.createdAt,
         status: account.status,
         distributorsCount: childDistributorIds.length,
+        currentBalance: account.currentBalance,
       };
     });
 }
@@ -259,7 +265,7 @@ export function TopDistributorsBoard({
         </label>
 
         <div className="min-h-[620px] overflow-x-auto rounded-[26px] border border-white/8 bg-black/18">
-          <table className="w-full min-w-[1120px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[1240px] border-collapse text-left text-sm">
             <thead className="bg-black/52 text-white/72">
               <tr>
                 {[
@@ -268,6 +274,7 @@ export function TopDistributorsBoard({
                   "상위총판",
                   "관리 업체",
                   "연결 총판 수",
+                  "보유금액",
                   "상태",
                   "최근 로그인",
                   "생성일",
@@ -314,6 +321,9 @@ export function TopDistributorsBoard({
                   </td>
                   <td className="px-4 py-4 text-center">
                     {row.distributorsCount ? `${row.distributorsCount}개` : "-"}
+                  </td>
+                  <td className="px-4 py-4 text-right font-semibold text-white">
+                    {formatKoreanWon(row.currentBalance)}
                   </td>
                   <td className="px-4 py-4 text-center">
                     <span className="mr-2 font-semibold text-sky-400">
