@@ -14,7 +14,7 @@ function SubmitButton() {
     <button
       type="submit"
       disabled={pending}
-      className="flex h-13 w-full items-center justify-center rounded-2xl bg-slate-950 text-sm font-semibold text-white transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+      className="flex h-13 w-full items-center justify-center rounded-2xl bg-cyan-300 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:bg-white/20 disabled:text-white/45"
     >
       {pending ? "로그인 확인 중..." : "로그인"}
     </button>
@@ -27,22 +27,22 @@ export function LoginForm() {
   return (
     <form action={formAction} className="mt-8 space-y-5">
       <label className="block space-y-2">
-        <span className="text-sm font-medium text-slate-700">아이디</span>
+        <span className="text-sm font-medium text-white/72">아이디</span>
         <input
           type="text"
           name="username"
           placeholder="아이디를 입력해주세요"
-          className="h-13 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-950 outline-none transition focus:border-cyan-700 focus:bg-white focus:ring-4 focus:ring-cyan-100"
+          className="h-13 w-full rounded-2xl border border-white/10 bg-black/22 px-4 text-sm text-white outline-none transition placeholder:text-white/28 focus:border-cyan-300/70 focus:bg-black/28 focus:ring-4 focus:ring-cyan-300/10"
         />
       </label>
 
       <label className="block space-y-2">
-        <span className="text-sm font-medium text-slate-700">비밀번호</span>
+        <span className="text-sm font-medium text-white/72">비밀번호</span>
         <input
           type="password"
           name="password"
           placeholder="비밀번호를 입력해주세요"
-          className="h-13 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-950 outline-none transition focus:border-cyan-700 focus:bg-white focus:ring-4 focus:ring-cyan-100"
+          className="h-13 w-full rounded-2xl border border-white/10 bg-black/22 px-4 text-sm text-white outline-none transition placeholder:text-white/28 focus:border-cyan-300/70 focus:bg-black/28 focus:ring-4 focus:ring-cyan-300/10"
         />
       </label>
 

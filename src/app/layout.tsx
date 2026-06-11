@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Vendor Admin",
-  description: "업체 전용 관리자 페이지 로그인",
+  title: "LAYLOW Admin",
+  description: "LAYLOW 관리자 로그인",
 };
 
 export default function RootLayout({
