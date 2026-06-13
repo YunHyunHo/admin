@@ -107,6 +107,11 @@ const sideMenuGroups = [
         href: "/dashboard/fee-records",
         key: "fee-records",
       },
+      {
+        title: "총판 환전신청",
+        href: "/dashboard/settlement/distributor-withdrawals",
+        key: "distributor-withdrawals",
+      },
     ],
   },
 ];
