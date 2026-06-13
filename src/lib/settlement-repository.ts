@@ -11,6 +11,7 @@ import type { SessionUser } from "@/lib/auth";
 
 type SettlementAggregateRow = {
   date: string;
+  domain_id: string | null;
   domain_name: string | null;
   top_distributor_id: string | null;
   distributor_id: string | null;
@@ -23,6 +24,11 @@ type SettlementAggregateRow = {
   distributor_fee_total: string;
 };
 
+type DomainSettlementSeedRow = {
+  domain_id: string;
+  domain_name: string;
+};
+
 type ProfitSectionSeedRow = {
   id: string;
   title: string;
@@ -31,6 +37,44 @@ type ProfitSectionSeedRow = {
 
 function toMmDd(isoDate: string) {
   return isoDate.slice(5);
+}
+
+function getDateRange(startDate: string, endDate: string) {
+  const dates: string[] = [];
+  const current = new Date(`${startDate}T00:00:00.000Z`);
+  const end = new Date(`${endDate}T00:00:00.000Z`);
+
+  while (current <= end) {
+    dates.push(current.toISOString().slice(0, 10));
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+
+  return dates;
+}
+
+async function getDomainSettlementSeeds(user: SessionUser) {
+  const scope = await getScopedDataCondition(user, {
+    company: "d",
+    distributor: "dist",
+    distributorAdmin: "dist_admin",
+  });
+  const result = await query<DomainSettlementSeedRow>(
+    `
+      select
+        d.id::text as domain_id,
+        coalesce(nullif(d.domain_name, ''), c.company_name, '-') as domain_name
+      from domains d
+      join companies c on c.id = d.company_id
+      left join distributors dist on dist.id = d.distributor_id
+      left join admins dist_admin on dist_admin.id = dist.admin_id
+      where d.status = 'ACTIVE'
+        ${scope.sql}
+      order by d.created_at asc, domain_name asc
+    `,
+    scope.values,
+  );
+
+  return result.rows;
 }
 
 async function getProfitSectionSeeds(user: SessionUser) {
@@ -98,6 +142,7 @@ async function getCommissionAggregates(
     `
       select
         date::text,
+        domain_id,
         coalesce(domain_name, '-') as domain_name,
         top_distributor_id,
         distributor_id,
@@ -111,6 +156,7 @@ async function getCommissionAggregates(
       from (
         select
           (coalesce(cr.processed_at, co.created_at) at time zone '${KOREA_TIME_ZONE}')::date as date,
+          d.id::text as domain_id,
           coalesce(nullif(d.domain_name, ''), c.company_name, '-') as domain_name,
           coalesce(parent_dist.id, dist.id)::text as top_distributor_id,
           case when parent_dist.id is null then null else dist.id::text end as distributor_id,
@@ -138,6 +184,7 @@ async function getCommissionAggregates(
 
         select
           (er.processed_at at time zone '${KOREA_TIME_ZONE}')::date as date,
+          d.id::text as domain_id,
           coalesce(nullif(d.domain_name, ''), c.company_name, '-') as domain_name,
           coalesce(parent_dist.id, dist.id)::text as top_distributor_id,
           case when parent_dist.id is null then null else dist.id::text end as distributor_id,
@@ -161,7 +208,7 @@ async function getCommissionAggregates(
           and (er.processed_at at time zone '${KOREA_TIME_ZONE}')::date <= $2::date
           ${exchangeScopeSql}
       ) daily
-      group by date, domain_name, top_distributor_id, distributor_id
+      group by date, domain_id, domain_name, top_distributor_id, distributor_id
       order by date asc
     `,
     values,
@@ -355,24 +402,35 @@ export async function getDomainSettlementForUser(
   }
 
   const aggregateRows = await getCommissionAggregates(user, startDate, endDate);
+  const domainSeeds = await getDomainSettlementSeeds(user);
+  const aggregateMap = new Map(
+    aggregateRows.map((row) => [
+      `${row.domain_id ?? `name:${row.domain_name ?? "-"}`}::${row.date}`,
+      row,
+    ]),
+  );
+  const dates = getDateRange(startDate, endDate);
   const domainName = "전체";
-  const rows = aggregateRows.map((row) => {
-    const charge = Number(row.charge_total);
-    const exchange = Number(row.exchange_total);
-    const company = Number(row.company_fee_total);
-    const topDistributor = Number(row.top_distributor_fee_total);
-    const distributor = Number(row.distributor_fee_total);
+  const rows = domainSeeds.flatMap((seed) =>
+    dates.map((date) => {
+      const aggregate = aggregateMap.get(`${seed.domain_id}::${date}`);
+      const charge = Number(aggregate?.charge_total ?? 0);
+      const exchange = Number(aggregate?.exchange_total ?? 0);
+      const company = Number(aggregate?.company_fee_total ?? 0);
+      const topDistributor = Number(aggregate?.top_distributor_fee_total ?? 0);
+      const distributor = Number(aggregate?.distributor_fee_total ?? 0);
 
-    return {
-      date: row.date,
-      domainName: row.domain_name ?? "-",
-      charge,
-      exchange,
-      company,
-      topDistributor,
-      distributor,
-    };
-  });
+      return {
+        date,
+        domainName: seed.domain_name,
+        charge,
+        exchange,
+        company,
+        topDistributor,
+        distributor,
+      };
+    }),
+  );
 
   return {
     domainName,
