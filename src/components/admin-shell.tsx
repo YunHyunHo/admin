@@ -137,6 +137,12 @@ const quickActions = [
   },
 ];
 
+const settlementOnlyRoles = new Set<SessionUser["role"]>([
+  "TOP_DISTRIBUTOR",
+  "ADMIN",
+]);
+const settlementOnlyMenuGroups = new Set(["대시보드", "정산"]);
+
 type AdminShellProps = {
   user: SessionUser;
   activeItem: string;
@@ -163,8 +169,13 @@ export async function AdminShell({
       : user.role === "TOP_DISTRIBUTOR"
         ? "상위총판"
         : "총판";
+  const isSettlementOnlyUser = settlementOnlyRoles.has(user.role);
   const visibleMenuGroups = sideMenuGroups
     .filter((group) => {
+      if (isSettlementOnlyUser) {
+        return settlementOnlyMenuGroups.has(group.title);
+      }
+
       return user.role === "MASTER" || !group.masterOnly;
     })
     .map((group) => ({
@@ -175,6 +186,7 @@ export async function AdminShell({
           : group.items.filter((item) => !masterOnlyMenuKeys.has(item.key)),
     }))
     .filter((group) => group.items.length > 0);
+  const visibleQuickActions = isSettlementOnlyUser ? [] : quickActions;
 
   return (
     <main className="admin-app-shell min-h-screen bg-[#09090b] text-white">
@@ -291,7 +303,7 @@ export async function AdminShell({
                   aria-label="거래 바로가기"
                   className="flex min-w-0 flex-1 flex-wrap items-center gap-2 lg:justify-center"
                 >
-                  {quickActions.map((action) => {
+                  {visibleQuickActions.map((action) => {
                     const isActive = action.key === activeItem;
 
                     return (

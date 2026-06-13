@@ -742,6 +742,255 @@ export async function processDbChargeRequest(input: {
     );
     const updated = updateResult.rows[0];
 
+    if (!updated && nextStatus === "REJECTED") {
+      const approvedResult = await client.query<
+        ChargeRequestRow & {
+          company_id: string;
+          domain_id: string | null;
+          distributor_id: string | null;
+        }
+      >(
+        `
+          select
+            cr.id::text,
+            cr.company_id::text,
+            cr.domain_id::text,
+            cr.distributor_id::text,
+            cr.user_uid,
+            cr.bank_name,
+            cr.account_number,
+            cr.depositor,
+            cr.amount::text,
+            cr.status::text as status,
+            cr.requested_at,
+            cr.processed_at,
+            c.company_name,
+            d.domain_name,
+            coalesce(parent_dist.name, dist.name) as top_distributor_name,
+            case when parent_dist.id is null then null else dist.name end as distributor_name,
+            (
+              select string_agg(child.name, ', ' order by child.name)
+              from distributors base_dist
+              join distributors child on child.parent_distributor_id = base_dist.id
+              left join distributors base_parent on base_parent.id = base_dist.parent_distributor_id
+              where base_dist.id = cr.distributor_id
+                and base_parent.id is null
+                and child.status = 'ACTIVE'
+            ) as child_distributor_names
+          from charge_requests cr
+          join companies c on c.id = cr.company_id
+          left join domains d on d.id = cr.domain_id
+          left join distributors dist on dist.id = cr.distributor_id
+          left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
+          left join admins dist_admin on dist_admin.id = dist.admin_id
+          where cr.id = $1::uuid
+            and cr.status in ('APPROVED', 'COMPLETED')
+            ${scopedSql}
+          for update of cr
+          limit 1
+        `,
+        [input.id, ...scope.values],
+      );
+      const approved = approvedResult.rows[0];
+
+      if (!approved) {
+        return updateResult;
+      }
+
+      const commissionResult = await client.query<{
+        distributor_id: string | null;
+        saved_commission: string;
+      }>(
+        `
+          select distributor_id::text, saved_commission::text
+          from commission_records
+          where charge_request_id = $1::uuid
+            and status in ('APPROVED', 'COMPLETED')
+          for update
+          limit 1
+        `,
+        [approved.id],
+      );
+      const commission = commissionResult.rows[0];
+      const distributorId = commission?.distributor_id ?? approved.distributor_id;
+      const savedCommission = Number(commission?.saved_commission ?? 0);
+      const netChargeAmount = Number(approved.amount) - savedCommission;
+
+      if (approved.domain_id && netChargeAmount > 0) {
+        const domainBalanceResult = await client.query<{
+          current_balance: string;
+        }>(
+          `
+            select current_balance::text
+            from domains
+            where id = $1::uuid
+            for update
+          `,
+          [approved.domain_id],
+        );
+        const beforeBalance = Number(
+          domainBalanceResult.rows[0]?.current_balance ?? 0,
+        );
+        const afterBalance = beforeBalance - netChargeAmount;
+
+        if (afterBalance < 0) {
+          throw new Error("도메인 보유금이 부족해 승인건을 거절할 수 없습니다.");
+        }
+
+        await client.query(
+          `
+            update domains
+            set current_balance = $2, updated_at = now()
+            where id = $1::uuid
+          `,
+          [approved.domain_id, afterBalance],
+        );
+        await client.query(
+          `
+            insert into admin_audit_logs (
+              admin_id,
+              action,
+              resource_type,
+              resource_id,
+              before_data,
+              after_data
+            )
+            values ($1::uuid, 'charge_request_rejected_after_approval', 'domain', $2::uuid, $3::jsonb, $4::jsonb)
+          `,
+          [
+            input.processedBy,
+            approved.domain_id,
+            JSON.stringify({ balance: beforeBalance }),
+            JSON.stringify({
+              balance: afterBalance,
+              amount: -netChargeAmount,
+              chargeRequestId: approved.id,
+            }),
+          ],
+        );
+      }
+
+      if (distributorId && savedCommission > 0) {
+        const balanceResult = await client.query<{
+          current_balance: string;
+        }>(
+          `
+            select current_balance::text
+            from distributors
+            where id = $1::uuid
+            for update
+          `,
+          [distributorId],
+        );
+        const beforeBalance = Number(balanceResult.rows[0]?.current_balance ?? 0);
+        const afterBalance = beforeBalance - savedCommission;
+
+        if (afterBalance < 0) {
+          throw new Error("총판 보유금이 부족해 승인건을 거절할 수 없습니다.");
+        }
+
+        await client.query(
+          `
+            update distributors
+            set current_balance = $2, updated_at = now()
+            where id = $1::uuid
+          `,
+          [distributorId, afterBalance],
+        );
+        await client.query(
+          `
+            insert into distributor_balance_transactions (
+              distributor_id,
+              amount,
+              balance_before,
+              balance_after,
+              source_type,
+              source_id,
+              memo,
+              created_by
+            )
+            values ($1::uuid, $2, $3, $4, 'COMMISSION_REVERSAL', $5::uuid, '충전 승인거절 수수료 차감', $6::uuid)
+            on conflict (source_type, source_id) do nothing
+          `,
+          [
+            distributorId,
+            -savedCommission,
+            beforeBalance,
+            afterBalance,
+            approved.id,
+            input.processedBy,
+          ],
+        );
+      }
+
+      await client.query(
+        `
+          update commission_records
+          set status = 'REJECTED'
+          where charge_request_id = $1::uuid
+            and status in ('APPROVED', 'COMPLETED')
+        `,
+        [approved.id],
+      );
+
+      const reversedResult = await client.query<
+        ChargeRequestRow & {
+          company_id: string;
+          domain_id: string | null;
+          distributor_id: string | null;
+        }
+      >(
+        `
+          update charge_requests
+          set
+            status = 'REJECTED',
+            processed_at = now(),
+            processed_by = $2::uuid,
+            updated_at = now()
+          where id = $1::uuid
+          returning
+            id::text,
+            company_id::text,
+            domain_id::text,
+            distributor_id::text,
+            user_uid,
+            bank_name,
+            account_number,
+            depositor,
+            amount::text,
+            status::text as status,
+            requested_at,
+            processed_at,
+            (select company_name from companies where id = charge_requests.company_id) as company_name,
+            (select domain_name from domains where id = charge_requests.domain_id) as domain_name,
+            (
+              select coalesce(parent_dist.name, dist.name)
+              from distributors dist
+              left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
+              where dist.id = charge_requests.distributor_id
+            ) as top_distributor_name,
+            (
+              select case when parent_dist.id is null then null else dist.name end
+              from distributors dist
+              left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
+              where dist.id = charge_requests.distributor_id
+            ) as distributor_name,
+            (
+              select string_agg(child.name, ', ' order by child.name)
+              from distributors dist
+              join distributors child on child.parent_distributor_id = dist.id
+              left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
+              where dist.id = charge_requests.distributor_id
+                and parent_dist.id is null
+                and child.status = 'ACTIVE'
+            ) as child_distributor_names
+        `,
+        [approved.id, input.processedBy],
+      );
+
+      return reversedResult;
+    }
+
     if (!updated || nextStatus !== "APPROVED") {
       return updateResult;
     }

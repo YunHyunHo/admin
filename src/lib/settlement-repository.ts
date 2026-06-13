@@ -355,7 +355,7 @@ export async function getDomainSettlementForUser(
   }
 
   const aggregateRows = await getCommissionAggregates(user, startDate, endDate);
-  const domainName = aggregateRows[0]?.domain_name ?? "전체";
+  const domainName = "전체";
   const rows = aggregateRows.map((row) => {
     const charge = Number(row.charge_total);
     const exchange = Number(row.exchange_total);

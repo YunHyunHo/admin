@@ -394,10 +394,18 @@ export function ChargeRequestsBoard({
     rejectedPage * rowsPerPage,
   );
 
-  async function moveRequest(row: PendingRequest, nextStatus: "승인" | "승인거절") {
+  async function moveRequest(
+    row: PendingRequest | ProcessedRequest,
+    nextStatus: "승인" | "승인거절",
+  ) {
     const targetId = row.id;
     const subjectLabel = row.depositor?.trim() || targetId;
-    const actionLabel = nextStatus === "승인" ? "승인" : "거절";
+    const actionLabel =
+      "status" in row && row.status === "승인" && nextStatus === "승인거절"
+        ? "승인취소"
+        : nextStatus === "승인"
+          ? "승인"
+          : "거절";
 
     if (!window.confirm(`${subjectLabel} 요청을 ${actionLabel}할까요?`)) {
       return;
@@ -622,9 +630,21 @@ export function ChargeRequestsBoard({
                         <td className="px-4 py-4">{row.requestedAt}</td>
                         <td className="px-4 py-4">{row.completedAt}</td>
                         <td className="px-4 py-4">
-                          <span className="rounded-full bg-emerald-500/12 px-3 py-1 text-xs font-medium text-emerald-200">
-                            {row.status}
-                          </span>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-emerald-500/12 px-3 py-1 text-xs font-medium text-emerald-200">
+                              {row.status}
+                            </span>
+                            {canProcessCharges ? (
+                              <button
+                                type="button"
+                                onClick={() => moveRequest(row, "승인거절")}
+                                disabled={processingId === row.id}
+                                className="rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                승인취소
+                              </button>
+                            ) : null}
+                          </div>
                         </td>
                       </tr>
                     ))}

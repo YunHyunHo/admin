@@ -32,8 +32,19 @@ type DomainSettlementResponse = {
   };
 };
 
-const PAGE_SIZE = 10;
 const MIN_QUERY_DATE = "2026-01-01";
+
+type DomainSettlementGroup = {
+  domainName: string;
+  rows: DomainSettlementRow[];
+  total: {
+    charge: number;
+    exchange: number;
+    company: number;
+    topDistributor: number;
+    distributor: number;
+  };
+};
 
 function getTodayIsoDate() {
   const formatter = new Intl.DateTimeFormat("en-CA", {
@@ -85,42 +96,52 @@ function formatSettlementValue(value: number, dashWhenZero = false) {
   return formatKoreanWon(value);
 }
 
-export function DomainSettlementBoard({
-  domainName,
-  initialRows,
-}: DomainSettlementBoardProps) {
-  const todayIsoDate = getTodayIsoDate();
-  const yesterdayIsoDate = getYesterdayIsoDate();
-  const [startDate, setStartDate] = useState(yesterdayIsoDate);
-  const [endDate, setEndDate] = useState(todayIsoDate);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [rows, setRows] = useState<DomainSettlementRow[]>(initialRows);
-  const [message, setMessage] = useState("서버 API에서 도메인 정산 데이터를 불러옵니다.");
-  const total = useMemo(
-    () =>
-      rows.reduce(
-        (sum, row) => ({
-          charge: sum.charge + row.charge,
-          exchange: sum.exchange + row.exchange,
-          company: sum.company + row.company,
-          topDistributor: sum.topDistributor + row.topDistributor,
-          distributor: sum.distributor + row.distributor,
-        }),
-        {
+function buildSettlementGroups(rows: DomainSettlementRow[]) {
+  const groups = new Map<string, DomainSettlementGroup>();
+
+  for (const row of rows) {
+    const domainName = row.domainName || "-";
+    const group =
+      groups.get(domainName) ??
+      ({
+        domainName,
+        rows: [],
+        total: {
           charge: 0,
           exchange: 0,
           company: 0,
           topDistributor: 0,
           distributor: 0,
         },
-      ),
-    [rows],
-  );
-  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
-  const visibleRows = rows.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE,
-  );
+      } satisfies DomainSettlementGroup);
+
+    group.rows.push(row);
+    group.total.charge += row.charge;
+    group.total.exchange += row.exchange;
+    group.total.company += row.company;
+    group.total.topDistributor += row.topDistributor;
+    group.total.distributor += row.distributor;
+    groups.set(domainName, group);
+  }
+
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      rows: group.rows.sort((left, right) => left.date.localeCompare(right.date)),
+    }))
+    .sort((left, right) => left.domainName.localeCompare(right.domainName, "ko"));
+}
+
+export function DomainSettlementBoard({
+  initialRows,
+}: DomainSettlementBoardProps) {
+  const todayIsoDate = getTodayIsoDate();
+  const yesterdayIsoDate = getYesterdayIsoDate();
+  const [startDate, setStartDate] = useState(yesterdayIsoDate);
+  const [endDate, setEndDate] = useState(todayIsoDate);
+  const [rows, setRows] = useState<DomainSettlementRow[]>(initialRows);
+  const [message, setMessage] = useState("서버 API에서 도메인 정산 데이터를 불러옵니다.");
+  const settlementGroups = useMemo(() => buildSettlementGroups(rows), [rows]);
   async function loadRows(nextStartDate: string, nextEndDate: string) {
     try {
       const response = await fetch(
@@ -147,7 +168,6 @@ export function DomainSettlementBoard({
 
     setStartDate(nextStartDate);
     setEndDate(nextEndDate);
-    setCurrentPage(1);
     void loadRows(nextStartDate, nextEndDate);
   }
 
@@ -159,7 +179,7 @@ export function DomainSettlementBoard({
             <p className="text-xs text-white/38">정산</p>
             <h2 className="mt-2 text-xl font-semibold text-white">도메인 정산</h2>
             <p className="mt-2 text-sm text-white/46">
-              {domainName} · {message}
+              업체별 정산 내역을 분리해서 표시합니다. {message}
             </p>
           </div>
 
@@ -213,124 +233,105 @@ export function DomainSettlementBoard({
         </div>
       </section>
 
-      <section className="space-y-2">
-        <div className="flex items-end justify-between gap-3">
-          <h3 className="text-base font-semibold text-white">{domainName}</h3>
-          <p className="text-xs text-white/44">
-            {rows.length}개 중 {(currentPage - 1) * PAGE_SIZE + 1}-
-            {Math.min(currentPage * PAGE_SIZE, rows.length)}
-          </p>
-        </div>
+      <section className="space-y-8">
+        {settlementGroups.length ? (
+          settlementGroups.map((group) => (
+            <div key={group.domainName} className="space-y-2">
+              <div className="flex items-end justify-between gap-3">
+                <h3 className="text-base font-semibold text-white">
+                  {group.domainName}
+                </h3>
+                <p className="text-xs text-white/44">{group.rows.length}건</p>
+              </div>
 
-        <div className="overflow-hidden border border-white/40">
-          <div className="overflow-x-auto">
-            <table className="min-w-full table-fixed text-sm">
-              <thead>
-                <tr className="border-b border-white/40 text-white">
-                  <th className="w-[14%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
-                    날짜
-                  </th>
-                  <th className="w-[18%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
-                    도메인
-                  </th>
-                  <th className="w-[14%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
-                    충전
-                  </th>
-                  <th className="w-[14%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
-                    수수료
-                  </th>
-                  <th className="w-[14%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
-                    환전(도메인)
-                  </th>
-                  <th className="w-[13%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
-                    상위총판
-                  </th>
-                  <th className="w-[13%] px-3 py-1.5 text-center font-semibold">
-                    총판
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleRows.map((row) => (
-                  <tr
-                    key={`${domainName}-${row.domainName}-${row.date}`}
-                    className="border-b border-white/30 text-white/90"
-                  >
-                    <td className="border-r border-white/30 px-3 py-1.5 text-center">
-                      {toDisplayDate(row.date)}
-                    </td>
-                    <td className="border-r border-white/30 px-3 py-1.5 text-center">
-                      {row.domainName}
-                    </td>
-                    <td className="border-r border-white/30 px-3 py-1.5 text-right">
-                      {formatSettlementValue(row.charge)}
-                    </td>
-                    <td className="border-r border-white/30 px-3 py-1.5 text-right">
-                      {formatSettlementValue(
-                        row.company + row.topDistributor + row.distributor,
-                      )}
-                    </td>
-                    <td className="border-r border-white/30 px-3 py-1.5 text-right">
-                      {formatSettlementValue(row.exchange)}
-                    </td>
-                    <td className="border-r border-white/30 px-3 py-1.5 text-right">
-                      {formatSettlementValue(row.topDistributor)}
-                    </td>
-                    <td className="px-3 py-1.5 text-right">
-                      {formatSettlementValue(row.distributor, true)}
-                    </td>
-                  </tr>
-                ))}
-                <tr className="bg-white/10 font-semibold text-white">
-                  <td className="border-r border-white/30 px-3 py-1.5 text-center">
-                    합계
-                  </td>
-                  <td className="border-r border-white/30 px-3 py-1.5 text-center">
-                    전체
-                  </td>
-                  <td className="border-r border-white/30 px-3 py-1.5 text-right">
-                    {formatSettlementValue(total.charge)}
-                  </td>
-                  <td className="border-r border-white/30 px-3 py-1.5 text-right">
-                    {formatSettlementValue(
-                      total.company + total.topDistributor + total.distributor,
-                    )}
-                  </td>
-                  <td className="border-r border-white/30 px-3 py-1.5 text-right">
-                    {formatSettlementValue(total.exchange)}
-                  </td>
-                  <td className="border-r border-white/30 px-3 py-1.5 text-right">
-                    {formatSettlementValue(total.topDistributor)}
-                  </td>
-                  <td className="px-3 py-1.5 text-right">
-                    {formatSettlementValue(total.distributor)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+              <div className="overflow-hidden border border-white/40">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full table-fixed text-sm">
+                    <thead>
+                      <tr className="border-b border-white/40 text-white">
+                        <th className="w-[16%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
+                          날짜
+                        </th>
+                        <th className="w-[16%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
+                          충전
+                        </th>
+                        <th className="w-[16%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
+                          수수료
+                        </th>
+                        <th className="w-[16%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
+                          환전(도메인)
+                        </th>
+                        <th className="w-[18%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
+                          상위총판
+                        </th>
+                        <th className="w-[18%] px-3 py-1.5 text-center font-semibold">
+                          총판
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {group.rows.map((row, rowIndex) => (
+                        <tr
+                          key={`${group.domainName}-${row.date}-${rowIndex}`}
+                          className="border-b border-white/30 text-white/90"
+                        >
+                          <td className="border-r border-white/30 px-3 py-1.5 text-center">
+                            {toDisplayDate(row.date)}
+                          </td>
+                          <td className="border-r border-white/30 px-3 py-1.5 text-right">
+                            {formatSettlementValue(row.charge)}
+                          </td>
+                          <td className="border-r border-white/30 px-3 py-1.5 text-right">
+                            {formatSettlementValue(
+                              row.company + row.topDistributor + row.distributor,
+                            )}
+                          </td>
+                          <td className="border-r border-white/30 px-3 py-1.5 text-right">
+                            {formatSettlementValue(row.exchange)}
+                          </td>
+                          <td className="border-r border-white/30 px-3 py-1.5 text-right">
+                            {formatSettlementValue(row.topDistributor)}
+                          </td>
+                          <td className="px-3 py-1.5 text-right">
+                            {formatSettlementValue(row.distributor, true)}
+                          </td>
+                        </tr>
+                      ))}
+                      <tr className="bg-white/10 font-semibold text-white">
+                        <td className="border-r border-white/30 px-3 py-1.5 text-center">
+                          합계
+                        </td>
+                        <td className="border-r border-white/30 px-3 py-1.5 text-right">
+                          {formatSettlementValue(group.total.charge)}
+                        </td>
+                        <td className="border-r border-white/30 px-3 py-1.5 text-right">
+                          {formatSettlementValue(
+                            group.total.company +
+                              group.total.topDistributor +
+                              group.total.distributor,
+                          )}
+                        </td>
+                        <td className="border-r border-white/30 px-3 py-1.5 text-right">
+                          {formatSettlementValue(group.total.exchange)}
+                        </td>
+                        <td className="border-r border-white/30 px-3 py-1.5 text-right">
+                          {formatSettlementValue(group.total.topDistributor)}
+                        </td>
+                        <td className="px-3 py-1.5 text-right">
+                          {formatSettlementValue(group.total.distributor)}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="border border-white/12 px-4 py-12 text-center text-sm text-white/44">
+            조회된 도메인 정산 내역이 없습니다.
           </div>
-        </div>
-
-        {totalPages > 1 ? (
-          <div className="flex justify-center gap-2 pt-3">
-            {Array.from({ length: totalPages }, (_, index) => index + 1).map(
-              (page) => (
-                <button
-                  key={page}
-                  type="button"
-                  onClick={() => setCurrentPage(page)}
-                  className={`h-8 min-w-8 border border-white/20 px-3 text-sm ${
-                    page === currentPage
-                      ? "bg-white text-black"
-                      : "bg-black/20 text-white hover:bg-white/10"
-                  }`}
-                >
-                  {page}
-                </button>
-              ),
-            )}
-          </div>
-        ) : null}
+        )}
       </section>
     </div>
   );

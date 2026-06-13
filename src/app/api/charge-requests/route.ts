@@ -127,16 +127,30 @@ export async function POST(request: Request) {
   }
 
   if (hasDatabaseUrl()) {
-    const processedRequest = await processDbChargeRequest({
-      id: body.id,
-      status: body.status,
-      processedBy: user.id,
-      user,
-    });
+    let processedRequest: ProcessedRequest | null;
+
+    try {
+      processedRequest = await processDbChargeRequest({
+        id: body.id,
+        status: body.status,
+        processedBy: user.id,
+        user,
+      });
+    } catch (error) {
+      return NextResponse.json(
+        {
+          message:
+            error instanceof Error
+              ? error.message
+              : "충전신청 처리 중 오류가 발생했습니다.",
+        },
+        { status: 400 },
+      );
+    }
 
     if (!processedRequest) {
       return NextResponse.json(
-        { message: "처리할 대기 충전신청을 찾을 수 없습니다." },
+        { message: "처리할 충전신청을 찾을 수 없습니다." },
         { status: 404 },
       );
     }
