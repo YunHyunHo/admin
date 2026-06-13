@@ -1,6 +1,7 @@
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
 import { formatKoreanDateTime } from "@/lib/korean-time";
 import { getScopedDataCondition } from "@/lib/master-scope";
+import type { PoolClient, QueryResultRow } from "pg";
 import type { SessionUser } from "@/lib/auth";
 import type {
   DomainExchangeOption,
@@ -35,6 +36,22 @@ type CreateDomainExchangeInput = {
   rawPayload?: unknown;
   domainId?: string | null;
   domainName?: string;
+};
+
+type QueryExecutor = {
+  query<T extends QueryResultRow>(
+    text: string,
+    values?: unknown[],
+  ): Promise<{ rows: T[] }>;
+};
+
+type DomainExchangeBalance = {
+  chargeAmount: number;
+  feeAmount: number;
+  approvedExchangeAmount: number;
+  pendingExchangeAmount: number;
+  approvedBalance: number;
+  withdrawableBalance: number;
 };
 
 export type DomainExchangeCreateContext = {
@@ -332,6 +349,99 @@ async function findIntegrationExchangeScope(input: {
   };
 }
 
+async function getDomainExchangeBalance(
+  executor: QueryExecutor,
+  domainId: string,
+): Promise<DomainExchangeBalance> {
+  const result = await executor.query<{
+    charge_amount: string;
+    fee_amount: string;
+    approved_exchange_amount: string;
+    pending_exchange_amount: string;
+  }>(
+    `
+      select
+        coalesce(sum(source.charge_amount), 0)::text as charge_amount,
+        coalesce(sum(source.fee_amount), 0)::text as fee_amount,
+        coalesce(sum(source.approved_exchange_amount), 0)::text as approved_exchange_amount,
+        coalesce(sum(source.pending_exchange_amount), 0)::text as pending_exchange_amount
+      from (
+        select
+          cr.amount as charge_amount,
+          coalesce(comm.saved_commission, 0) as fee_amount,
+          0::numeric as approved_exchange_amount,
+          0::numeric as pending_exchange_amount
+        from charge_requests cr
+        left join commission_records comm on comm.charge_request_id = cr.id
+        where cr.domain_id = $1::uuid
+          and cr.status in ('APPROVED', 'COMPLETED')
+
+        union all
+
+        select
+          0::numeric as charge_amount,
+          0::numeric as fee_amount,
+          er.amount as approved_exchange_amount,
+          0::numeric as pending_exchange_amount
+        from exchange_requests er
+        where er.domain_id = $1::uuid
+          and er.status in ('APPROVED', 'COMPLETED')
+
+        union all
+
+        select
+          0::numeric as charge_amount,
+          0::numeric as fee_amount,
+          0::numeric as approved_exchange_amount,
+          er.amount as pending_exchange_amount
+        from exchange_requests er
+        where er.domain_id = $1::uuid
+          and er.status = 'PENDING'
+      ) source
+    `,
+    [domainId],
+  );
+  const row = result.rows[0];
+  const chargeAmount = Number(row?.charge_amount ?? 0);
+  const feeAmount = Number(row?.fee_amount ?? 0);
+  const approvedExchangeAmount = Number(row?.approved_exchange_amount ?? 0);
+  const pendingExchangeAmount = Number(row?.pending_exchange_amount ?? 0);
+  const approvedBalance = chargeAmount - feeAmount - approvedExchangeAmount;
+
+  return {
+    chargeAmount,
+    feeAmount,
+    approvedExchangeAmount,
+    pendingExchangeAmount,
+    approvedBalance,
+    withdrawableBalance: approvedBalance - pendingExchangeAmount,
+  };
+}
+
+async function getApprovedDomainBalanceForUpdate(
+  client: PoolClient,
+  domainId: string,
+) {
+  const domainResult = await client.query<{ id: string }>(
+    `
+      select id::text
+      from domains
+      where id = $1::uuid
+        and status <> 'DELETED'
+      for update
+    `,
+    [domainId],
+  );
+
+  if (!domainResult.rows[0]) {
+    throw new Error("환전 요청의 도메인 정보를 찾을 수 없습니다.");
+  }
+
+  const balance = await getDomainExchangeBalance(client, domainId);
+
+  return balance.approvedBalance.toString();
+}
+
 async function insertExchangeRequest(
   input: CreateDomainExchangeInput & {
     companyId: string;
@@ -411,8 +521,9 @@ export async function createIntegrationDomainExchange(input: CreateDomainExchang
   }
 
   const scope = await findIntegrationExchangeScope(input);
+  const balance = await getDomainExchangeBalance({ query }, scope.domain_id);
 
-  if (input.amount > Number(scope.current_balance)) {
+  if (input.amount > balance.withdrawableBalance) {
     throw new Error("보유금보다 큰 금액은 신청할 수 없습니다.");
   }
 
@@ -452,20 +563,9 @@ export async function approveDomainExchange(id: string, processedBy: string) {
     }
 
     const requestAmount = Number(exchange.amount);
-    const domainBalance =
-      exchange.domain_id
-        ? (
-            await client.query<{ current_balance: string }>(
-              `
-                select current_balance::text
-                from domains
-                where id = $1::uuid
-                for update
-              `,
-              [exchange.domain_id],
-            )
-          ).rows[0]?.current_balance
-        : null;
+    const domainBalance = exchange.domain_id
+      ? await getApprovedDomainBalanceForUpdate(client, exchange.domain_id)
+      : null;
     const distributorBalance =
       !domainBalance && exchange.distributor_id
         ? (
