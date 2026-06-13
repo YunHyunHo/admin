@@ -19,6 +19,7 @@ import {
   getMockChargeStateFromCookie,
   setMockChargeStateCookie,
 } from "@/lib/mock-state-cookie";
+import type { QueryResultRow } from "pg";
 import type { SessionUser } from "@/lib/auth";
 
 const DEFAULT_ROW_LIMIT = 300;
@@ -63,6 +64,18 @@ type CreateChargeRequestInput = {
   rawPayload?: unknown;
 };
 
+type QueryExecutor = {
+  query<T extends QueryResultRow>(
+    text: string,
+    values?: unknown[],
+  ): Promise<{ rows: T[] }>;
+};
+
+type DomainChargeBalance = {
+  approvedBalance: number;
+  withdrawableBalance: number;
+};
+
 export type IntegrationChargeDomainOption = {
   id: string;
   name: string;
@@ -82,6 +95,71 @@ export type ChargeRequestsResponse = {
 
 function formatStamp(value: Date | string | null) {
   return formatKoreanDateTime(value);
+}
+
+async function getDomainChargeBalance(
+  executor: QueryExecutor,
+  domainId: string,
+): Promise<DomainChargeBalance> {
+  const result = await executor.query<{
+    charge_amount: string;
+    fee_amount: string;
+    approved_exchange_amount: string;
+    pending_exchange_amount: string;
+  }>(
+    `
+      select
+        coalesce(sum(source.charge_amount), 0)::text as charge_amount,
+        coalesce(sum(source.fee_amount), 0)::text as fee_amount,
+        coalesce(sum(source.approved_exchange_amount), 0)::text as approved_exchange_amount,
+        coalesce(sum(source.pending_exchange_amount), 0)::text as pending_exchange_amount
+      from (
+        select
+          cr.amount as charge_amount,
+          coalesce(comm.saved_commission, 0) as fee_amount,
+          0::numeric as approved_exchange_amount,
+          0::numeric as pending_exchange_amount
+        from charge_requests cr
+        left join commission_records comm on comm.charge_request_id = cr.id
+        where cr.domain_id = $1::uuid
+          and cr.status in ('APPROVED', 'COMPLETED')
+
+        union all
+
+        select
+          0::numeric as charge_amount,
+          0::numeric as fee_amount,
+          er.amount as approved_exchange_amount,
+          0::numeric as pending_exchange_amount
+        from exchange_requests er
+        where er.domain_id = $1::uuid
+          and er.status in ('APPROVED', 'COMPLETED')
+
+        union all
+
+        select
+          0::numeric as charge_amount,
+          0::numeric as fee_amount,
+          0::numeric as approved_exchange_amount,
+          er.amount as pending_exchange_amount
+        from exchange_requests er
+        where er.domain_id = $1::uuid
+          and er.status = 'PENDING'
+      ) source
+    `,
+    [domainId],
+  );
+  const row = result.rows[0];
+  const chargeAmount = Number(row?.charge_amount ?? 0);
+  const feeAmount = Number(row?.fee_amount ?? 0);
+  const approvedExchangeAmount = Number(row?.approved_exchange_amount ?? 0);
+  const pendingExchangeAmount = Number(row?.pending_exchange_amount ?? 0);
+  const approvedBalance = chargeAmount - feeAmount - approvedExchangeAmount;
+
+  return {
+    approvedBalance,
+    withdrawableBalance: approvedBalance - pendingExchangeAmount,
+  };
 }
 
 function toPendingRequest(row: ChargeRequestRow): PendingRequest {
@@ -826,23 +904,22 @@ export async function processDbChargeRequest(input: {
       const netChargeAmount = Number(approved.amount) - savedCommission;
 
       if (approved.domain_id && netChargeAmount > 0) {
-        const domainBalanceResult = await client.query<{
-          current_balance: string;
-        }>(
+        await client.query(
           `
-            select current_balance::text
+            select id
             from domains
             where id = $1::uuid
+              and status <> 'DELETED'
             for update
           `,
           [approved.domain_id],
         );
-        const beforeBalance = Number(
-          domainBalanceResult.rows[0]?.current_balance ?? 0,
-        );
-        const afterBalance = beforeBalance - netChargeAmount;
+        const domainBalance = await getDomainChargeBalance(client, approved.domain_id);
+        const afterWithdrawableBalance =
+          domainBalance.withdrawableBalance - netChargeAmount;
+        const afterBalance = domainBalance.approvedBalance - netChargeAmount;
 
-        if (afterBalance < 0) {
+        if (afterWithdrawableBalance < 0) {
           throw new Error("도메인 보유금이 부족해 승인건을 거절할 수 없습니다.");
         }
 
@@ -869,7 +946,7 @@ export async function processDbChargeRequest(input: {
           [
             input.processedBy,
             approved.domain_id,
-            JSON.stringify({ balance: beforeBalance }),
+            JSON.stringify({ balance: domainBalance.approvedBalance }),
             JSON.stringify({
               balance: afterBalance,
               amount: -netChargeAmount,
