@@ -112,6 +112,13 @@ function toProcessedRequest(row: ChargeRequestRow): ProcessedRequest {
   };
 }
 
+function sortByProcessedAtDesc(left: ChargeRequestRow, right: ChargeRequestRow) {
+  const leftTime = new Date(left.processed_at ?? left.requested_at).getTime();
+  const rightTime = new Date(right.processed_at ?? right.requested_at).getTime();
+
+  return rightTime - leftTime;
+}
+
 function splitRows(rows: ChargeRequestRow[]): ChargeRequestsResponse {
   return {
     pending: rows
@@ -123,9 +130,11 @@ function splitRows(rows: ChargeRequestRow[]): ChargeRequestsResponse {
       .map(toPendingRequest),
     approved: rows
       .filter((row) => row.status === "APPROVED" || row.status === "COMPLETED")
+      .sort(sortByProcessedAtDesc)
       .map(toProcessedRequest),
     rejected: rows
       .filter((row) => row.status === "REJECTED" || row.status === "CANCELED")
+      .sort(sortByProcessedAtDesc)
       .map(toProcessedRequest),
   };
 }
