@@ -261,7 +261,7 @@ export function DomainExchangesBoard({
     }
 
     if (numericAmount > currentBalance) {
-      setCreateModalMessage("보유 수수료보다 큰 금액은 신청할 수 없습니다.");
+      setCreateModalMessage("보유금보다 큰 금액은 신청할 수 없습니다.");
       return;
     }
 
@@ -552,7 +552,7 @@ export function DomainExchangesBoard({
             <div className="mt-7 space-y-4">
               <ModalFeedback message={createModalMessage} />
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                <p>보유 수수료: <strong>{currentBalance.toLocaleString("ko-KR")} 원</strong></p>
+                <p>보유금: <strong>{currentBalance.toLocaleString("ko-KR")} 원</strong></p>
                 <p className="mt-1">
                   {hasConnectedDomain
                     ? "연결된 도메인이 있으면 자동으로 적용됩니다. 필요하면 다른 도메인으로 바꿀 수 있어요."

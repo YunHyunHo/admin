@@ -394,7 +394,7 @@ export async function createDomainExchange(
   const scope = await findExchangeScope(input.domainId, input.user);
 
   if (input.amount > Number(scope.current_balance)) {
-    throw new Error("보유 수수료보다 큰 금액은 신청할 수 없습니다.");
+    throw new Error("보유금보다 큰 금액은 신청할 수 없습니다.");
   }
 
   return insertExchangeRequest({
@@ -413,7 +413,7 @@ export async function createIntegrationDomainExchange(input: CreateDomainExchang
   const scope = await findIntegrationExchangeScope(input);
 
   if (input.amount > Number(scope.current_balance)) {
-    throw new Error("보유 수수료보다 큰 금액은 신청할 수 없습니다.");
+    throw new Error("보유금보다 큰 금액은 신청할 수 없습니다.");
   }
 
   return insertExchangeRequest({

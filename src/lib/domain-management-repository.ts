@@ -85,7 +85,7 @@ export async function getDomainManagementRows(
         dist_admin.login_id as distributor_login_id,
         coalesce(parent_dist.name, dist.name) as top_distributor_name,
         child_dist.names as child_distributor_names,
-        coalesce(dist.current_balance, dom.current_balance)::text as current_balance,
+        dom.current_balance::text as current_balance,
         ba.bank_name,
         ba.account_number,
         ba.account_holder,
@@ -259,18 +259,12 @@ export async function adjustDomainBalance(input: {
 
   await withTransaction(async (client) => {
     const domainResult = await client.query<{
-      distributor_id: string | null;
-      domain_balance: string;
-      current_balance: string | null;
+      current_balance: string;
     }>(
       `
         select
-          dom.distributor_id::text,
-          dom.current_balance::text as domain_balance,
-          dist.current_balance::text
+          dom.current_balance::text
         from domains dom
-        left join distributors dist on dist.id = dom.distributor_id
-          and dist.status = 'ACTIVE'
         where dom.id = $1::uuid
           and dom.status <> 'DELETED'
         limit 1
@@ -286,61 +280,11 @@ export async function adjustDomainBalance(input: {
 
     const signedAmount =
       input.direction === "increase" ? input.amount : -input.amount;
-    const hasDistributorBalance =
-      Boolean(domain.distributor_id) && domain.current_balance !== null;
-    const beforeBalance = Number(
-      hasDistributorBalance ? domain.current_balance : domain.domain_balance,
-    );
+    const beforeBalance = Number(domain.current_balance);
     const afterBalance = beforeBalance + signedAmount;
 
     if (afterBalance < 0) {
       throw new Error("현재 보유금보다 큰 금액은 감소할 수 없습니다.");
-    }
-
-    if (hasDistributorBalance) {
-      await client.query(
-        `
-          update distributors
-          set current_balance = $2,
-              updated_at = now()
-          where id = $1::uuid
-        `,
-        [domain.distributor_id, afterBalance],
-      );
-
-      await client.query(
-        `
-          insert into distributor_balance_transactions (
-            distributor_id,
-            amount,
-            balance_before,
-            balance_after,
-            source_type,
-            source_id,
-            memo,
-            created_by
-          )
-          values (
-            $1::uuid,
-            $2,
-            $3,
-            $4,
-            'DOMAIN_BALANCE_ADJUSTMENT',
-            gen_random_uuid(),
-            $5,
-            $6::uuid
-          )
-        `,
-        [
-          domain.distributor_id,
-          signedAmount,
-          beforeBalance,
-          afterBalance,
-          input.direction === "increase" ? "도메인 보유금 추가" : "도메인 보유금 감소",
-          input.processedBy,
-        ],
-      );
-      return;
     }
 
     await client.query(
