@@ -203,9 +203,15 @@ export async function getDomainExchangeCreateContext(user: SessionUser) {
     throw new Error("환전신청을 연결할 계정을 찾을 수 없습니다.");
   }
 
+  const domainBalance = scopeRow.domain_id
+    ? await getDomainExchangeBalance({ query }, scopeRow.domain_id)
+    : null;
+
   return {
     defaultDomainId: scopeRow.domain_id,
-    currentBalance: Number(scopeRow.current_balance),
+    currentBalance: domainBalance
+      ? domainBalance.withdrawableBalance
+      : Number(scopeRow.current_balance),
     hasConnectedDomain: Boolean(scopeRow.domain_id),
   } satisfies DomainExchangeCreateContext;
 }
@@ -254,7 +260,14 @@ async function findExchangeScope(domainId: string | null | undefined, user: Sess
       company_id: distributorScope.company_id,
       domain_id: ownDomainResult.rows[0]?.domain_id ?? null,
       distributor_id: distributorScope.distributor_id,
-      current_balance: distributorScope.current_balance,
+      current_balance: ownDomainResult.rows[0]?.domain_id
+        ? (
+            await getDomainExchangeBalance(
+              { query },
+              ownDomainResult.rows[0].domain_id,
+            )
+          ).withdrawableBalance.toString()
+        : distributorScope.current_balance,
     };
   }
 
@@ -286,7 +299,15 @@ async function findExchangeScope(domainId: string | null | undefined, user: Sess
     throw new Error("환전신청을 연결할 도메인을 찾을 수 없습니다.");
   }
 
-  return domainScope;
+  const domainBalance = await getDomainExchangeBalance(
+    { query },
+    domainScope.domain_id ?? domainId,
+  );
+
+  return {
+    ...domainScope,
+    current_balance: domainBalance.withdrawableBalance.toString(),
+  };
 }
 
 async function findIntegrationExchangeScope(input: {
