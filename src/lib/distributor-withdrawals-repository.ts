@@ -360,3 +360,91 @@ export async function rejectDistributorWithdrawal(id: string, processedBy: Sessi
     throw new Error("처리할 총판 환전 요청을 찾을 수 없습니다.");
   }
 }
+
+export async function cancelDistributorWithdrawal(id: string, processedBy: SessionUser) {
+  await withTransaction(async (client) => {
+    const processingScopeSql =
+      processedBy.role === "MASTER" ? "" : "and dist_admin.created_by = $2::uuid";
+    const processingValues =
+      processedBy.role === "MASTER" ? [id] : [id, processedBy.id];
+    const withdrawal = await client.query<ProcessingWithdrawalRow>(
+      `
+        select
+          dw.id::text,
+          dw.distributor_id::text,
+          dw.request_amount::text,
+          d.current_balance::text,
+          dw.status::text as status
+        from distributor_withdrawals dw
+        join distributors d on d.id = dw.distributor_id
+        left join admins dist_admin on dist_admin.id = d.admin_id
+        where dw.id = $1::uuid
+          ${processingScopeSql}
+          and dw.status in ('APPROVED', 'COMPLETED')
+        for update of dw, d
+      `,
+      processingValues,
+    );
+    const row = withdrawal.rows[0];
+
+    if (!row) {
+      throw new Error("승인취소할 총판 환전 요청을 찾을 수 없습니다.");
+    }
+
+    const requestAmount = Number(row.request_amount);
+    const beforeBalance = Number(row.current_balance);
+    const afterBalance = beforeBalance + requestAmount;
+
+    await client.query(
+      `
+        update distributors
+        set current_balance = $2,
+            updated_at = now()
+        where id = $1::uuid
+      `,
+      [row.distributor_id, afterBalance],
+    );
+
+    await client.query(
+      `
+        update distributor_withdrawals
+        set status = 'CANCELED',
+            before_balance = $2,
+            after_balance = $3,
+            processed_at = now(),
+            processed_by = $4::uuid,
+            updated_at = now()
+        where id = $1::uuid
+          and status in ('APPROVED', 'COMPLETED')
+      `,
+      [id, beforeBalance, afterBalance, processedBy.id],
+    );
+
+    await client.query(
+      `
+        insert into distributor_balance_transactions (
+          distributor_id,
+          amount,
+          balance_before,
+          balance_after,
+          source_type,
+          source_id,
+          memo,
+          created_by
+        )
+        values (
+          $1::uuid,
+          $2,
+          $3,
+          $4,
+          'DISTRIBUTOR_WITHDRAWAL_CANCEL',
+          $5::uuid,
+          '총판 환전 승인취소',
+          $6::uuid
+        )
+        on conflict (source_type, source_id) do nothing
+      `,
+      [row.distributor_id, requestAmount, beforeBalance, afterBalance, id, processedBy.id],
+    );
+  });
+}

@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/auth";
 import { hasDatabaseUrl } from "@/lib/db";
 import {
   approveDistributorWithdrawal,
+  cancelDistributorWithdrawal,
   createDistributorWithdrawal,
   getDistributorWithdrawalRows,
   rejectDistributorWithdrawal,
@@ -21,7 +22,7 @@ type CreateDistributorWithdrawalPayload = {
 
 type PatchDistributorWithdrawalPayload = {
   id?: string;
-  action?: "approve" | "reject";
+  action?: "approve" | "reject" | "cancel";
 };
 
 function isUuid(value: string | undefined) {
@@ -30,6 +31,10 @@ function isUuid(value: string | undefined) {
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
     ),
   );
+}
+
+function isPatchAction(value: string | undefined): value is NonNullable<PatchDistributorWithdrawalPayload["action"]> {
+  return value === "approve" || value === "reject" || value === "cancel";
 }
 
 export async function GET() {
@@ -137,11 +142,20 @@ export async function PATCH(request: Request) {
     );
   }
 
+  if (!isPatchAction(payload.action)) {
+    return NextResponse.json(
+      { message: "지원하지 않는 총판 환전 요청 처리입니다." },
+      { status: 400 },
+    );
+  }
+
   try {
     if (payload.action === "approve") {
       await approveDistributorWithdrawal(payload.id, user);
-    } else {
+    } else if (payload.action === "reject") {
       await rejectDistributorWithdrawal(payload.id, user);
+    } else {
+      await cancelDistributorWithdrawal(payload.id, user);
     }
   } catch (error) {
     return NextResponse.json(
@@ -160,6 +174,8 @@ export async function PATCH(request: Request) {
     message:
       payload.action === "approve"
         ? "총판 환전 요청이 승인되었습니다."
-        : "총판 환전 요청이 거절되었습니다.",
+        : payload.action === "reject"
+          ? "총판 환전 요청이 거절되었습니다."
+          : "총판 환전 요청이 승인취소되었습니다.",
   });
 }

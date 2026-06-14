@@ -721,3 +721,148 @@ export async function rejectDomainExchange(id: string, processedBy: string) {
     throw new Error("처리할 대기 환전 요청을 찾을 수 없습니다.");
   }
 }
+
+export async function cancelApprovedDomainExchange(id: string, processedBy: string) {
+  await withTransaction(async (client) => {
+    const exchangeResult = await client.query<{
+      id: string;
+      domain_id: string | null;
+      distributor_id: string | null;
+      amount: string;
+    }>(
+      `
+        select
+          er.id::text,
+          er.domain_id::text,
+          er.distributor_id::text,
+          er.amount::text
+        from exchange_requests er
+        where er.id = $1::uuid
+          and er.status in ('APPROVED', 'COMPLETED')
+        for update of er
+      `,
+      [id],
+    );
+    const exchange = exchangeResult.rows[0];
+
+    if (!exchange) {
+      throw new Error("승인취소할 환전 요청을 찾을 수 없습니다.");
+    }
+
+    const requestAmount = Number(exchange.amount);
+
+    if (exchange.domain_id) {
+      const balanceResult = await client.query<{ current_balance: string }>(
+        `
+          select current_balance::text
+          from domains
+          where id = $1::uuid
+            and status <> 'DELETED'
+          for update
+        `,
+        [exchange.domain_id],
+      );
+      const beforeBalance = Number(balanceResult.rows[0]?.current_balance ?? 0);
+      const afterBalance = beforeBalance + requestAmount;
+
+      await client.query(
+        `
+          update domains
+          set current_balance = $2,
+              updated_at = now()
+          where id = $1::uuid
+        `,
+        [exchange.domain_id, afterBalance],
+      );
+
+      await client.query(
+        `
+          insert into admin_audit_logs (
+            admin_id,
+            action,
+            resource_type,
+            resource_id,
+            before_data,
+            after_data
+          )
+          values ($1::uuid, 'domain_exchange_canceled', 'domain', $2::uuid, $3::jsonb, $4::jsonb)
+        `,
+        [
+          processedBy,
+          exchange.domain_id,
+          JSON.stringify({ balance: beforeBalance }),
+          JSON.stringify({ balance: afterBalance, amount: requestAmount }),
+        ],
+      );
+    } else if (exchange.distributor_id) {
+      const balanceResult = await client.query<{ current_balance: string }>(
+        `
+          select current_balance::text
+          from distributors
+          where id = $1::uuid
+          for update
+        `,
+        [exchange.distributor_id],
+      );
+      const beforeBalance = Number(balanceResult.rows[0]?.current_balance ?? 0);
+      const afterBalance = beforeBalance + requestAmount;
+
+      await client.query(
+        `
+          update distributors
+          set current_balance = $2,
+              updated_at = now()
+          where id = $1::uuid
+        `,
+        [exchange.distributor_id, afterBalance],
+      );
+
+      await client.query(
+        `
+          insert into distributor_balance_transactions (
+            distributor_id,
+            amount,
+            balance_before,
+            balance_after,
+            source_type,
+            source_id,
+            memo,
+            created_by
+          )
+          values (
+            $1::uuid,
+            $2,
+            $3,
+            $4,
+            'DOMAIN_EXCHANGE_CANCEL',
+            $5::uuid,
+            '도메인 환전 승인취소',
+            $6::uuid
+          )
+          on conflict (source_type, source_id) do nothing
+        `,
+        [
+          exchange.distributor_id,
+          requestAmount,
+          beforeBalance,
+          afterBalance,
+          id,
+          processedBy,
+        ],
+      );
+    }
+
+    await client.query(
+      `
+        update exchange_requests
+        set status = 'CANCELED',
+            processed_at = now(),
+            processed_by = $2::uuid,
+            updated_at = now()
+        where id = $1::uuid
+          and status in ('APPROVED', 'COMPLETED')
+      `,
+      [id, processedBy],
+    );
+  });
+}

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import {
   approveDomainExchange,
+  cancelApprovedDomainExchange,
   createDomainExchange,
   getDomainExchangeCreateContext,
   getDomainExchangeRows,
@@ -15,7 +16,7 @@ export const runtime = "nodejs";
 
 type PatchDomainExchangePayload = {
   id?: string;
-  action?: "approve" | "reject";
+  action?: "approve" | "reject" | "cancel";
 };
 
 type CreateDomainExchangePayload = {
@@ -34,6 +35,10 @@ function isUuid(value: string | undefined) {
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
     ),
   );
+}
+
+function isPatchAction(value: string | undefined): value is NonNullable<PatchDomainExchangePayload["action"]> {
+  return value === "approve" || value === "reject" || value === "cancel";
 }
 
 export async function GET() {
@@ -149,6 +154,13 @@ export async function PATCH(request: Request) {
     );
   }
 
+  if (!isPatchAction(payload.action)) {
+    return NextResponse.json(
+      { message: "지원하지 않는 환전 요청 처리입니다." },
+      { status: 400 },
+    );
+  }
+
   if (hasDatabaseUrl()) {
     if (!isUuid(payload.id)) {
       return NextResponse.json(
@@ -160,8 +172,10 @@ export async function PATCH(request: Request) {
     try {
       if (payload.action === "approve") {
         await approveDomainExchange(payload.id, user.id);
-      } else {
+      } else if (payload.action === "reject") {
         await rejectDomainExchange(payload.id, user.id);
+      } else {
+        await cancelApprovedDomainExchange(payload.id, user.id);
       }
     } catch (error) {
       return NextResponse.json(
@@ -180,7 +194,9 @@ export async function PATCH(request: Request) {
       message:
         payload.action === "approve"
           ? "환전 요청이 승인되었습니다."
-          : "환전 요청이 거절되었습니다.",
+          : payload.action === "reject"
+            ? "환전 요청이 거절되었습니다."
+            : "환전 요청이 승인취소되었습니다.",
     });
   }
 
@@ -188,6 +204,8 @@ export async function PATCH(request: Request) {
     message:
       payload.action === "approve"
         ? "환전 요청이 승인되었습니다."
-        : "환전 요청이 거절되었습니다.",
+        : payload.action === "reject"
+          ? "환전 요청이 거절되었습니다."
+          : "환전 요청이 승인취소되었습니다.",
   });
 }

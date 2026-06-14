@@ -632,8 +632,11 @@ export async function createPersistedAdminAccount(input: {
 
 export async function updatePersistedAdminAccount(input: {
   id: string;
-  action: "toggle-status" | "delete" | "hard-delete" | "set-companies";
+  action: "toggle-status" | "delete" | "hard-delete" | "set-companies" | "adjust-balance";
   managedCompanies?: string[];
+  balanceAmount?: number;
+  balanceDirection?: "increase" | "decrease";
+  processedBy?: string;
 }) {
   if (!hasDatabaseUrl()) {
     return null;
@@ -644,6 +647,94 @@ export async function updatePersistedAdminAccount(input: {
 
   if (!targetAccount) {
     return null;
+  }
+
+  if (input.action === "adjust-balance") {
+    const amount = Number(input.balanceAmount);
+
+    if (
+      (targetAccount.role !== "TOP_DISTRIBUTOR" && targetAccount.role !== "ADMIN") ||
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      (input.balanceDirection !== "increase" && input.balanceDirection !== "decrease") ||
+      !input.processedBy
+    ) {
+      throw new Error("조정할 총판 보유금 정보를 확인해주세요.");
+    }
+
+    await withTransaction(async (client) => {
+      const distributorResult = await client.query<{
+        id: string;
+        current_balance: string;
+      }>(
+        `
+          select id::text, current_balance::text
+          from distributors
+          where admin_id = $1::uuid
+            and status <> 'DELETED'
+          for update
+        `,
+        [input.id],
+      );
+      const distributor = distributorResult.rows[0];
+
+      if (!distributor) {
+        throw new Error("보유금을 조정할 총판 정보를 찾지 못했습니다.");
+      }
+
+      const signedAmount = input.balanceDirection === "decrease" ? -amount : amount;
+      const beforeBalance = Number(distributor.current_balance);
+      const afterBalance = beforeBalance + signedAmount;
+
+      if (afterBalance < 0) {
+        throw new Error("현재 보유금보다 큰 금액은 감소할 수 없습니다.");
+      }
+
+      await client.query(
+        `
+          update distributors
+          set current_balance = $2,
+              updated_at = now()
+          where id = $1::uuid
+        `,
+        [distributor.id, afterBalance],
+      );
+
+      await client.query(
+        `
+          insert into distributor_balance_transactions (
+            distributor_id,
+            amount,
+            balance_before,
+            balance_after,
+            source_type,
+            source_id,
+            memo,
+            created_by
+          )
+          values (
+            $1::uuid,
+            $2,
+            $3,
+            $4,
+            'DISTRIBUTOR_BALANCE_ADJUSTMENT',
+            gen_random_uuid(),
+            $5,
+            $6::uuid
+          )
+        `,
+        [
+          distributor.id,
+          signedAmount,
+          beforeBalance,
+          afterBalance,
+          input.balanceDirection === "increase" ? "총판 보유금 추가" : "총판 보유금 감소",
+          input.processedBy,
+        ],
+      );
+    });
+
+    return (await getAllAdminAccounts()).find((account) => account.id === input.id);
   }
 
   if (input.action === "delete") {

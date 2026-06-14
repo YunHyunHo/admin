@@ -308,7 +308,21 @@ export function DistributorWithdrawalHistoryBoard({
     }
   }
 
-  async function processWithdrawal(id: string, action: "approve" | "reject") {
+  async function processWithdrawal(id: string, action: "approve" | "reject" | "cancel") {
+    if (
+      action === "approve" &&
+      !window.confirm("이 총판 환전 요청을 승인할까요? 승인하면 총판 보유금에서 요청금액이 차감됩니다.")
+    ) {
+      return;
+    }
+
+    if (
+      action === "cancel" &&
+      !window.confirm("이미 승인된 총판 환전 요청을 승인취소할까요? 차감했던 보유금이 다시 복구됩니다.")
+    ) {
+      return;
+    }
+
     const response = await fetch("/api/distributor-withdrawals", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -332,7 +346,9 @@ export function DistributorWithdrawalHistoryBoard({
       data.message ??
         (action === "approve"
           ? "총판 환전 요청이 승인되었습니다."
-          : "총판 환전 요청이 거절되었습니다."),
+          : action === "reject"
+            ? "총판 환전 요청이 거절되었습니다."
+            : "총판 환전 요청이 승인취소되었습니다."),
     );
   }
 
@@ -438,6 +454,17 @@ export function DistributorWithdrawalHistoryBoard({
                           className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-500"
                         >
                           거절
+                        </button>
+                      </div>
+                    ) : canProcessWithdrawals && row.status === "승인" ? (
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="text-white/70">{row.status}</span>
+                        <button
+                          type="button"
+                          onClick={() => void processWithdrawal(row.id, "cancel")}
+                          className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-500"
+                        >
+                          승인취소
                         </button>
                       </div>
                     ) : (

@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 
 import { ModalFeedback } from "@/components/modal-feedback";
-import { getKoreanNowStamp } from "@/lib/korean-time";
 import type {
   DomainExchangeOption,
   DomainExchangeRow,
@@ -215,10 +214,6 @@ function normalizeExchangeRow(row: DomainExchangeRow): DomainExchangeRow {
   };
 }
 
-function getNowStamp() {
-  return getKoreanNowStamp();
-}
-
 export function DomainExchangesBoard({
   initialRows = fallbackDomainExchanges,
   eyebrow = "Domain Exchange",
@@ -312,7 +307,7 @@ export function DomainExchangesBoard({
     }
   }
 
-  async function persistExchangePatch(id: string, action: "approve" | "reject") {
+  async function persistExchangePatch(id: string, action: "approve" | "reject" | "cancel") {
     const response = await fetch("/api/domain-exchanges", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -338,33 +333,27 @@ export function DomainExchangesBoard({
   }
 
   function approveRow(id: string) {
-    setRows((current) =>
-      current.map((row) =>
-        row.id === id
-          ? {
-              ...row,
-              status: "승인",
-              completedAt: row.completedAt || getNowStamp(),
-            }
-          : row,
-      ),
-    );
+    if (!window.confirm("이 환전 요청을 승인할까요? 승인하면 보유금에서 요청금액이 차감됩니다.")) {
+      return;
+    }
+
     void persistExchangePatch(id, "approve");
   }
 
   function rejectRow(id: string) {
-    setRows((current) =>
-      current.map((row) =>
-        row.id === id
-          ? {
-              ...row,
-              status: "승인거절",
-              completedAt: row.completedAt || getNowStamp(),
-            }
-          : row,
-      ),
-    );
     void persistExchangePatch(id, "reject");
+  }
+
+  function cancelRow(id: string) {
+    if (
+      !window.confirm(
+        "이미 승인된 환전 요청을 승인취소할까요? 차감했던 보유금이 다시 복구됩니다.",
+      )
+    ) {
+      return;
+    }
+
+    void persistExchangePatch(id, "cancel");
   }
 
   return (
@@ -464,6 +453,17 @@ export function DomainExchangesBoard({
                             className="rounded-lg bg-white px-3 py-1 text-xs font-semibold text-slate-950 transition hover:bg-red-100"
                           >
                             거절
+                          </button>
+                        </div>
+                      ) : canProcessExchanges && row.status === "승인" ? (
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="text-white/68">{row.status}</span>
+                          <button
+                            type="button"
+                            onClick={() => cancelRow(row.id)}
+                            className="rounded-lg bg-red-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-red-500"
+                          >
+                            승인취소
                           </button>
                         </div>
                       ) : (

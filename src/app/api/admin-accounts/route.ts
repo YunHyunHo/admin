@@ -30,12 +30,24 @@ type CreateAdminPayload = {
 
 type PatchAdminPayload = {
   id?: string;
-  action?: "toggle-status" | "delete" | "hard-delete" | "set-companies";
+  action?: "toggle-status" | "delete" | "hard-delete" | "set-companies" | "adjust-balance";
   managedCompanies?: string[];
+  balanceAmount?: number;
+  balanceDirection?: "increase" | "decrease";
 };
 
 function isWritableRole(role: string | undefined) {
   return role === "MASTER";
+}
+
+function isPatchAction(value: string | undefined): value is NonNullable<PatchAdminPayload["action"]> {
+  return (
+    value === "toggle-status" ||
+    value === "delete" ||
+    value === "hard-delete" ||
+    value === "set-companies" ||
+    value === "adjust-balance"
+  );
 }
 
 function toPublicList(accounts: AdminAccountRecord[]) {
@@ -265,6 +277,13 @@ export async function PATCH(request: Request) {
     );
   }
 
+  if (!isPatchAction(payload.action)) {
+    return NextResponse.json(
+      { message: "지원하지 않는 계정 수정 요청입니다." },
+      { status: 400 },
+    );
+  }
+
   const issuedAccounts = await getIssuedAdminAccountsFromCookie(user);
   const targetAccount = issuedAccounts.find((account) => account.id === payload.id);
 
@@ -282,11 +301,36 @@ export async function PATCH(request: Request) {
     );
   }
 
+  if (payload.action === "adjust-balance") {
+    const amount = Number(payload.balanceAmount);
+
+    if (targetAccount.role !== "TOP_DISTRIBUTOR" && targetAccount.role !== "ADMIN") {
+      return NextResponse.json(
+        { message: "총판 계정만 보유금을 조정할 수 있습니다." },
+        { status: 400 },
+      );
+    }
+
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      (payload.balanceDirection !== "increase" && payload.balanceDirection !== "decrease")
+    ) {
+      return NextResponse.json(
+        { message: "조정할 보유금액을 확인해주세요." },
+        { status: 400 },
+      );
+    }
+  }
+
   if (hasDatabaseUrl()) {
     await updatePersistedAdminAccount({
       id: payload.id,
       action: payload.action,
       managedCompanies: payload.managedCompanies,
+      balanceAmount: payload.balanceAmount,
+      balanceDirection: payload.balanceDirection,
+      processedBy: user.id,
     });
     const [updatedAccounts, managedCompanies] = await Promise.all([
       getAllAdminAccounts(user),
@@ -306,6 +350,8 @@ export async function PATCH(request: Request) {
             ? targetAccount.status === "ACTIVE"
               ? `${targetAccount.loginId} 계정을 사용중지했습니다.`
               : `${targetAccount.loginId} 계정을 다시 사용 상태로 변경했습니다.`
+          : payload.action === "adjust-balance"
+            ? `${targetAccount.loginId} 계정의 보유금이 조정되었습니다.`
             : `${targetAccount.loginId} 계정의 관리업체를 수정했습니다.`,
     });
   }
@@ -366,6 +412,22 @@ export async function PATCH(request: Request) {
         : account,
     );
     message = `${targetAccount.loginId} 계정의 관리업체를 수정했습니다.`;
+  }
+
+  if (payload.action === "adjust-balance") {
+    const amount = Number(payload.balanceAmount ?? 0);
+    const signedAmount = payload.balanceDirection === "decrease" ? -amount : amount;
+
+    nextAccounts = issuedAccounts.map((account) =>
+      account.id === payload.id
+        ? {
+            ...account,
+            currentBalance: Math.max(0, account.currentBalance + signedAmount),
+            updatedAt: getNowStamp(),
+          }
+        : account,
+    );
+    message = `${targetAccount.loginId} 계정의 보유금이 조정되었습니다.`;
   }
 
   const response = NextResponse.json({

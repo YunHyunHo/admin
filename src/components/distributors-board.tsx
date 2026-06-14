@@ -81,6 +81,11 @@ export function DistributorsBoard({
   const [isCreating, setIsCreating] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [managedCompaniesRow, setManagedCompaniesRow] = useState<DistributorRow | null>(null);
+  const [balanceRow, setBalanceRow] = useState<DistributorRow | null>(null);
+  const [balanceDirection, setBalanceDirection] = useState<"increase" | "decrease">("increase");
+  const [balanceAmount, setBalanceAmount] = useState("");
+  const [balanceModalMessage, setBalanceModalMessage] = useState("");
+  const [isAdjustingBalance, setIsAdjustingBalance] = useState(false);
 
   const topDistributorOptions = useMemo(
     () =>
@@ -228,6 +233,52 @@ export function DistributorsBoard({
     }
   }
 
+  function openBalanceModal(row: DistributorRow, direction: "increase" | "decrease") {
+    setBalanceRow(row);
+    setBalanceDirection(direction);
+    setBalanceAmount("");
+    setBalanceModalMessage("");
+  }
+
+  async function handleAdjustBalance() {
+    if (!balanceRow) {
+      return;
+    }
+
+    const numericAmount = Number(balanceAmount.replaceAll(",", ""));
+
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      setBalanceModalMessage("조정할 보유금액을 입력해주세요.");
+      return;
+    }
+
+    if (balanceDirection === "decrease" && numericAmount > balanceRow.currentBalance) {
+      setBalanceModalMessage("현재 보유금보다 큰 금액은 감소할 수 없습니다.");
+      return;
+    }
+
+    setIsAdjustingBalance(true);
+    setBalanceModalMessage("");
+
+    try {
+      const data = await requestAccount("PATCH", {
+        id: balanceRow.id,
+        action: "adjust-balance",
+        balanceAmount: numericAmount,
+        balanceDirection,
+      });
+      setMessage(data.message ?? `${balanceRow.loginId} 계정의 보유금이 조정되었습니다.`);
+      setBalanceRow(null);
+      setBalanceAmount("");
+    } catch (error) {
+      setBalanceModalMessage(
+        error instanceof Error ? error.message : "보유금 조정에 실패했습니다.",
+      );
+    } finally {
+      setIsAdjustingBalance(false);
+    }
+  }
+
   return (
     <section className="rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
       <div className="flex flex-col gap-4 border-b border-white/8 px-5 py-6 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
@@ -323,7 +374,25 @@ export function DistributorsBoard({
                     </button>
                   </td>
                   <td className="px-4 py-4 text-right font-semibold text-white">
-                    {formatKoreanWon(row.currentBalance)}
+                    <div className="flex flex-col items-end gap-2">
+                      <span>{formatKoreanWon(row.currentBalance)}</span>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => openBalanceModal(row, "increase")}
+                          className="rounded-lg bg-cyan-500/20 px-2.5 py-1 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-500/30"
+                        >
+                          추가
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openBalanceModal(row, "decrease")}
+                          className="rounded-lg bg-rose-500/20 px-2.5 py-1 text-xs font-semibold text-rose-100 transition hover:bg-rose-500/30"
+                        >
+                          감소
+                        </button>
+                      </div>
+                    </div>
                   </td>
                   <td className="px-4 py-4 text-center">
                     <span className="mr-2 font-semibold text-sky-400">
@@ -492,6 +561,54 @@ export function DistributorsBoard({
               <button
                 type="button"
                 onClick={() => setManagedCompaniesRow(null)}
+                className="rounded bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {balanceRow ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-[460px] rounded-[28px] border border-white/10 bg-white p-6 text-slate-950 shadow-[0_28px_120px_rgba(0,0,0,0.58)]">
+            <h3 className="text-2xl font-semibold tracking-[-0.04em]">
+              총판 보유금 {balanceDirection === "increase" ? "추가" : "감소"}
+            </h3>
+            <p className="mt-2 text-sm text-slate-500">
+              {balanceRow.nickname} / {balanceRow.loginId}
+            </p>
+
+            <div className="mt-6 space-y-4">
+              <ModalFeedback message={balanceModalMessage} />
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                현재 보유금 <strong>{formatKoreanWon(balanceRow.currentBalance)}</strong>
+              </div>
+              <input
+                value={balanceAmount}
+                onChange={(event) => setBalanceAmount(event.target.value)}
+                placeholder="조정 금액"
+                inputMode="numeric"
+                className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
+              />
+            </div>
+
+            <div className="mt-8 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={handleAdjustBalance}
+                disabled={isAdjustingBalance}
+                className="rounded bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {isAdjustingBalance ? "처리 중" : "조정"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setBalanceRow(null);
+                  setBalanceModalMessage("");
+                }}
                 className="rounded bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
               >
                 닫기
