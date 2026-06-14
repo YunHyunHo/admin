@@ -254,21 +254,21 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
       fee_totals as (
         select
           entity.entity_id,
-          coalesce(sum(co.saved_commission), 0)::text as fee_total
+          coalesce(sum(t.amount), 0)::text as fee_total
         from scoped_entities entity
-        left join commission_records co on (
-          co.distributor_id = entity.distributor_id
-          or exists (
-            select 1
-            from domains dom
-            where dom.id = co.domain_id
-              and dom.distributor_id = entity.distributor_id
-              and dom.status <> 'DELETED'
+        left join distributor_balance_transactions t on t.distributor_id = entity.distributor_id
+          and t.source_type in (
+            'COMMISSION',
+            'COMMISSION_TOP_DISTRIBUTOR',
+            'COMMISSION_DISTRIBUTOR',
+            'COMMISSION_SUB_DISTRIBUTOR',
+            'COMMISSION_REVERSAL',
+            'COMMISSION_TOP_DISTRIBUTOR_REVERSAL',
+            'COMMISSION_DISTRIBUTOR_REVERSAL',
+            'COMMISSION_SUB_DISTRIBUTOR_REVERSAL'
           )
-        )
-          and co.status in ('APPROVED', 'COMPLETED')
-          and (co.created_at at time zone 'Asia/Seoul') >= $1::date
-          and (co.created_at at time zone 'Asia/Seoul') < $2::date
+          and (t.created_at at time zone 'Asia/Seoul') >= $1::date
+          and (t.created_at at time zone 'Asia/Seoul') < $2::date
         group by entity.entity_id
       ),
       exchange_totals as (
