@@ -76,6 +76,13 @@ type DomainChargeBalance = {
   withdrawableBalance: number;
 };
 
+type DistributorCommissionCredit = {
+  distributorId: string | null | undefined;
+  amount: number;
+  sourceType: string;
+  memo: string;
+};
+
 export type IntegrationChargeDomainOption = {
   id: string;
   name: string;
@@ -160,6 +167,109 @@ async function getDomainChargeBalance(
     approvedBalance,
     withdrawableBalance: approvedBalance - pendingExchangeAmount,
   };
+}
+
+async function applyDistributorCommissionCredit(
+  executor: QueryExecutor,
+  input: {
+    distributorId: string;
+    amount: number;
+    sourceType: string;
+    sourceId: string;
+    memo: string;
+    processedBy: string;
+  },
+) {
+  if (input.amount === 0) {
+    return;
+  }
+
+  const balanceResult = await executor.query<{
+    current_balance: string;
+  }>(
+    `
+      select current_balance::text
+      from distributors
+      where id = $1::uuid
+      for update
+    `,
+    [input.distributorId],
+  );
+  const beforeBalance = Number(balanceResult.rows[0]?.current_balance ?? 0);
+  const afterBalance = beforeBalance + input.amount;
+
+  if (afterBalance < 0) {
+    throw new Error("총판 보유금이 부족해 승인건을 거절할 수 없습니다.");
+  }
+
+  await executor.query(
+    `
+      update distributors
+      set current_balance = $2, updated_at = now()
+      where id = $1::uuid
+    `,
+    [input.distributorId, afterBalance],
+  );
+  await executor.query(
+    `
+      insert into distributor_balance_transactions (
+        distributor_id,
+        amount,
+        balance_before,
+        balance_after,
+        source_type,
+        source_id,
+        memo,
+        created_by
+      )
+      values ($1::uuid, $2, $3, $4, $5, $6::uuid, $7, $8::uuid)
+      on conflict (source_type, source_id) do nothing
+    `,
+    [
+      input.distributorId,
+      input.amount,
+      beforeBalance,
+      afterBalance,
+      input.sourceType,
+      input.sourceId,
+      input.memo,
+      input.processedBy,
+    ],
+  );
+}
+
+async function applyDistributorCommissionCredits(
+  executor: QueryExecutor,
+  credits: DistributorCommissionCredit[],
+  sourceId: string,
+  processedBy: string,
+) {
+  const byDistributorAndSource = new Map<string, DistributorCommissionCredit>();
+
+  for (const credit of credits) {
+    if (!credit.distributorId || credit.amount <= 0) {
+      continue;
+    }
+
+    const key = `${credit.sourceType}:${credit.distributorId}`;
+    const previous = byDistributorAndSource.get(key);
+
+    byDistributorAndSource.set(key, {
+      ...credit,
+      amount: (previous?.amount ?? 0) + credit.amount,
+    });
+  }
+
+  for (const credit of byDistributorAndSource.values()) {
+    await applyDistributorCommissionCredit(executor, {
+      distributorId: credit.distributorId!,
+      amount: credit.amount,
+      sourceType: credit.sourceType,
+      sourceId,
+      memo: credit.memo,
+      processedBy,
+    });
+  }
 }
 
 function toPendingRequest(row: ChargeRequestRow): PendingRequest {
@@ -956,57 +1066,46 @@ export async function processDbChargeRequest(input: {
         );
       }
 
-      if (distributorId && savedCommission > 0) {
-        const balanceResult = await client.query<{
-          current_balance: string;
-        }>(
-          `
-            select current_balance::text
-            from distributors
-            where id = $1::uuid
-            for update
-          `,
-          [distributorId],
-        );
-        const beforeBalance = Number(balanceResult.rows[0]?.current_balance ?? 0);
-        const afterBalance = beforeBalance - savedCommission;
-
-        if (afterBalance < 0) {
-          throw new Error("총판 보유금이 부족해 승인건을 거절할 수 없습니다.");
-        }
-
-        await client.query(
-          `
-            update distributors
-            set current_balance = $2, updated_at = now()
-            where id = $1::uuid
-          `,
-          [distributorId, afterBalance],
-        );
-        await client.query(
-          `
-            insert into distributor_balance_transactions (
-              distributor_id,
-              amount,
-              balance_before,
-              balance_after,
-              source_type,
-              source_id,
-              memo,
-              created_by
+      const commissionTransactionResult = await client.query<{
+        distributor_id: string;
+        amount: string;
+        source_type: string;
+      }>(
+        `
+          select distributor_id::text, amount::text, source_type
+          from distributor_balance_transactions
+          where source_id = $1::uuid
+            and source_type in (
+              'COMMISSION_TOP_DISTRIBUTOR',
+              'COMMISSION_DISTRIBUTOR',
+              'COMMISSION_SUB_DISTRIBUTOR'
             )
-            values ($1::uuid, $2, $3, $4, 'COMMISSION_REVERSAL', $5::uuid, '충전 승인거절 수수료 차감', $6::uuid)
-            on conflict (source_type, source_id) do nothing
-          `,
-          [
-            distributorId,
-            -savedCommission,
-            beforeBalance,
-            afterBalance,
-            approved.id,
-            input.processedBy,
-          ],
-        );
+            and amount > 0
+          for update
+        `,
+        [approved.id],
+      );
+
+      if (commissionTransactionResult.rows.length) {
+        for (const transaction of commissionTransactionResult.rows) {
+          await applyDistributorCommissionCredit(client, {
+            distributorId: transaction.distributor_id,
+            amount: -Number(transaction.amount),
+            sourceType: `${transaction.source_type}_REVERSAL`,
+            sourceId: approved.id,
+            memo: "충전 승인거절 수수료 차감",
+            processedBy: input.processedBy,
+          });
+        }
+      } else if (distributorId && savedCommission > 0) {
+        await applyDistributorCommissionCredit(client, {
+          distributorId,
+          amount: -savedCommission,
+          sourceType: "COMMISSION_REVERSAL",
+          sourceId: approved.id,
+          memo: "충전 승인거절 수수료 차감",
+          processedBy: input.processedBy,
+        });
       }
 
       await client.query(
@@ -1084,6 +1183,9 @@ export async function processDbChargeRequest(input: {
     await ensureFeeRateSchema(client);
 
     const feeRateResult = await client.query<{
+      distributor_id: string | null;
+      top_distributor_id: string | null;
+      sub_distributor_id: string | null;
       company_rate: string;
       distributor_rate: string;
       agency_rate: string;
@@ -1091,16 +1193,21 @@ export async function processDbChargeRequest(input: {
     }>(
       `
         select
+          fee.distributor_id::text,
+          coalesce(parent_dist.id, dist.id)::text as top_distributor_id,
+          fee.sub_distributor_id::text,
           company_rate::text,
           distributor_rate::text,
           agency_rate::text,
           coalesce(sub_distributor_rate, 0)::text as sub_distributor_rate
-        from fee_rates
+        from fee_rates fee
+        left join distributors dist on dist.id = fee.distributor_id
+        left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
         where
-          starts_at <= now()
-          and (ends_at is null or ends_at > now())
-          and domain_id = $1::uuid
-        order by starts_at desc, created_at desc
+          fee.starts_at <= now()
+          and (fee.ends_at is null or fee.ends_at > now())
+          and fee.domain_id = $1::uuid
+        order by fee.starts_at desc, fee.created_at desc
         limit 1
       `,
       [updated.domain_id],
@@ -1135,8 +1242,11 @@ export async function processDbChargeRequest(input: {
     const totalRate =
       companyRate + distributorRate + agencyRate + subDistributorRate;
     const companyFee = Math.floor(amount * (companyRate / 100));
-    const distributorFee = Math.floor(amount * (distributorRate / 100));
-    const savedCommission = Math.floor(amount * (totalRate / 100));
+    const topDistributorFee = Math.floor(amount * (distributorRate / 100));
+    const distributorFee = Math.floor(amount * (agencyRate / 100));
+    const subDistributorFee = Math.floor(amount * (subDistributorRate / 100));
+    const savedCommission =
+      companyFee + topDistributorFee + distributorFee + subDistributorFee;
     const netChargeAmount = amount - savedCommission;
 
     await client.query(
@@ -1175,7 +1285,7 @@ export async function processDbChargeRequest(input: {
         amount,
         totalRate,
         companyFee,
-        distributorFee,
+        topDistributorFee,
         savedCommission,
       ],
     );
@@ -1230,54 +1340,38 @@ export async function processDbChargeRequest(input: {
       );
     }
 
-    if (distributorId && savedCommission > 0) {
-      const balanceResult = await client.query<{
-        current_balance: string;
-      }>(
-        `
-          select current_balance::text
-          from distributors
-          where id = $1::uuid
-          for update
-        `,
-        [distributorId],
-      );
-      const beforeBalance = Number(balanceResult.rows[0]?.current_balance ?? 0);
-      const afterBalance = beforeBalance + savedCommission;
+    const primaryDistributorId = feeRates?.distributor_id ?? distributorId;
+    const topDistributorId = feeRates?.top_distributor_id ?? primaryDistributorId;
+    const primaryIsChild =
+      Boolean(primaryDistributorId) &&
+      Boolean(topDistributorId) &&
+      primaryDistributorId !== topDistributorId;
 
-      await client.query(
-        `
-          update distributors
-          set current_balance = $2, updated_at = now()
-          where id = $1::uuid
-        `,
-        [distributorId, afterBalance],
-      );
-      await client.query(
-        `
-          insert into distributor_balance_transactions (
-            distributor_id,
-            amount,
-            balance_before,
-            balance_after,
-            source_type,
-            source_id,
-            memo,
-            created_by
-          )
-          values ($1::uuid, $2, $3, $4, 'COMMISSION', $5::uuid, '충전 승인 수수료 적립', $6::uuid)
-          on conflict (source_type, source_id) do nothing
-        `,
-        [
-          distributorId,
-          savedCommission,
-          beforeBalance,
-          afterBalance,
-          updated.id,
-          input.processedBy,
-        ],
-      );
-    }
+    await applyDistributorCommissionCredits(
+      client,
+      [
+        {
+          distributorId: topDistributorId,
+          amount: topDistributorFee,
+          sourceType: "COMMISSION_TOP_DISTRIBUTOR",
+          memo: "충전 승인 상위총판 수수료 적립",
+        },
+        {
+          distributorId: primaryIsChild ? primaryDistributorId : null,
+          amount: distributorFee,
+          sourceType: "COMMISSION_DISTRIBUTOR",
+          memo: "충전 승인 총판 수수료 적립",
+        },
+        {
+          distributorId: feeRates?.sub_distributor_id,
+          amount: subDistributorFee,
+          sourceType: "COMMISSION_SUB_DISTRIBUTOR",
+          memo: "충전 승인 추가 총판 수수료 적립",
+        },
+      ],
+      updated.id,
+      input.processedBy,
+    );
 
     return updateResult;
   });
