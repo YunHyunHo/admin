@@ -138,6 +138,7 @@ const quickActions = [
 const settlementOnlyRoles = new Set<SessionUser["role"]>([
   "TOP_DISTRIBUTOR",
   "ADMIN",
+  "DOMAIN_ADMIN",
 ]);
 const settlementOnlyMenuGroups = new Set(["대시보드", "정산"]);
 
