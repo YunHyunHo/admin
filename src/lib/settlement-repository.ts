@@ -82,20 +82,7 @@ async function getProfitSectionSeeds(user: SessionUser) {
     user.role === "MASTER"
       ? { sql: "", values: [] as string[] }
       : user.role === "TOP_DISTRIBUTOR"
-        ? {
-            sql: `
-              and (
-                d.admin_id = $1::uuid
-                or d.parent_distributor_id in (
-                  select own_dist.id
-                  from distributors own_dist
-                  where own_dist.admin_id = $1::uuid
-                    and own_dist.status = 'ACTIVE'
-                )
-              )
-            `,
-            values: [user.id],
-          }
+        ? { sql: "and d.admin_id = $1::uuid", values: [user.id] }
         : { sql: "and d.admin_id = $1::uuid", values: [user.id] };
   const result = await query<ProfitSectionSeedRow>(
     `
@@ -121,17 +108,43 @@ async function getCommissionAggregates(
   user: SessionUser,
   startDate: string,
   endDate: string,
+  options: { profitScope?: boolean } = {},
 ) {
-  const commissionScope = await getScopedDataCondition(user, {
-    company: "co",
-    distributor: "dist",
-    distributorAdmin: "dist_admin",
-  });
-  const exchangeScope = await getScopedDataCondition(user, {
-    company: "er",
-    distributor: "dist",
-    distributorAdmin: "dist_admin",
-  });
+  const getProfitScope = async (companyAlias: string) => {
+    if (!options.profitScope) {
+      return getScopedDataCondition(user, {
+        company: companyAlias,
+        distributor: "dist",
+        distributorAdmin: "dist_admin",
+      });
+    }
+
+    if (user.role === "MASTER") {
+      return { sql: "", values: [] as unknown[] };
+    }
+
+    if (user.role === "TOP_DISTRIBUTOR") {
+      return {
+        sql: "and (dist.admin_id = $1::uuid or parent_dist.admin_id = $1::uuid)",
+        values: [user.id] as unknown[],
+      };
+    }
+
+    if (user.role === "ADMIN") {
+      return {
+        sql: "and dist.admin_id = $1::uuid",
+        values: [user.id] as unknown[],
+      };
+    }
+
+    return getScopedDataCondition(user, {
+      company: companyAlias,
+      distributor: "dist",
+      distributorAdmin: "dist_admin",
+    });
+  };
+  const commissionScope = await getProfitScope("co");
+  const exchangeScope = await getProfitScope("er");
   const commissionScopeSql = commissionScope.sql.replaceAll("$1", "$3");
   const exchangeScopeSql = exchangeScope.sql.replaceAll("$1", "$3");
   const scopedValues = commissionScope.values.length
@@ -229,7 +242,9 @@ export async function getSettlementProfitForUser(
     return getSettlementProfit(user.companyName, startDate, endDate, state, settings);
   }
 
-  const aggregateRows = await getCommissionAggregates(user, startDate, endDate);
+  const aggregateRows = await getCommissionAggregates(user, startDate, endDate, {
+    profitScope: true,
+  });
   const domainName = aggregateRows[0]?.domain_name ?? "전체";
   const rows = aggregateRows.map((row) => {
     const chargeTotal = Number(row.charge_total);
@@ -290,7 +305,12 @@ export async function getSettlementProfitForUser(
     sectionMap.set(id, section);
     return section;
   };
-  ensureSection("headquarters", "본사", "본사");
+  const showOnlyOwnDistributorProfit =
+    user.role === "TOP_DISTRIBUTOR" || user.role === "ADMIN";
+
+  if (!showOnlyOwnDistributorProfit) {
+    ensureSection("headquarters", "본사", "본사");
+  }
 
   for (const seed of await getProfitSectionSeeds(user)) {
     ensureSection(seed.id, seed.title, seed.category);
@@ -335,14 +355,20 @@ export async function getSettlementProfitForUser(
       payoutTotal: exchangeTotal,
     };
 
-    addSectionRow("headquarters", "본사", "본사", {
-      ...base,
-      feeTotal: companyFeeTotal,
-      companyFeeTotal,
-      distributorFeeTotal: 0,
-    });
+    if (!showOnlyOwnDistributorProfit) {
+      addSectionRow("headquarters", "본사", "본사", {
+        ...base,
+        feeTotal: companyFeeTotal,
+        companyFeeTotal,
+        distributorFeeTotal: 0,
+      });
+    }
 
-    if (row.top_distributor_id && row.top_distributor_name) {
+    if (
+      row.top_distributor_id &&
+      row.top_distributor_name &&
+      user.role !== "ADMIN"
+    ) {
       addSectionRow(`top:${row.top_distributor_id}`, row.top_distributor_name, "상위총판", {
         ...base,
         feeTotal: topDistributorFeeTotal,
@@ -351,7 +377,11 @@ export async function getSettlementProfitForUser(
       });
     }
 
-    if (row.distributor_id && row.distributor_name) {
+    if (
+      row.distributor_id &&
+      row.distributor_name &&
+      user.role !== "TOP_DISTRIBUTOR"
+    ) {
       addSectionRow(`dist:${row.distributor_id}`, row.distributor_name, "총판", {
         ...base,
         feeTotal: distributorFeeTotal,
