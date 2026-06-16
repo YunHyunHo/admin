@@ -138,7 +138,6 @@ const quickActions = [
 const settlementOnlyRoles = new Set<SessionUser["role"]>([
   "TOP_DISTRIBUTOR",
   "ADMIN",
-  "DOMAIN_ADMIN",
 ]);
 const settlementOnlyMenuGroups = new Set(["대시보드", "정산"]);
 
@@ -160,9 +159,12 @@ export async function AdminShell({
   const userRoleLabel =
     user.role === "MASTER"
       ? "마스터"
+      : user.role === "DOMAIN_ADMIN"
+        ? "어드민"
       : user.role === "TOP_DISTRIBUTOR"
         ? "상위총판"
         : "총판";
+  const hasMasterMenu = user.role === "MASTER" || user.role === "DOMAIN_ADMIN";
   const isSettlementOnlyUser = settlementOnlyRoles.has(user.role);
   const visibleMenuGroups = sideMenuGroups
     .filter((group) => {
@@ -170,12 +172,12 @@ export async function AdminShell({
         return settlementOnlyMenuGroups.has(group.title);
       }
 
-      return user.role === "MASTER" || !group.masterOnly;
+      return hasMasterMenu || !group.masterOnly;
     })
     .map((group) => ({
       ...group,
       items:
-        user.role === "MASTER"
+        hasMasterMenu
           ? group.items
           : group.items.filter((item) => !masterOnlyMenuKeys.has(item.key)),
     }))
