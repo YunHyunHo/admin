@@ -46,7 +46,6 @@ export default async function DashboardPage() {
       user={user}
       activeItem="dashboard-home"
       helperText=""
-      partnerSummaries={prioritizedPartnerSummaries}
     >
       <div className="space-y-5">
         <section className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.28)] sm:p-6">
