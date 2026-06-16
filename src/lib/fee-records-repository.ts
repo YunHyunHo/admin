@@ -27,7 +27,6 @@ type FeeRecordDbRow = {
   id: string;
   top_agent: string | null;
   sub_agent: string | null;
-  child_distributor_names: string | null;
   acquisition_branch: string;
   domain: string;
   uid: string;
@@ -41,9 +40,9 @@ type FeeRecordDbRow = {
 
 async function getFeeRecordScope(user: SessionUser): Promise<ScopedClause> {
   return getScopedDataCondition(user, {
-    company: "co",
-    distributor: "dist",
-    distributorAdmin: "dist_admin",
+    company: "cr",
+    distributor: "recipient_dist",
+    distributorAdmin: "recipient_admin",
   });
 }
 
@@ -52,13 +51,13 @@ function formatStamp(value: Date | string) {
 }
 
 function toFeeRecord(row: FeeRecordDbRow): FeeRecordRow {
-  const subAgent = row.sub_agent ?? row.child_distributor_names ?? "-";
+  const subAgent = row.sub_agent ?? "-";
 
   return {
     id: row.id,
     topAgent: row.top_agent ?? "마스터 관리자",
     subAgent,
-    acquisitionBranch: subAgent,
+    acquisitionBranch: row.acquisition_branch,
     domain: row.domain,
     uid: row.uid,
     amount: Number(row.amount),
@@ -83,45 +82,58 @@ export async function getFeeRecordsForUser(
   }
   const scope = await getFeeRecordScope(user);
   const scopeSql = scope.sql.replaceAll("$1", "$3");
-  const values = user.role === "MASTER"
-    ? [startDate, endDate]
-    : [startDate, endDate, user.id];
+  const values = [startDate, endDate, ...scope.values];
 
   const result = await query<FeeRecordDbRow>(
     `
       select
-        cr.id::text,
-        coalesce(parent_dist.name, dist.name) as top_agent,
-        case when parent_dist.id is null then null else dist.name end as sub_agent,
-        child_dist.names as child_distributor_names,
-        coalesce(case when parent_dist.id is null then child_dist.names else dist.name end, c.company_name) as acquisition_branch,
+        concat(t.source_id::text, ':', t.source_type, ':', t.distributor_id::text) as id,
+        case
+          when t.source_type = 'COMMISSION_TOP_DISTRIBUTOR' then recipient_dist.name
+          when recipient_parent.id is not null then recipient_parent.name
+          else coalesce(source_parent.name, source_dist.name, recipient_dist.name)
+        end as top_agent,
+        case
+          when t.source_type = 'COMMISSION_TOP_DISTRIBUTOR' then
+            case
+              when source_dist.id is not null and source_dist.id <> recipient_dist.id then source_dist.name
+              else null
+            end
+          else recipient_dist.name
+        end as sub_agent,
+        recipient_dist.name as acquisition_branch,
         coalesce(nullif(d.domain_name, ''), c.company_name, '-') as domain,
         cr.user_uid as uid,
-        co.charge_amount::text as amount,
-        co.commission_rate::text as fee_rate,
-        co.saved_commission::text as fee,
+        cr.amount::text as amount,
+        case
+          when cr.amount > 0 then round((t.amount / cr.amount) * 100, 4)
+          else 0
+        end::text as fee_rate,
+        t.amount::text as fee,
         cr.bank_name,
-        co.created_at as acquired_at,
+        t.created_at as acquired_at,
         cr.requested_at
-      from commission_records co
-      join charge_requests cr on cr.id = co.charge_request_id
-      join companies c on c.id = co.company_id
-      left join domains d on d.id = co.domain_id
-      left join distributors dist on dist.id = co.distributor_id
-      left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
-      left join admins dist_admin on dist_admin.id = dist.admin_id
-      left join lateral (
-        select string_agg(child.name, ', ' order by child.name) as names
-        from distributors child
-        where child.parent_distributor_id = dist.id
-          and child.status = 'ACTIVE'
-      ) child_dist on parent_dist.id is null
+      from distributor_balance_transactions t
+      join charge_requests cr on cr.id = t.source_id
+      join companies c on c.id = cr.company_id
+      left join domains d on d.id = cr.domain_id
+      left join distributors source_dist on source_dist.id = cr.distributor_id
+      left join distributors source_parent on source_parent.id = source_dist.parent_distributor_id
+      join distributors recipient_dist on recipient_dist.id = t.distributor_id
+      left join distributors recipient_parent on recipient_parent.id = recipient_dist.parent_distributor_id
+      left join admins recipient_admin on recipient_admin.id = recipient_dist.admin_id
       where
-        co.status in ('APPROVED', 'COMPLETED')
-        and co.created_at >= $1::date
-        and co.created_at < ($2::date + interval '1 day')
+        cr.status in ('APPROVED', 'COMPLETED')
+        and t.source_type in (
+          'COMMISSION_TOP_DISTRIBUTOR',
+          'COMMISSION_DISTRIBUTOR',
+          'COMMISSION_SUB_DISTRIBUTOR'
+        )
+        and t.amount > 0
+        and t.created_at >= $1::date
+        and t.created_at < ($2::date + interval '1 day')
         ${scopeSql}
-      order by co.created_at desc
+      order by t.created_at desc
       limit ${DEFAULT_ROW_LIMIT}
     `,
     values,
