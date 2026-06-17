@@ -3,12 +3,15 @@
 import { useMemo, useState } from "react";
 
 import { ModalFeedback } from "@/components/modal-feedback";
-import type { AdminRole, PublicAdminAccount } from "@/lib/admin-accounts";
+import type { AdminAccountRecord, AdminRole } from "@/lib/admin-accounts";
+
+type AdminListAccount = Omit<AdminAccountRecord, "password">;
 
 type AdminRow = {
   id: string;
   nickname: string;
   loginId: string;
+  visiblePassword: string;
   role: AdminRole;
   createdAt: string;
   status: "ACTIVE" | "SUSPENDED";
@@ -20,14 +23,14 @@ type AdminRow = {
 };
 
 const rowsPerPage = 10;
-function getVisibleAdmins(accounts: PublicAdminAccount[]) {
+function getVisibleAdmins(accounts: AdminListAccount[]) {
   return accounts.filter(
     (account) => account.role === "DOMAIN_ADMIN" && !account.hasDomainMapping,
   );
 }
 
 type AdminsBoardProps = {
-  initialAdmins: PublicAdminAccount[];
+  initialAdmins: AdminListAccount[];
   managedCompanies: string[];
   canManageAdmins: boolean;
 };
@@ -47,6 +50,9 @@ export function AdminsBoard({
   const [nickname, setNickname] = useState("");
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
+  const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>(
+    {},
+  );
   const [message, setMessage] = useState("");
   const [createModalMessage, setCreateModalMessage] = useState("");
   const [processingAdminId, setProcessingAdminId] = useState<string | null>(
@@ -82,7 +88,7 @@ export function AdminsBoard({
   );
 
   function applyAccountResponse(data: {
-    accounts: PublicAdminAccount[];
+    accounts: AdminListAccount[];
     managedCompanies: string[];
   }) {
     setAdmins(getVisibleAdmins(data.accounts));
@@ -105,7 +111,7 @@ export function AdminsBoard({
       ? safeParseJson(responseText)
       : { message: "서버 응답이 비어 있습니다." }) as
       | {
-          accounts: PublicAdminAccount[];
+          accounts: AdminListAccount[];
           managedCompanies: string[];
           message?: string;
         }
@@ -303,6 +309,7 @@ export function AdminsBoard({
                 {[
                   "닉네임",
                   "아이디",
+                  "비밀번호",
                   "상태",
                   "업체선택",
                   "가입일",
@@ -328,6 +335,22 @@ export function AdminsBoard({
                   </td>
                   <td className="border border-white/18 px-4 py-4 text-center font-semibold">
                     {admin.loginId}
+                  </td>
+                  <td className="border border-white/18 px-4 py-4 text-center">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setRevealedPasswords((current) => ({
+                          ...current,
+                          [admin.id]: !current[admin.id],
+                        }))
+                      }
+                      className="rounded-lg bg-teal-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-400"
+                    >
+                      {revealedPasswords[admin.id]
+                        ? admin.visiblePassword || "확인 불가"
+                        : "비밀번호 확인"}
+                    </button>
                   </td>
                   <td className="border border-white/18 px-4 py-4 text-center">
                     <span className="mr-2 font-semibold text-sky-400">

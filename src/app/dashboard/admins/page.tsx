@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin-shell";
 import { AdminsBoard } from "@/components/admins-board";
 import {
+  getAllAdminAccounts,
   getManagedCompanyOptions,
-  getPublicAdminAccounts,
 } from "@/lib/admin-accounts";
 import { getSessionUser } from "@/lib/auth";
 import { canManageMasterResources } from "@/lib/permissions";
@@ -24,7 +24,14 @@ export default async function AdminsPage() {
   }
 
   const [adminAccounts, managedCompanies] = await Promise.all([
-    getPublicAdminAccounts(user),
+    getAllAdminAccounts(user).then((accounts) =>
+      accounts.map((account) => {
+        const { password, ...visibleAccount } = account;
+        void password;
+
+        return visibleAccount;
+      }),
+    ),
     getManagedCompanyOptions(),
   ]);
 

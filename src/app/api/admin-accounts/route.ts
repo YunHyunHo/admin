@@ -60,6 +60,15 @@ function toPublicList(accounts: AdminAccountRecord[]) {
   });
 }
 
+function toVisiblePasswordList(accounts: AdminAccountRecord[]) {
+  return accounts.map((account) => {
+    const { password, ...visibleAccount } = account;
+    void password;
+
+    return visibleAccount;
+  });
+}
+
 function isAdminRole(value: string | undefined): value is AdminRole {
   return (
     value === "MASTER" ||
@@ -84,7 +93,9 @@ export async function GET() {
     ]);
 
     return NextResponse.json({
-      accounts: toPublicList(allAccounts),
+      accounts: isWritableRole(user.role)
+        ? toVisiblePasswordList(allAccounts)
+        : toPublicList(allAccounts),
       detailedAccounts: isWritableRole(user.role) ? allAccounts : [],
       managedCompanies,
     });
@@ -202,7 +213,7 @@ export async function POST(request: Request) {
       const updatedAccounts = await getAllAdminAccounts(user);
 
       return NextResponse.json({
-        accounts: toPublicList(updatedAccounts),
+        accounts: toVisiblePasswordList(updatedAccounts),
         detailedAccounts: updatedAccounts,
         managedCompanies: managedCompanyOptions,
         message: `${loginId} 계정이 생성되었습니다.`,
@@ -224,7 +235,7 @@ export async function POST(request: Request) {
       ...issuedAccounts,
     ];
     const response = NextResponse.json({
-      accounts: toPublicList([allAccounts[0], ...nextAccounts]),
+      accounts: toVisiblePasswordList([allAccounts[0], ...nextAccounts]),
       detailedAccounts: [allAccounts[0], ...nextAccounts],
       managedCompanies: managedCompanyOptions,
       message: `${loginId} 계정이 생성되었습니다.`,
@@ -338,7 +349,7 @@ export async function PATCH(request: Request) {
     ]);
 
     return NextResponse.json({
-      accounts: toPublicList(updatedAccounts),
+      accounts: toVisiblePasswordList(updatedAccounts),
       detailedAccounts: updatedAccounts,
       managedCompanies,
       message:
@@ -431,7 +442,7 @@ export async function PATCH(request: Request) {
   }
 
   const response = NextResponse.json({
-    accounts: toPublicList([...(await getAllAdminAccounts(user)).slice(0, 1), ...nextAccounts]),
+    accounts: toVisiblePasswordList([...(await getAllAdminAccounts(user)).slice(0, 1), ...nextAccounts]),
     managedCompanies: await getManagedCompanyOptions(),
     message,
   });
