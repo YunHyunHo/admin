@@ -131,6 +131,7 @@ export async function PATCH(request: Request) {
 
   try {
     await updateFeeRateDomainDistributor({
+      user,
       domainId: body.domainId,
       distributorId: body.distributorId,
       target: body.target,

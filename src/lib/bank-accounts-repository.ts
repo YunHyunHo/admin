@@ -1,6 +1,9 @@
 import { hasDatabaseUrl, query } from "@/lib/db";
 import { formatKoreanDateTime } from "@/lib/korean-time";
-import { getScopedDistributorCondition } from "@/lib/master-scope";
+import {
+  getMasterOwnedCompanyExistsCondition,
+  getScopedDistributorCondition,
+} from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
 import type {
   AccountBranchOption,
@@ -55,13 +58,18 @@ export async function getBankAccountBoardData(user?: SessionUser) {
     };
   }
   const scope = user
-    ? user.role === "MASTER"
-      ? { sql: "", values: [] as string[] }
-      : getScopedDistributorCondition(user)
+    ? getScopedDistributorCondition(user)
     : { sql: "", values: [] as string[] };
   const accountScopeSql =
     user?.role === "MASTER"
-      ? ""
+      ? `and (
+          ba.created_by = $1::uuid
+          or dist_admin.created_by = $1::uuid
+          or (
+            ba.company_id is not null
+            and ${getMasterOwnedCompanyExistsCondition("ba.company_id")}
+          )
+        )`
       : scope.sql.replaceAll("dist.", "d.");
 
   const [accounts, branchOptions] = await Promise.all([
@@ -146,9 +154,10 @@ export async function createBankAccount(
         distributor_id,
         bank_name,
         account_number,
-        account_holder
+        account_holder,
+        created_by
       )
-      values ($1::uuid, $2::uuid, $3, $4, $5)
+      values ($1::uuid, $2::uuid, $3, $4, $5, $6::uuid)
     `,
     [
       null,
@@ -156,6 +165,7 @@ export async function createBankAccount(
       input.bankName,
       input.accountNumber,
       input.holder,
+      _user.id,
     ],
   );
 }
@@ -165,26 +175,68 @@ export async function updateBankAccount(input: {
   holder?: string;
   accountNumber?: string;
   isActive?: boolean;
+  user: SessionUser;
 }) {
   await query(
     `
-      update bank_accounts
+      update bank_accounts ba
       set
         account_holder = coalesce($2, account_holder),
         account_number = coalesce($3, account_number),
         is_active = coalesce($4, is_active),
         updated_at = now()
-      where id = $1::uuid
+      where ba.id = $1::uuid
+        and (
+          ba.created_by = $5::uuid
+          or (
+            ba.distributor_id is not null
+            and exists (
+              select 1
+              from distributors d
+              join admins dist_admin on dist_admin.id = d.admin_id
+              where d.id = ba.distributor_id
+                and dist_admin.created_by = $5::uuid
+            )
+          )
+          or (
+            ba.company_id is not null
+            and ${getMasterOwnedCompanyExistsCondition("ba.company_id", "$5")}
+          )
+        )
     `,
     [
       input.id,
       input.holder ?? null,
       input.accountNumber ?? null,
       input.isActive ?? null,
+      input.user.id,
     ],
   );
 }
 
-export async function deleteBankAccount(id: string) {
-  await query("delete from bank_accounts where id = $1::uuid", [id]);
+export async function deleteBankAccount(id: string, user: SessionUser) {
+  await query(
+    `
+      delete from bank_accounts ba
+      where ba.id = $1::uuid
+        and (
+          ba.created_by = $2::uuid
+          or (
+            ba.distributor_id is not null
+            and exists (
+              select 1
+              from distributors d
+              join admins dist_admin on dist_admin.id = d.admin_id
+              where d.id = ba.distributor_id
+                and dist_admin.created_by = $2::uuid
+            )
+          )
+          or (
+            ba.company_id is not null
+            and ${getMasterOwnedCompanyExistsCondition("ba.company_id", "$2")}
+          )
+        )
+    `,
+    [id, user.id],
+  );
 }

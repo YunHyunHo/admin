@@ -171,11 +171,11 @@ export async function PATCH(request: Request) {
 
     try {
       if (payload.action === "approve") {
-        await approveDomainExchange(payload.id, user.id);
+        await approveDomainExchange(payload.id, user);
       } else if (payload.action === "reject") {
-        await rejectDomainExchange(payload.id, user.id);
+        await rejectDomainExchange(payload.id, user);
       } else {
-        await cancelApprovedDomainExchange(payload.id, user.id);
+        await cancelApprovedDomainExchange(payload.id, user);
       }
     } catch (error) {
       return NextResponse.json(

@@ -6,7 +6,10 @@ import { getAdminSettingsFromCookie } from "@/lib/settings-cookie";
 import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
 import { hasDatabaseUrl, query } from "@/lib/db";
 import { KOREA_TIME_ZONE } from "@/lib/korean-time";
-import { getScopedDataCondition } from "@/lib/master-scope";
+import {
+  getScopedDataCondition,
+  getScopedDistributorCondition,
+} from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
 
 type SettlementAggregateRow = {
@@ -80,7 +83,7 @@ async function getDomainSettlementSeeds(user: SessionUser) {
 async function getProfitSectionSeeds(user: SessionUser) {
   const scope =
     user.role === "MASTER"
-      ? { sql: "", values: [] as string[] }
+      ? getScopedDistributorCondition(user, "d", "dist_admin")
       : user.role === "TOP_DISTRIBUTOR"
         ? { sql: "and d.admin_id = $1::uuid", values: [user.id] }
         : { sql: "and d.admin_id = $1::uuid", values: [user.id] };
@@ -120,7 +123,11 @@ async function getCommissionAggregates(
     }
 
     if (user.role === "MASTER") {
-      return { sql: "", values: [] as unknown[] };
+      return getScopedDataCondition(user, {
+        company: companyAlias,
+        distributor: "dist",
+        distributorAdmin: "dist_admin",
+      });
     }
 
     if (user.role === "TOP_DISTRIBUTOR") {

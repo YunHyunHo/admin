@@ -48,12 +48,14 @@ const indexStatements = [
   "alter type admin_role add value if not exists 'TOP_DISTRIBUTOR'",
   "alter table admins add column if not exists password_ciphertext text",
   "alter table domains add column if not exists current_balance numeric(18, 0) not null default 0",
+  "alter table bank_accounts add column if not exists created_by uuid references admins(id)",
   "alter table exchange_requests alter column domain_id drop not null",
   "create index if not exists idx_admins_created_by_status on admins (created_by, status)",
   "create index if not exists idx_distributors_admin_status_created on distributors (admin_id, status, created_at desc)",
   "create index if not exists idx_domains_distributor_status_created on domains (distributor_id, status, created_at desc)",
   "create index if not exists idx_domains_company_status_created on domains (company_id, status, created_at desc)",
   "create index if not exists idx_bank_accounts_lookup on bank_accounts (company_id, distributor_id, is_active, created_at desc)",
+  "create index if not exists idx_bank_accounts_created_by on bank_accounts (created_by, created_at desc)",
   "create index if not exists idx_charge_requests_distributor_requested on charge_requests (distributor_id, requested_at desc, created_at desc)",
   "create index if not exists idx_charge_requests_status_requested on charge_requests (status, requested_at desc)",
   "create index if not exists idx_charge_requests_domain_requested on charge_requests (domain_id, requested_at desc)",
@@ -74,6 +76,51 @@ const indexStatements = [
   "create index if not exists idx_exchange_requests_status_processed_kst on exchange_requests (status, ((processed_at at time zone 'Asia/Seoul'))) where processed_at is not null",
   "create index if not exists idx_commission_records_status_created_kst on commission_records (status, ((created_at at time zone 'Asia/Seoul')))",
   "create index if not exists idx_distributor_withdrawals_status_processed_kst on distributor_withdrawals (status, ((processed_at at time zone 'Asia/Seoul'))) where processed_at is not null",
+  `
+    update bank_accounts ba
+    set created_by = coalesce(
+          (
+            select owner_admin.created_by
+            from domains dom
+            join admin_domain_mappings adm on adm.domain_id = dom.id
+            join admins owner_admin on owner_admin.id = adm.admin_id
+            where dom.company_id = ba.company_id
+              and owner_admin.created_by is not null
+            order by owner_admin.created_at desc
+            limit 1
+          ),
+          (
+            select dist_admin.created_by
+            from distributors dist
+            join admins dist_admin on dist_admin.id = dist.admin_id
+            where dist.id = ba.distributor_id
+              and dist_admin.created_by is not null
+            limit 1
+          )
+        ),
+        updated_at = now()
+    where ba.created_by is null
+      and coalesce(
+        (
+          select owner_admin.created_by
+          from domains dom
+          join admin_domain_mappings adm on adm.domain_id = dom.id
+          join admins owner_admin on owner_admin.id = adm.admin_id
+          where dom.company_id = ba.company_id
+            and owner_admin.created_by is not null
+          order by owner_admin.created_at desc
+          limit 1
+        ),
+        (
+          select dist_admin.created_by
+          from distributors dist
+          join admins dist_admin on dist_admin.id = dist.admin_id
+          where dist.id = ba.distributor_id
+            and dist_admin.created_by is not null
+          limit 1
+        )
+      ) is not null
+  `,
   `
     update distributors d
     set level = case when a.role = 'TOP_DISTRIBUTOR' then 'TOP_DISTRIBUTOR' else 'DISTRIBUTOR' end,

@@ -131,18 +131,20 @@ export async function PATCH(request: Request) {
 
   try {
     if (payload.action === "delete") {
-      await deleteDomainEntry(payload.id);
+      await deleteDomainEntry(payload.id, user);
     } else if (payload.action === "adjust-balance") {
       await adjustDomainBalance({
         id: payload.id,
         amount: Number(payload.amount),
         direction: payload.balanceDirection === "decrease" ? "decrease" : "increase",
         processedBy: user.id,
+        user,
       });
     } else if (payload.action === "link-account") {
       await linkDomainEntryAccount({
         id: payload.id,
         accountId: payload.accountId?.trim() ?? "",
+        user,
       });
     } else if (payload.action === "update-account") {
       await updateDomainEntryAccount({
@@ -150,11 +152,13 @@ export async function PATCH(request: Request) {
         bankName: payload.bankName?.trim() ?? "",
         accountHolder: payload.accountHolder?.trim() ?? "",
         accountNumber: payload.accountNumber?.trim() ?? "",
+        user,
       });
     } else {
       await updateDomainEntryStatus({
         id: payload.id,
         depositEnabled: Boolean(payload.depositEnabled),
+        user,
       });
     }
   } catch (error) {

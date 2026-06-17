@@ -80,7 +80,7 @@ export async function POST(request: Request) {
     }
 
     try {
-      await createDomain({ domainName, distributorId: distributorId! });
+      await createDomain({ domainName, distributorId: distributorId!, user });
     } catch (error) {
       return NextResponse.json(
         {
@@ -150,13 +150,14 @@ export async function PATCH(request: Request) {
 
     try {
       if (payload.action === "delete") {
-        await deleteDomain(payload.id);
+        await deleteDomain(payload.id, user);
       } else if (payload.action === "adjust-balance") {
         await adjustDomainBalance({
           id: payload.id,
           amount: Number(payload.amount),
           direction: payload.balanceDirection === "decrease" ? "decrease" : "increase",
           processedBy: user.id,
+          user,
         });
       } else {
         await updateDomain({
@@ -169,6 +170,7 @@ export async function PATCH(request: Request) {
             payload.action === "toggle-status"
               ? Boolean(payload.depositEnabled)
               : undefined,
+          user,
         });
       }
     } catch (error) {

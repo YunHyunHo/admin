@@ -103,9 +103,7 @@ export async function getDistributorWithdrawalRows(
     return fallbackRows;
   }
   const scope = user
-    ? user.role === "MASTER"
-      ? { sql: "", values: [] as string[] }
-      : getScopedDistributorCondition(user, "d", "dist_admin")
+    ? getScopedDistributorCondition(user, "d", "dist_admin")
     : { sql: "", values: [] as string[] };
 
   const withdrawals = await query<WithdrawalDbRow>(
@@ -242,10 +240,8 @@ export async function createDistributorWithdrawal(input: CreateDistributorWithdr
 
 export async function approveDistributorWithdrawal(id: string, processedBy: SessionUser) {
   await withTransaction(async (client) => {
-    const processingScopeSql =
-      processedBy.role === "MASTER" ? "" : "and dist_admin.created_by = $2::uuid";
-    const processingValues =
-      processedBy.role === "MASTER" ? [id] : [id, processedBy.id];
+    const processingScopeSql = "and dist_admin.created_by = $2::uuid";
+    const processingValues = [id, processedBy.id];
     const withdrawal = await client.query<ProcessingWithdrawalRow>(
       `
         select
@@ -336,8 +332,7 @@ export async function approveDistributorWithdrawal(id: string, processedBy: Sess
 }
 
 export async function rejectDistributorWithdrawal(id: string, processedBy: SessionUser) {
-  const processingScopeSql =
-    processedBy.role === "MASTER" ? "" : "and dist_admin.created_by = $2::uuid";
+  const processingScopeSql = "and dist_admin.created_by = $2::uuid";
   const result = await query<{ id: string }>(
     `
       update distributor_withdrawals dw
@@ -363,10 +358,8 @@ export async function rejectDistributorWithdrawal(id: string, processedBy: Sessi
 
 export async function cancelDistributorWithdrawal(id: string, processedBy: SessionUser) {
   await withTransaction(async (client) => {
-    const processingScopeSql =
-      processedBy.role === "MASTER" ? "" : "and dist_admin.created_by = $2::uuid";
-    const processingValues =
-      processedBy.role === "MASTER" ? [id] : [id, processedBy.id];
+    const processingScopeSql = "and dist_admin.created_by = $2::uuid";
+    const processingValues = [id, processedBy.id];
     const withdrawal = await client.query<ProcessingWithdrawalRow>(
       `
         select

@@ -141,7 +141,7 @@ export async function PATCH(request: Request) {
     }
 
     if (payload.action === "delete") {
-      await deleteBankAccount(payload.id);
+      await deleteBankAccount(payload.id, user);
     } else {
       await updateBankAccount({
         id: payload.id,
@@ -150,6 +150,7 @@ export async function PATCH(request: Request) {
           payload.action === "update" ? payload.accountNumber?.trim() : undefined,
         isActive:
           payload.action === "toggle-active" ? Boolean(payload.isActive) : undefined,
+        user,
       });
     }
 

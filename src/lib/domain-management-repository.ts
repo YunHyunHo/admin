@@ -1,6 +1,10 @@
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
 import { formatKoreanDateTime } from "@/lib/korean-time";
-import { getScopedDataCondition, type ScopedClause } from "@/lib/master-scope";
+import {
+  getMasterOwnedCompanyExistsCondition,
+  getScopedDataCondition,
+  type ScopedClause,
+} from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
 import type {
   DomainDistributorOption,
@@ -170,14 +174,18 @@ export async function getDomainBoardData(fallbackRows: DomainRow[], user?: Sessi
 export async function createDomain(input: {
   domainName: string;
   distributorId: string;
+  user: SessionUser;
 }) {
   const distributor = await query<{ company_id: string }>(
     `
       select company_id::text
-      from distributors
-      where id = $1::uuid and status = 'ACTIVE'
+      from distributors dist
+      left join admins dist_admin on dist_admin.id = dist.admin_id
+      where dist.id = $1::uuid
+        and dist.status = 'ACTIVE'
+        and dist_admin.created_by = $2::uuid
     `,
-    [input.distributorId],
+    [input.distributorId, input.user.id],
   );
   const companyId = distributor.rows[0]?.company_id;
 
@@ -205,15 +213,19 @@ export async function updateDomain(input: {
   domainName?: string;
   distributorId?: string;
   depositEnabled?: boolean;
+  user: SessionUser;
 }) {
   const distributor = input.distributorId
     ? await query<{ company_id: string }>(
         `
           select company_id::text
-          from distributors
-          where id = $1::uuid and status = 'ACTIVE'
+          from distributors dist
+          left join admins dist_admin on dist_admin.id = dist.admin_id
+          where dist.id = $1::uuid
+            and dist.status = 'ACTIVE'
+            and dist_admin.created_by = $2::uuid
         `,
-        [input.distributorId],
+        [input.distributorId, input.user.id],
       )
     : null;
   const companyId = distributor?.rows[0]?.company_id ?? null;
@@ -232,6 +244,7 @@ export async function updateDomain(input: {
         status = coalesce($5::admin_status, status),
         updated_at = now()
       where id = $1::uuid
+        and ${getMasterOwnedCompanyExistsCondition("domains.company_id", "$6")}
     `,
     [
       input.id,
@@ -243,6 +256,7 @@ export async function updateDomain(input: {
           ? "ACTIVE"
           : "SUSPENDED"
         : null,
+      input.user.id,
     ],
   );
 }
@@ -252,6 +266,7 @@ export async function adjustDomainBalance(input: {
   amount: number;
   direction: "increase" | "decrease";
   processedBy: string;
+  user: SessionUser;
 }) {
   if (!Number.isFinite(input.amount) || input.amount <= 0) {
     throw new Error("보유금 조정 금액을 확인해주세요.");
@@ -267,10 +282,11 @@ export async function adjustDomainBalance(input: {
         from domains dom
         where dom.id = $1::uuid
           and dom.status <> 'DELETED'
+          and ${getMasterOwnedCompanyExistsCondition("dom.company_id", "$2")}
         limit 1
         for update of dom
       `,
-      [input.id],
+      [input.id, input.user.id],
     );
     const domain = domainResult.rows[0];
 
@@ -326,13 +342,14 @@ export async function adjustDomainBalance(input: {
   });
 }
 
-export async function deleteDomain(id: string) {
+export async function deleteDomain(id: string, user: SessionUser) {
   await query(
     `
-      update domains
+      update domains dom
       set status = 'DELETED', updated_at = now()
-      where id = $1::uuid
+      where dom.id = $1::uuid
+        and ${getMasterOwnedCompanyExistsCondition("dom.company_id", "$2")}
     `,
-    [id],
+    [id, user.id],
   );
 }

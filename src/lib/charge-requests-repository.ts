@@ -8,7 +8,10 @@ import {
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
 import { ensureFeeRateSchema } from "@/lib/fee-rate-schema";
 import { formatKoreanDateTime } from "@/lib/korean-time";
-import { getScopedDistributorCondition } from "@/lib/master-scope";
+import {
+  getMasterOwnedCompanyExistsCondition,
+  getScopedDistributorCondition,
+} from "@/lib/master-scope";
 import {
   getDefaultChargeRequestState,
   getChargeRequestsByCompany,
@@ -359,9 +362,15 @@ async function getChargeRequestScope(
   } = {},
 ): Promise<ScopedClause> {
   if (user.role === "MASTER") {
+    const chargeAlias = aliases.charge ?? "cr";
+    const distributorAdminAlias = aliases.distributorAdmin ?? "dist_admin";
+
     return {
-      sql: "",
-      values: [],
+      sql: `and (
+        ${distributorAdminAlias}.created_by = $1::uuid
+        or ${getMasterOwnedCompanyExistsCondition(`${chargeAlias}.company_id`)}
+      )`,
+      values: [user.id],
     };
   }
 
@@ -594,10 +603,16 @@ async function getManualChargeScope(user: SessionUser) {
         from companies c
         left join distributors dist on dist.company_id = c.id
           and dist.status = 'ACTIVE'
+        left join admins dist_admin on dist_admin.id = dist.admin_id
         where c.status = 'ACTIVE'
+          and (
+            dist_admin.created_by = $1::uuid
+            or ${getMasterOwnedCompanyExistsCondition("c.id")}
+          )
         order by dist.created_at desc nulls last, c.created_at desc
         limit 1
       `,
+      [user.id],
     );
     const scope = result.rows[0];
 

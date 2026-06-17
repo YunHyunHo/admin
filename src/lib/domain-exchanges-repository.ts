@@ -10,6 +10,10 @@ import type {
 
 const DEFAULT_ROW_LIMIT = 200;
 
+function shiftSqlParams(sql: string, offset: number) {
+  return sql.replace(/\$(\d+)/g, (_, indexText) => `$${Number(indexText) + offset}`);
+}
+
 type ExchangeRequestDbRow = {
   id: string;
   user_uid: string | null;
@@ -150,6 +154,11 @@ export async function getDomainExchangeOptions(user: SessionUser) {
   if (!hasDatabaseUrl()) {
     return [] satisfies DomainExchangeOption[];
   }
+  const scope = await getScopedDataCondition(user, {
+    company: "dom",
+    distributor: "dist",
+    distributorAdmin: "dist_admin",
+  });
 
   const result = await query<DomainExchangeOption>(
     `
@@ -158,12 +167,13 @@ export async function getDomainExchangeOptions(user: SessionUser) {
         coalesce(nullif(dom.domain_name, ''), c.company_name) as name
       from domains dom
       join companies c on c.id = dom.company_id
-      join distributors dist on dist.id = dom.distributor_id
+      left join distributors dist on dist.id = dom.distributor_id
+      left join admins dist_admin on dist_admin.id = dist.admin_id
       where dom.status <> 'DELETED'
-        and dist.admin_id = $1::uuid
+        ${scope.sql}
       order by coalesce(nullif(dom.domain_name, ''), c.company_name) asc
     `,
-    [user.id],
+    scope.values,
   );
 
   return result.rows;
@@ -556,8 +566,14 @@ export async function createIntegrationDomainExchange(input: CreateDomainExchang
   });
 }
 
-export async function approveDomainExchange(id: string, processedBy: string) {
+export async function approveDomainExchange(id: string, processedBy: SessionUser) {
   await withTransaction(async (client) => {
+    const scope = await getScopedDataCondition(processedBy, {
+      company: "er",
+      distributor: "dist",
+      distributorAdmin: "dist_admin",
+    });
+    const scopeSql = shiftSqlParams(scope.sql, 1);
     const exchangeResult = await client.query<{
       id: string;
       domain_id: string | null;
@@ -571,11 +587,14 @@ export async function approveDomainExchange(id: string, processedBy: string) {
           er.distributor_id::text,
           er.amount::text
         from exchange_requests er
+        left join distributors dist on dist.id = er.distributor_id
+        left join admins dist_admin on dist_admin.id = dist.admin_id
         where er.id = $1::uuid
           and er.status = 'PENDING'
+          ${scopeSql}
         for update of er
       `,
-      [id],
+      [id, ...scope.values],
     );
     const exchange = exchangeResult.rows[0];
 
@@ -653,7 +672,7 @@ export async function approveDomainExchange(id: string, processedBy: string) {
           beforeBalance,
           afterBalance,
           id,
-          processedBy,
+          processedBy.id,
         ],
       );
     } else if (exchange.domain_id) {
@@ -680,7 +699,7 @@ export async function approveDomainExchange(id: string, processedBy: string) {
           values ($1::uuid, 'domain_exchange_approved', 'domain', $2::uuid, $3::jsonb, $4::jsonb)
         `,
         [
-          processedBy,
+          processedBy.id,
           exchange.domain_id,
           JSON.stringify({ balance: beforeBalance }),
           JSON.stringify({ balance: afterBalance, amount: -requestAmount }),
@@ -698,23 +717,38 @@ export async function approveDomainExchange(id: string, processedBy: string) {
         where id = $1::uuid
           and status = 'PENDING'
       `,
-      [id, processedBy],
+      [id, processedBy.id],
     );
   });
 }
 
-export async function rejectDomainExchange(id: string, processedBy: string) {
+export async function rejectDomainExchange(id: string, processedBy: SessionUser) {
+  const scope = await getScopedDataCondition(processedBy, {
+    company: "er",
+    distributor: "dist",
+    distributorAdmin: "dist_admin",
+  });
+  const scopeSql = shiftSqlParams(scope.sql, 2);
   const result = await query<{ id: string }>(
     `
-      update exchange_requests
+      with target as (
+        select er.id
+        from exchange_requests er
+        left join distributors dist on dist.id = er.distributor_id
+        left join admins dist_admin on dist_admin.id = dist.admin_id
+        where er.id = $1::uuid
+          and er.status = 'PENDING'
+          ${scopeSql}
+      )
+      update exchange_requests er
       set status = 'REJECTED',
           processed_at = coalesce(processed_at, now()),
           processed_by = $2::uuid,
           updated_at = now()
-      where id = $1::uuid and status = 'PENDING'
-      returning id::text
+      where er.id in (select id from target)
+      returning er.id::text
     `,
-    [id, processedBy],
+    [id, processedBy.id, ...scope.values],
   );
 
   if (!result.rows[0]) {
@@ -722,8 +756,14 @@ export async function rejectDomainExchange(id: string, processedBy: string) {
   }
 }
 
-export async function cancelApprovedDomainExchange(id: string, processedBy: string) {
+export async function cancelApprovedDomainExchange(id: string, processedBy: SessionUser) {
   await withTransaction(async (client) => {
+    const scope = await getScopedDataCondition(processedBy, {
+      company: "er",
+      distributor: "dist",
+      distributorAdmin: "dist_admin",
+    });
+    const scopeSql = shiftSqlParams(scope.sql, 1);
     const exchangeResult = await client.query<{
       id: string;
       domain_id: string | null;
@@ -737,11 +777,14 @@ export async function cancelApprovedDomainExchange(id: string, processedBy: stri
           er.distributor_id::text,
           er.amount::text
         from exchange_requests er
+        left join distributors dist on dist.id = er.distributor_id
+        left join admins dist_admin on dist_admin.id = dist.admin_id
         where er.id = $1::uuid
           and er.status in ('APPROVED', 'COMPLETED')
+          ${scopeSql}
         for update of er
       `,
-      [id],
+      [id, ...scope.values],
     );
     const exchange = exchangeResult.rows[0];
 
@@ -788,7 +831,7 @@ export async function cancelApprovedDomainExchange(id: string, processedBy: stri
           values ($1::uuid, 'domain_exchange_canceled', 'domain', $2::uuid, $3::jsonb, $4::jsonb)
         `,
         [
-          processedBy,
+          processedBy.id,
           exchange.domain_id,
           JSON.stringify({ balance: beforeBalance }),
           JSON.stringify({ balance: afterBalance, amount: requestAmount }),
@@ -847,7 +890,7 @@ export async function cancelApprovedDomainExchange(id: string, processedBy: stri
           beforeBalance,
           afterBalance,
           id,
-          processedBy,
+          processedBy.id,
         ],
       );
     }
@@ -862,7 +905,7 @@ export async function cancelApprovedDomainExchange(id: string, processedBy: stri
         where id = $1::uuid
           and status in ('APPROVED', 'COMPLETED')
       `,
-      [id, processedBy],
+      [id, processedBy.id],
     );
   });
 }

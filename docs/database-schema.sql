@@ -126,6 +126,7 @@ create table bank_accounts (
   account_number text not null,
   account_holder text not null,
   is_active boolean not null default true,
+  created_by uuid references admins(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

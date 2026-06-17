@@ -2,7 +2,10 @@ import { hashPassword } from "@/lib/password";
 import { decryptVisiblePassword, encryptVisiblePassword } from "@/lib/admin-accounts";
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
 import { getDomainManagementRows } from "@/lib/domain-management-repository";
-import { getScopedDistributorCondition } from "@/lib/master-scope";
+import {
+  getMasterOwnedCompanyExistsCondition,
+  getScopedDistributorCondition,
+} from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
 
 export type DomainListOwnerOption = {
@@ -79,13 +82,10 @@ function isUuid(value: string | undefined) {
 }
 
 export async function getDomainListBoardData(user: SessionUser) {
-  const scope =
-    user.role === "MASTER"
-      ? { sql: "", values: [] as string[] }
-      : getScopedDistributorCondition(user);
+  const scope = getScopedDistributorCondition(user);
   const domainAdminScope =
     user.role === "MASTER"
-      ? { sql: "", values: [] as string[] }
+      ? { sql: "and a.created_by = $1::uuid", values: [user.id] }
       : user.role === "DOMAIN_ADMIN"
         ? { sql: "and a.id = $1::uuid", values: [user.id] }
         : { sql: "and a.created_by = $1::uuid", values: [user.id] };
@@ -348,9 +348,10 @@ export async function createDomainEntry(input: CreateDomainEntryInput) {
             bank_name,
             account_number,
             account_holder,
+            created_by,
             is_active
           )
-          values ($1::uuid, $2::uuid, $3, $4, $5, true)
+          values ($1::uuid, $2::uuid, $3, $4, $5, $6::uuid, true)
         `,
         [
           companyId,
@@ -358,6 +359,7 @@ export async function createDomainEntry(input: CreateDomainEntryInput) {
           input.bankName.trim(),
           input.accountNumber.trim(),
           input.accountHolder.trim(),
+          input.createdById,
         ],
       );
     });
@@ -390,16 +392,19 @@ export async function createDomainEntry(input: CreateDomainEntryInput) {
 export async function updateDomainEntryStatus(input: {
   id: string;
   depositEnabled: boolean;
+  user: SessionUser;
 }) {
   await query(
     `
-      update domains
+      update domains dom
       set
         status = $2::admin_status,
         updated_at = now()
-      where id = $1::uuid
+      where dom.id = $1::uuid
+        and dom.status <> 'DELETED'
+        and ${getMasterOwnedCompanyExistsCondition("dom.company_id", "$3")}
     `,
-    [input.id, input.depositEnabled ? "ACTIVE" : "SUSPENDED"],
+    [input.id, input.depositEnabled ? "ACTIVE" : "SUSPENDED", input.user.id],
   );
 }
 
@@ -408,6 +413,7 @@ export async function updateDomainEntryAccount(input: {
   bankName: string;
   accountHolder: string;
   accountNumber: string;
+  user: SessionUser;
 }) {
   if (!isUuid(input.id)) {
     throw new Error("도메인 정보를 확인해주세요.");
@@ -440,9 +446,10 @@ export async function updateDomainEntryAccount(input: {
         from domains dom
         where dom.id = $1::uuid
           and dom.status <> 'DELETED'
+          and ${getMasterOwnedCompanyExistsCondition("dom.company_id", "$2")}
         limit 1
       `,
-      [input.id],
+      [input.id, input.user.id],
     );
 
     const domain = domainResult.rows[0];
@@ -459,6 +466,7 @@ export async function updateDomainEntryAccount(input: {
             bank_name = $2,
             account_number = $3,
             account_holder = $4,
+            created_by = coalesce(created_by, $5::uuid),
             is_active = true,
             updated_at = now()
           where id = $1::uuid
@@ -468,6 +476,7 @@ export async function updateDomainEntryAccount(input: {
           input.bankName.trim(),
           input.accountNumber.trim(),
           input.accountHolder.trim(),
+          input.user.id,
         ],
       );
       return;
@@ -481,9 +490,10 @@ export async function updateDomainEntryAccount(input: {
           bank_name,
           account_number,
           account_holder,
+          created_by,
           is_active
         )
-        values ($1::uuid, $2::uuid, $3, $4, $5, true)
+        values ($1::uuid, $2::uuid, $3, $4, $5, $6::uuid, true)
       `,
       [
         domain.company_id,
@@ -491,6 +501,7 @@ export async function updateDomainEntryAccount(input: {
         input.bankName.trim(),
         input.accountNumber.trim(),
         input.accountHolder.trim(),
+        input.user.id,
       ],
     );
   });
@@ -499,6 +510,7 @@ export async function updateDomainEntryAccount(input: {
 export async function linkDomainEntryAccount(input: {
   id: string;
   accountId: string;
+  user: SessionUser;
 }) {
   if (!isUuid(input.id) || !isUuid(input.accountId)) {
     throw new Error("도메인 또는 계좌 정보를 확인해주세요.");
@@ -519,14 +531,15 @@ export async function linkDomainEntryAccount(input: {
       where dom.id = $1::uuid
         and dom.status <> 'DELETED'
         and ba.is_active = true
+        and ${getMasterOwnedCompanyExistsCondition("dom.company_id", "$3")}
         and (
-          (ba.company_id is null and ba.distributor_id is null)
+          (ba.company_id is null and ba.distributor_id is null and ba.created_by = $3::uuid)
           or ba.company_id = dom.company_id
           or ba.distributor_id = dom.distributor_id
         )
       limit 1
     `,
-    [input.id, input.accountId],
+    [input.id, input.accountId, input.user.id],
   );
 
   const selected = accountResult.rows[0];
@@ -540,14 +553,15 @@ export async function linkDomainEntryAccount(input: {
     bankName: selected.bank_name,
     accountHolder: selected.account_holder,
     accountNumber: selected.account_number,
+    user: input.user,
   });
 }
 
-export async function deleteDomainEntry(id: string) {
-  await deleteDomainEntryWithAccount(id, false);
+export async function deleteDomainEntry(id: string, user: SessionUser) {
+  await deleteDomainEntryWithAccount(id, false, user);
 }
 
-async function deleteDomainEntryWithAccount(id: string, hardDelete: boolean) {
+async function deleteDomainEntryWithAccount(id: string, hardDelete: boolean, user: SessionUser) {
   if (!isUuid(id)) {
     throw new Error("도메인 정보를 확인해주세요.");
   }
@@ -579,9 +593,10 @@ async function deleteDomainEntryWithAccount(id: string, hardDelete: boolean) {
           limit 1
         ) ba on true
         where dom.id = $1::uuid
+          and ${getMasterOwnedCompanyExistsCondition("dom.company_id", "$2")}
         limit 1
       `,
-      [id],
+      [id, user.id],
     );
 
     const companyName = domainRow.rows[0]?.company_name;

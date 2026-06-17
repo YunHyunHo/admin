@@ -2,7 +2,11 @@ import { getFeeRateByCompanyFromSettings } from "@/lib/charge-utils";
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
 import { ensureFeeRateSchema } from "@/lib/fee-rate-schema";
 import { formatKoreanDateTime } from "@/lib/korean-time";
-import { getScopedDistributorCondition } from "@/lib/master-scope";
+import {
+  getMasterOwnedCompanyExistsCondition,
+  getScopedDataCondition,
+  getScopedDistributorCondition,
+} from "@/lib/master-scope";
 import { getAdminSettingsFromCookie } from "@/lib/settings-cookie";
 import type { SessionUser } from "@/lib/auth";
 
@@ -127,10 +131,12 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
 
   await ensureFeeRateSchema();
 
-  const scope =
-    user.role === "MASTER"
-      ? { sql: "", values: [] as string[] }
-      : getScopedDistributorCondition(user);
+  const scope = await getScopedDataCondition(user, {
+    company: "dom",
+    distributor: "dist",
+    distributorAdmin: "dist_admin",
+  });
+  const distributorScope = getScopedDistributorCondition(user);
 
   const result = await query<FeeRateDbRow>(
     `
@@ -218,11 +224,14 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
           else 'DISTRIBUTOR'
         end as role
       from distributors dist
+      left join admins dist_admin on dist_admin.id = dist.admin_id
       where dist.status = 'ACTIVE'
+        ${distributorScope.sql}
       order by
         case when dist.parent_distributor_id is null then 0 else 1 end,
         dist.name asc
     `,
+    distributorScope.values,
   );
 
   const rows = result.rows.map(toSettingsRow);
@@ -236,6 +245,7 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
 }
 
 export async function updateFeeRateDomainDistributor(input: {
+  user: SessionUser;
   domainId?: string;
   distributorId?: string;
   target?: "topDistributor" | "distributor" | "subDistributor";
@@ -254,12 +264,14 @@ export async function updateFeeRateDomainDistributor(input: {
     const distributorResult = await client.query<{ id: string }>(
       `
         select id::text
-        from distributors
-        where id = $1::uuid
-          and status = 'ACTIVE'
+        from distributors dist
+        left join admins dist_admin on dist_admin.id = dist.admin_id
+        where dist.id = $1::uuid
+          and dist.status = 'ACTIVE'
+          and dist_admin.created_by = $2::uuid
         limit 1
       `,
-      [input.distributorId],
+      [input.distributorId, input.user.id],
     );
 
     if (!distributorResult.rows[0]) {
@@ -288,9 +300,10 @@ export async function updateFeeRateDomainDistributor(input: {
           from domains dom
           where dom.id = $1::uuid
             and dom.status <> 'DELETED'
+            and ${getMasterOwnedCompanyExistsCondition("dom.company_id", "$2")}
           limit 1
         `,
-        [input.domainId],
+        [input.domainId, input.user.id],
       );
       const domain = domainResult.rows[0];
 
@@ -341,9 +354,10 @@ export async function updateFeeRateDomainDistributor(input: {
         set distributor_id = $2::uuid, updated_at = now()
         where id = $1::uuid
           and status <> 'DELETED'
+          and ${getMasterOwnedCompanyExistsCondition("domains.company_id", "$3")}
         returning id::text
       `,
-      [input.domainId, input.distributorId],
+      [input.domainId, input.distributorId, input.user.id],
     );
 
     if (!domainResult.rows[0]) {
@@ -416,10 +430,11 @@ export async function saveFeeRateSettings(input: {
         from domains dom
         where dom.id = $1::uuid
           and dom.status <> 'DELETED'
+          and ${getMasterOwnedCompanyExistsCondition("dom.company_id", "$2")}
         limit 1
         for update
       `,
-      [input.domainId],
+      [input.domainId, input.user.id],
     );
 
     const target = domainResult.rows[0];

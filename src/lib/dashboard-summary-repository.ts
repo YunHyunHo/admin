@@ -71,21 +71,28 @@ export async function getDashboardSummaryForUser(user: SessionUser) {
           values: [await getManagedCompanyIds(user.id)] as unknown[],
         }
       : user.role === "MASTER"
-        ? { sql: "", values: [] as unknown[] }
+        ? getScopedDistributorCondition(
+            user,
+            "balance_dist",
+            "balance_dist_admin",
+          )
         : getScopedDistributorCondition(
             user,
             "balance_dist",
             "balance_dist_admin",
           );
-  const feeRateScopeSql =
+  const feeRateScope =
     user.role === "DOMAIN_ADMIN"
-      ? scope.sql.replaceAll("cr.", "fee.")
-      : scope.sql
-        ? `and (
-            fee.distributor_id is null
-            or (${scope.sql.replace("and ", "")})
-          )`
-        : "";
+      ? {
+          sql: scope.sql.replaceAll("cr.", "fee."),
+          values: scope.values,
+        }
+      : await getScopedDataCondition(user, {
+          company: "fee",
+          distributor: "dist",
+          distributorAdmin: "dist_admin",
+        });
+  const feeRateScopeSql = feeRateScope.sql;
   const balanceTotalSql =
     user.role === "DOMAIN_ADMIN"
       ? `
@@ -140,7 +147,7 @@ export async function getDashboardSummaryForUser(user: SessionUser) {
         order by fee.starts_at desc, fee.created_at desc
         limit 1
       `,
-      scope.values,
+      feeRateScope.values,
     ),
   ]);
   const row = summaryResult.rows[0];
@@ -174,10 +181,7 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
 
   const dashboardScope =
     user.role === "MASTER"
-      ? {
-          sql: "",
-          values: [] as string[],
-        }
+      ? getScopedDistributorCondition(user)
       : user.role === "TOP_DISTRIBUTOR"
         ? {
             sql: `

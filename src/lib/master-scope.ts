@@ -24,6 +24,23 @@ export function getScopedDistributorCondition(
   };
 }
 
+export function getMasterOwnedCompanyExistsCondition(
+  companyIdExpression: string,
+  param = "$1",
+) {
+  return `
+    exists (
+      select 1
+      from admin_company_mappings scoped_acm
+      join admins scoped_admin on scoped_admin.id = scoped_acm.admin_id
+      where scoped_acm.company_id = ${companyIdExpression}
+        and scoped_admin.created_by = ${param}::uuid
+        and scoped_admin.role = 'DOMAIN_ADMIN'
+        and scoped_admin.status <> 'DELETED'
+    )
+  `;
+}
+
 export function getScopedMasterNameExpression(
   user: Pick<SessionUser, "role">,
   fallbackExpression = "owner_master.name",
@@ -56,9 +73,16 @@ export async function getScopedDataCondition(
   } = {},
 ): Promise<ScopedClause> {
   if (user.role === "MASTER") {
+    const companyAlias = aliases.company;
+    const companyScope = companyAlias
+      ? getMasterOwnedCompanyExistsCondition(`${companyAlias}.company_id`)
+      : "";
+    const distributorScope = `${aliases.distributorAdmin ?? "dist_admin"}.created_by = $1::uuid`;
+    const conditions = [distributorScope, companyScope].filter(Boolean);
+
     return {
-      sql: "",
-      values: [],
+      sql: conditions.length ? `and (${conditions.join(" or ")})` : "and 1 = 0",
+      values: [user.id],
     };
   }
 
