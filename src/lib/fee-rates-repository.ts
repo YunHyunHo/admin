@@ -263,7 +263,7 @@ export async function updateFeeRateDomainDistributor(input: {
 
     const distributorResult = await client.query<{ id: string }>(
       `
-        select id::text
+        select dist.id::text
         from distributors dist
         left join admins dist_admin on dist_admin.id = dist.admin_id
         where dist.id = $1::uuid
