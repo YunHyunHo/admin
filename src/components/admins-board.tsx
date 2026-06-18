@@ -378,11 +378,7 @@ export function AdminsBoard({
                       type="button"
                       onClick={() => {
                         setCompanySettingsAdmin(admin);
-                        setSelectedManagedCompanies(
-                          admin.managedCompanies.filter(
-                            (company) => company && company !== "전체",
-                          ),
-                        );
+                        setSelectedManagedCompanies([]);
                         setCompanyModalMessage("");
                       }}
                       disabled={!canManageAdmins}
