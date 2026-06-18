@@ -1228,32 +1228,26 @@ export async function processDbChargeRequest(input: {
       [updated.domain_id],
     );
     const feeRates = feeRateResult.rows[0];
-    let distributorId = updated.distributor_id;
-
-    if (!distributorId) {
-      const fallbackDistributor = await client.query<{ id: string }>(
-        `
-          select id::text
-          from distributors
-          where status = 'ACTIVE'
-          order by created_at asc
-          limit 1
-        `,
-      );
-
-      distributorId = fallbackDistributor.rows[0]?.id ?? null;
-    }
+    const distributorId = updated.distributor_id;
 
     const amount = Number(updated.amount);
-    const hasSubDistributor =
-      Boolean(updated.top_distributor_name) &&
-      Boolean(updated.distributor_name ?? updated.child_distributor_names);
+    const primaryDistributorId = feeRates?.distributor_id ?? distributorId;
+    const topDistributorId = feeRates?.top_distributor_id ?? primaryDistributorId;
+    const primaryIsChild =
+      Boolean(primaryDistributorId) &&
+      Boolean(topDistributorId) &&
+      primaryDistributorId !== topDistributorId;
+    const hasTopDistributor = Boolean(topDistributorId);
+    const hasDistributor = primaryIsChild;
+    const hasSubDistributor = Boolean(feeRates?.sub_distributor_id);
     const companyRate = Number(feeRates?.company_rate ?? "0.2");
-    const distributorRate = Number(feeRates?.distributor_rate ?? "0.1");
-    const agencyRate = Number(
-      feeRates?.agency_rate ?? (hasSubDistributor ? "0.1" : "0"),
-    );
-    const subDistributorRate = Number(feeRates?.sub_distributor_rate ?? "0");
+    const distributorRate = hasTopDistributor
+      ? Number(feeRates?.distributor_rate ?? "0.1")
+      : 0;
+    const agencyRate = hasDistributor ? Number(feeRates?.agency_rate ?? "0.1") : 0;
+    const subDistributorRate = hasSubDistributor
+      ? Number(feeRates?.sub_distributor_rate ?? "0")
+      : 0;
     const totalRate =
       companyRate + distributorRate + agencyRate + subDistributorRate;
     const companyFee = Math.floor(amount * (companyRate / 100));
@@ -1296,7 +1290,7 @@ export async function processDbChargeRequest(input: {
         updated.id,
         updated.company_id,
         updated.domain_id,
-        distributorId,
+        primaryDistributorId,
         amount,
         totalRate,
         companyFee,
@@ -1354,13 +1348,6 @@ export async function processDbChargeRequest(input: {
         ],
       );
     }
-
-    const primaryDistributorId = feeRates?.distributor_id ?? distributorId;
-    const topDistributorId = feeRates?.top_distributor_id ?? primaryDistributorId;
-    const primaryIsChild =
-      Boolean(primaryDistributorId) &&
-      Boolean(topDistributorId) &&
-      primaryDistributorId !== topDistributorId;
 
     await applyDistributorCommissionCredits(
       client,
