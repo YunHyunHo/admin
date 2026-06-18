@@ -162,12 +162,19 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
         c.company_name,
         coalesce(domain_admin.name, c.company_name) as vendor_name,
         coalesce(fr.company_rate, 0.2)::text as company_rate,
-        coalesce(fr.distributor_rate, 0.1)::text as distributor_rate,
-        coalesce(
-          fr.agency_rate,
-          case when parent_dist.id is null and child_dist.names is null then 0 else 0.1 end
-        )::text as agency_rate,
-        coalesce(fr.sub_distributor_rate, 0)::text as sub_distributor_rate,
+        case
+          when dist.id is null then 0
+          else coalesce(fr.distributor_rate, 0.1)
+        end::text as distributor_rate,
+        case
+          when dist.id is null then 0
+          when parent_dist.id is null and child_dist.names is null then 0
+          else coalesce(fr.agency_rate, 0.1)
+        end::text as agency_rate,
+        case
+          when fr.sub_distributor_id is null then 0
+          else coalesce(fr.sub_distributor_rate, 0)
+        end::text as sub_distributor_rate,
         coalesce(fr.updated_at, dom.updated_at, dist.updated_at) as updated_at
       from domains dom
       join companies c on c.id = dom.company_id
