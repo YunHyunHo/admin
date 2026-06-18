@@ -1093,7 +1093,10 @@ export async function processDbChargeRequest(input: {
             and source_type in (
               'COMMISSION_TOP_DISTRIBUTOR',
               'COMMISSION_DISTRIBUTOR',
-              'COMMISSION_SUB_DISTRIBUTOR'
+              'COMMISSION_SUB_DISTRIBUTOR',
+              'COMMISSION_PARTNER_1',
+              'COMMISSION_PARTNER_2',
+              'COMMISSION_PARTNER_3'
             )
             and amount > 0
           for update
@@ -1198,6 +1201,7 @@ export async function processDbChargeRequest(input: {
     await ensureFeeRateSchema(client);
 
     const feeRateResult = await client.query<{
+      id: string;
       distributor_id: string | null;
       top_distributor_id: string | null;
       sub_distributor_id: string | null;
@@ -1208,6 +1212,7 @@ export async function processDbChargeRequest(input: {
     }>(
       `
         select
+          fee.id::text,
           fee.distributor_id::text,
           coalesce(parent_dist.id, dist.id)::text as top_distributor_id,
           fee.sub_distributor_id::text,
@@ -1228,6 +1233,22 @@ export async function processDbChargeRequest(input: {
       [updated.domain_id],
     );
     const feeRates = feeRateResult.rows[0];
+    const partnerResult = feeRates?.id
+      ? await client.query<{
+          position: number;
+          distributor_id: string;
+          rate: string;
+        }>(
+          `
+            select position, distributor_id::text, rate::text
+            from fee_rate_partners
+            where fee_rate_id = $1::uuid
+            order by position asc
+          `,
+          [feeRates.id],
+        )
+      : { rows: [] };
+    const partnerRows = partnerResult.rows;
     const distributorId = updated.distributor_id;
 
     const amount = Number(updated.amount);
@@ -1248,14 +1269,41 @@ export async function processDbChargeRequest(input: {
     const subDistributorRate = hasSubDistributor
       ? Number(feeRates?.sub_distributor_rate ?? "0")
       : 0;
-    const totalRate =
-      companyRate + distributorRate + agencyRate + subDistributorRate;
+    const partnerCredits = partnerRows
+      .map((partner) => {
+        const rate = Number(partner.rate);
+
+        return {
+          distributorId: partner.distributor_id,
+          rate,
+          amount: Math.floor(amount * (rate / 100)),
+          sourceType: `COMMISSION_PARTNER_${partner.position}`,
+          memo: `충전 승인 파트너${partner.position} 수수료 적립`,
+        };
+      })
+      .filter((partner) => partner.rate > 0);
+    const partnerTotalRate = partnerCredits.reduce(
+      (sum, partner) => sum + partner.rate,
+      0,
+    );
+    const totalRate = partnerCredits.length
+      ? companyRate + partnerTotalRate
+      : companyRate + distributorRate + agencyRate + subDistributorRate;
     const companyFee = Math.floor(amount * (companyRate / 100));
-    const topDistributorFee = Math.floor(amount * (distributorRate / 100));
-    const distributorFee = Math.floor(amount * (agencyRate / 100));
-    const subDistributorFee = Math.floor(amount * (subDistributorRate / 100));
+    const topDistributorFee = partnerCredits.length
+      ? (partnerCredits[0]?.amount ?? 0)
+      : Math.floor(amount * (distributorRate / 100));
+    const distributorFee = partnerCredits.length
+      ? partnerCredits.slice(1).reduce((sum, partner) => sum + partner.amount, 0)
+      : Math.floor(amount * (agencyRate / 100));
+    const subDistributorFee = partnerCredits.length
+      ? 0
+      : Math.floor(amount * (subDistributorRate / 100));
     const savedCommission =
-      companyFee + topDistributorFee + distributorFee + subDistributorFee;
+      companyFee +
+      (partnerCredits.length
+        ? partnerCredits.reduce((sum, partner) => sum + partner.amount, 0)
+        : topDistributorFee + distributorFee + subDistributorFee);
     const netChargeAmount = amount - savedCommission;
 
     await client.query(
@@ -1290,7 +1338,7 @@ export async function processDbChargeRequest(input: {
         updated.id,
         updated.company_id,
         updated.domain_id,
-        primaryDistributorId,
+        partnerCredits[1]?.distributorId ?? primaryDistributorId,
         amount,
         totalRate,
         companyFee,
@@ -1351,26 +1399,28 @@ export async function processDbChargeRequest(input: {
 
     await applyDistributorCommissionCredits(
       client,
-      [
-        {
-          distributorId: topDistributorId,
-          amount: topDistributorFee,
-          sourceType: "COMMISSION_TOP_DISTRIBUTOR",
-          memo: "충전 승인 상위총판 수수료 적립",
-        },
-        {
-          distributorId: primaryIsChild ? primaryDistributorId : null,
-          amount: distributorFee,
-          sourceType: "COMMISSION_DISTRIBUTOR",
-          memo: "충전 승인 총판 수수료 적립",
-        },
-        {
-          distributorId: feeRates?.sub_distributor_id,
-          amount: subDistributorFee,
-          sourceType: "COMMISSION_SUB_DISTRIBUTOR",
-          memo: "충전 승인 추가 총판 수수료 적립",
-        },
-      ],
+      partnerCredits.length
+        ? partnerCredits
+        : [
+            {
+              distributorId: topDistributorId,
+              amount: topDistributorFee,
+              sourceType: "COMMISSION_TOP_DISTRIBUTOR",
+              memo: "충전 승인 상위총판 수수료 적립",
+            },
+            {
+              distributorId: primaryIsChild ? primaryDistributorId : null,
+              amount: distributorFee,
+              sourceType: "COMMISSION_DISTRIBUTOR",
+              memo: "충전 승인 총판 수수료 적립",
+            },
+            {
+              distributorId: feeRates?.sub_distributor_id,
+              amount: subDistributorFee,
+              sourceType: "COMMISSION_SUB_DISTRIBUTOR",
+              memo: "충전 승인 추가 총판 수수료 적립",
+            },
+          ],
       updated.id,
       input.processedBy,
     );

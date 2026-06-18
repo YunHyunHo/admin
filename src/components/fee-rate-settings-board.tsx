@@ -704,10 +704,10 @@ function getTargetOptions(
   }
 
   if (target === "topDistributor") {
-    return distributorOptions.filter((option) => option.role === "TOP_DISTRIBUTOR");
+    return distributorOptions;
   }
 
   void row;
 
-  return distributorOptions.filter((option) => option.role === "DISTRIBUTOR");
+  return distributorOptions;
 }

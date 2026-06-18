@@ -41,7 +41,10 @@ type FeeRecordDbRow = {
 const commissionSourceTypes = `
   'COMMISSION_TOP_DISTRIBUTOR',
   'COMMISSION_DISTRIBUTOR',
-  'COMMISSION_SUB_DISTRIBUTOR'
+  'COMMISSION_SUB_DISTRIBUTOR',
+  'COMMISSION_PARTNER_1',
+  'COMMISSION_PARTNER_2',
+  'COMMISSION_PARTNER_3'
 `;
 
 async function getFeeRecordScope(user: SessionUser): Promise<ScopedClause> {
