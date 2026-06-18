@@ -37,7 +37,7 @@ type PatchAdminPayload = {
 };
 
 function isWritableRole(role: string | undefined) {
-  return role === "MASTER";
+  return role === "MASTER" || role === "DOMAIN_ADMIN";
 }
 
 function isPatchAction(value: string | undefined): value is NonNullable<PatchAdminPayload["action"]> {

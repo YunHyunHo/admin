@@ -11,6 +11,7 @@ import {
   getAdminSettingsFromCookie,
   setAdminSettingsCookie,
 } from "@/lib/settings-cookie";
+import { canManageMasterResources } from "@/lib/permissions";
 
 export const runtime = "nodejs";
 
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
 
-  if (user.role !== "MASTER") {
+  if (!canManageMasterResources(user)) {
     return NextResponse.json(
       { message: "수수료 수정은 마스터 계정만 가능합니다." },
       { status: 403 },
@@ -116,7 +117,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
 
-  if (user.role !== "MASTER") {
+  if (!canManageMasterResources(user)) {
     return NextResponse.json(
       { message: "수수료 수정은 마스터 계정만 가능합니다." },
       { status: 403 },

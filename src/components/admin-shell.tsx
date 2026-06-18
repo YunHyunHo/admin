@@ -5,6 +5,10 @@ import { logoutAction } from "@/app/actions/auth";
 import { DashboardSummaryToggle } from "@/components/dashboard-summary-toggle";
 import { GlobalDashboardSummaryPanel } from "@/components/global-dashboard-summary-panel";
 import type { SessionUser } from "@/lib/auth";
+import {
+  getDashboardPartnerSummariesForUser,
+  sortDashboardPartnerSummaries,
+} from "@/lib/dashboard-summary-repository";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const sideMenuGroups = [
@@ -168,6 +172,9 @@ export async function AdminShell({
         : "총판";
   const hasMasterMenu = user.role === "MASTER" || user.role === "DOMAIN_ADMIN";
   const isSettlementOnlyUser = settlementOnlyRoles.has(user.role);
+  const partnerSummaries = sortDashboardPartnerSummaries(
+    await getDashboardPartnerSummariesForUser(user),
+  );
   const visibleMenuGroups = sideMenuGroups
     .filter((group) => {
       if (isSettlementOnlyUser) {
@@ -328,7 +335,9 @@ export async function AdminShell({
             </header>
 
             <div className="flex min-w-0 flex-1 flex-col">
-              <GlobalDashboardSummaryPanel />
+              <GlobalDashboardSummaryPanel
+                partnerSummaries={partnerSummaries}
+              />
               <div className="flex flex-col gap-3 border-b border-white/8 px-4 py-4 text-sm text-white/68 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-1 text-xs uppercase tracking-[0.2em] text-white/42">

@@ -43,7 +43,7 @@ type PatchDomainEntryPayload = {
 };
 
 function canWrite(role: string | undefined) {
-  return role === "MASTER";
+  return role === "MASTER" || role === "DOMAIN_ADMIN";
 }
 
 export async function GET() {

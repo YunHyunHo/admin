@@ -26,7 +26,7 @@ type PatchAccountPayload = {
 };
 
 function isWritableRole(role: string | undefined) {
-  return role === "MASTER";
+  return role === "MASTER" || role === "DOMAIN_ADMIN";
 }
 
 function isUuid(value: string | undefined) {
