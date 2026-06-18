@@ -94,6 +94,7 @@ async function getProfitSectionSeeds(user: SessionUser) {
         d.name as title,
         case when d.parent_distributor_id is null then '상위총판' else '총판' end as category
       from distributors d
+      left join admins dist_admin on dist_admin.id = d.admin_id
       where d.status = 'ACTIVE'
         ${scope.sql}
       order by
