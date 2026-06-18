@@ -30,7 +30,7 @@ type DailyProfitRow = {
 type ProfitSection = {
   id: string;
   title: string;
-  category: "본사" | "상위총판" | "총판";
+  category: "본사" | "업체" | "상위총판" | "총판";
   rows: DailyProfitRow[];
   totals: {
     chargeTotal: number;

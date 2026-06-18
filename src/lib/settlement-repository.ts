@@ -14,6 +14,8 @@ import type { SessionUser } from "@/lib/auth";
 
 type SettlementAggregateRow = {
   date: string;
+  company_id: string | null;
+  company_name: string | null;
   domain_id: string | null;
   domain_name: string | null;
   top_distributor_id: string | null;
@@ -35,7 +37,7 @@ type DomainSettlementSeedRow = {
 type ProfitSectionSeedRow = {
   id: string;
   title: string;
-  category: "상위총판" | "총판";
+  category: "업체" | "상위총판" | "총판";
 };
 
 function toMmDd(isoDate: string) {
@@ -81,6 +83,25 @@ async function getDomainSettlementSeeds(user: SessionUser) {
 }
 
 async function getProfitSectionSeeds(user: SessionUser) {
+  if (user.role === "DOMAIN_ADMIN") {
+    const result = await query<ProfitSectionSeedRow>(
+      `
+        select
+          'company:' || c.id::text as id,
+          c.company_name as title,
+          '업체' as category
+        from admin_company_mappings acm
+        join companies c on c.id = acm.company_id
+        where acm.admin_id = $1::uuid
+          and c.status = 'ACTIVE'
+        order by c.company_name asc
+      `,
+      [user.id],
+    );
+
+    return result.rows;
+  }
+
   const scope =
     user.role === "MASTER"
       ? getScopedDistributorCondition(user, "d", "dist_admin")
@@ -163,6 +184,8 @@ async function getCommissionAggregates(
     `
       select
         date::text,
+        company_id,
+        max(company_name) as company_name,
         domain_id,
         coalesce(domain_name, '-') as domain_name,
         top_distributor_id,
@@ -177,6 +200,8 @@ async function getCommissionAggregates(
       from (
         select
           (coalesce(cr.processed_at, co.created_at) at time zone '${KOREA_TIME_ZONE}')::date as date,
+          c.id::text as company_id,
+          c.company_name as company_name,
           d.id::text as domain_id,
           coalesce(nullif(d.domain_name, ''), c.company_name, '-') as domain_name,
           coalesce(parent_dist.id, dist.id)::text as top_distributor_id,
@@ -205,6 +230,8 @@ async function getCommissionAggregates(
 
         select
           (er.processed_at at time zone '${KOREA_TIME_ZONE}')::date as date,
+          c.id::text as company_id,
+          c.company_name as company_name,
           d.id::text as domain_id,
           coalesce(nullif(d.domain_name, ''), c.company_name, '-') as domain_name,
           coalesce(parent_dist.id, dist.id)::text as top_distributor_id,
@@ -229,7 +256,7 @@ async function getCommissionAggregates(
           and (er.processed_at at time zone '${KOREA_TIME_ZONE}')::date <= $2::date
           ${exchangeScopeSql}
       ) daily
-      group by date, domain_id, domain_name, top_distributor_id, distributor_id
+      group by date, company_id, domain_id, domain_name, top_distributor_id, distributor_id
       order by date asc
     `,
     values,
@@ -276,7 +303,7 @@ export async function getSettlementProfitForUser(
     {
       id: string;
       title: string;
-      category: "본사" | "상위총판" | "총판";
+      category: "본사" | "업체" | "상위총판" | "총판";
       rows: typeof rows;
       totals: {
         chargeTotal: number;
@@ -290,7 +317,7 @@ export async function getSettlementProfitForUser(
   const ensureSection = (
     id: string,
     title: string,
-    category: "본사" | "상위총판" | "총판",
+    category: "본사" | "업체" | "상위총판" | "총판",
   ) => {
     if (sectionMap.has(id)) {
       return sectionMap.get(id)!;
@@ -315,8 +342,9 @@ export async function getSettlementProfitForUser(
   };
   const showOnlyOwnDistributorProfit =
     user.role === "TOP_DISTRIBUTOR" || user.role === "ADMIN";
+  const showCompanyScopedProfit = user.role === "DOMAIN_ADMIN";
 
-  if (!showOnlyOwnDistributorProfit) {
+  if (!showOnlyOwnDistributorProfit && !showCompanyScopedProfit) {
     ensureSection("headquarters", "본사", "본사");
   }
 
@@ -327,7 +355,7 @@ export async function getSettlementProfitForUser(
   const addSectionRow = (
     id: string,
     title: string,
-    category: "본사" | "상위총판" | "총판",
+    category: "본사" | "업체" | "상위총판" | "총판",
     row: (typeof rows)[number],
   ) => {
     const section = ensureSection(id, title, category);
@@ -362,6 +390,21 @@ export async function getSettlementProfitForUser(
       chargeTotal,
       payoutTotal: exchangeTotal,
     };
+
+    if (showCompanyScopedProfit) {
+      const companySectionId = row.company_id
+        ? `company:${row.company_id}`
+        : `company:${row.domain_id ?? row.domain_name ?? "unknown"}`;
+      const companySectionTitle = row.company_name ?? row.domain_name ?? user.companyName;
+
+      addSectionRow(companySectionId, companySectionTitle, "업체", {
+        ...base,
+        feeTotal: companyFeeTotal + topDistributorFeeTotal + distributorFeeTotal,
+        companyFeeTotal,
+        distributorFeeTotal: topDistributorFeeTotal + distributorFeeTotal,
+      });
+      continue;
+    }
 
     if (!showOnlyOwnDistributorProfit) {
       addSectionRow("headquarters", "본사", "본사", {
