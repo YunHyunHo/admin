@@ -6,11 +6,6 @@ import { DashboardSummaryToggle } from "@/components/dashboard-summary-toggle";
 import { GlobalDashboardSummaryPanel } from "@/components/global-dashboard-summary-panel";
 import type { SessionUser } from "@/lib/auth";
 import { ThemeToggle } from "@/components/theme-toggle";
-import {
-  getDashboardPartnerSummariesForUser,
-  sortDashboardPartnerSummaries,
-  type DashboardPartnerSummary,
-} from "@/lib/dashboard-summary-repository";
 
 const sideMenuGroups = [
   {
@@ -153,7 +148,6 @@ type AdminShellProps = {
   activeItem: string;
   badge?: string;
   helperText?: string;
-  partnerSummaries?: DashboardPartnerSummary[];
   children: ReactNode;
 };
 
@@ -162,12 +156,8 @@ export async function AdminShell({
   activeItem,
   badge = "Overview",
   helperText = "원하는 데이터와 형태를 정하면 이 화면에 바로 붙일 수 있어요.",
-  partnerSummaries,
   children,
 }: AdminShellProps) {
-  const globalPartnerSummaries = sortDashboardPartnerSummaries(
-    partnerSummaries ?? (await getDashboardPartnerSummariesForUser(user)),
-  );
   const userRoleLabel =
     user.role === "MASTER"
       ? "마스터"
@@ -338,9 +328,7 @@ export async function AdminShell({
             </header>
 
             <div className="flex min-w-0 flex-1 flex-col">
-              <GlobalDashboardSummaryPanel
-                partnerSummaries={globalPartnerSummaries}
-              />
+              <GlobalDashboardSummaryPanel />
               <div className="flex flex-col gap-3 border-b border-white/8 px-4 py-4 text-sm text-white/68 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-1 text-xs uppercase tracking-[0.2em] text-white/42">

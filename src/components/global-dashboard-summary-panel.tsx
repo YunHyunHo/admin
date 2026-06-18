@@ -35,14 +35,23 @@ function getMetricValues(item: DashboardPartnerSummary) {
 }
 
 export function GlobalDashboardSummaryPanel({
-  partnerSummaries,
+  partnerSummaries: initialPartnerSummaries,
 }: {
-  partnerSummaries: DashboardPartnerSummary[];
+  partnerSummaries?: DashboardPartnerSummary[];
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const totals = useMemo(
-    () => getSummaryTotals(partnerSummaries),
+  const [partnerSummaries, setPartnerSummaries] = useState<
+    DashboardPartnerSummary[] | null
+  >(initialPartnerSummaries ?? null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const visiblePartnerSummaries = useMemo(
+    () => partnerSummaries ?? [],
     [partnerSummaries],
+  );
+  const totals = useMemo(
+    () => getSummaryTotals(visiblePartnerSummaries),
+    [visiblePartnerSummaries],
   );
   const totalValues = [
     totals.chargeTotal,
@@ -69,6 +78,60 @@ export function GlobalDashboardSummaryPanel({
       window.removeEventListener(summaryToggleEvent, handleSummaryToggle);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isOpen || partnerSummaries !== null || isLoading) {
+      return;
+    }
+
+    let ignore = false;
+
+    async function loadPartnerSummaries() {
+      setIsLoading(true);
+      setErrorMessage("");
+
+      try {
+        const response = await fetch("/api/dashboard-summary", {
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          throw new Error("현황 데이터를 불러오지 못했습니다.");
+        }
+
+        const payload = (await response.json()) as {
+          partnerSummaries?: DashboardPartnerSummary[];
+        };
+
+        if (!ignore) {
+          setPartnerSummaries(payload.partnerSummaries ?? []);
+        }
+      } catch (error) {
+        if (!ignore) {
+          setErrorMessage(
+            error instanceof Error
+              ? error.message
+              : "현황 데이터를 불러오지 못했습니다.",
+          );
+          setPartnerSummaries([]);
+        }
+      } finally {
+        if (!ignore) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void loadPartnerSummaries();
+
+    return () => {
+      ignore = true;
+    };
+  }, [isLoading, isOpen, partnerSummaries]);
+
+  if (!isOpen) {
+    return null;
+  }
 
   return (
     <section
@@ -103,13 +166,20 @@ export function GlobalDashboardSummaryPanel({
           </div>
         </div>
 
-        {isOpen ? (
-          <div
-            data-dashboard-summary-details
-            className="grid gap-px bg-white/8 p-px lg:grid-cols-2"
-          >
-            {partnerSummaries.length ? (
-              partnerSummaries.map((item) => (
+        <div
+          data-dashboard-summary-details
+          className="grid gap-px bg-white/8 p-px lg:grid-cols-2"
+        >
+          {isLoading ? (
+            <div className="px-4 py-10 text-center text-sm text-white/42 lg:col-span-2">
+              하청/업체 현황을 불러오는 중입니다.
+            </div>
+          ) : errorMessage ? (
+            <div className="px-4 py-10 text-center text-sm text-rose-200/80 lg:col-span-2">
+              {errorMessage}
+            </div>
+          ) : visiblePartnerSummaries.length ? (
+            visiblePartnerSummaries.map((item) => (
                 <div
                   key={`global-summary-grid-${item.id}`}
                   className="grid min-h-[72px] grid-cols-[minmax(7rem,1fr)_repeat(4,minmax(5.25rem,1fr))] bg-[#12151c] text-center text-sm text-white"
@@ -135,14 +205,13 @@ export function GlobalDashboardSummaryPanel({
                     </div>
                   ))}
                 </div>
-              ))
-            ) : (
-              <div className="px-4 py-10 text-center text-sm text-white/42 lg:col-span-2">
-                표시할 하청/업체 현황이 없습니다.
-              </div>
-            )}
-          </div>
-        ) : null}
+            ))
+          ) : (
+            <div className="px-4 py-10 text-center text-sm text-white/42 lg:col-span-2">
+              표시할 하청/업체 현황이 없습니다.
+            </div>
+          )}
+        </div>
       </div>
     </section>
   );
