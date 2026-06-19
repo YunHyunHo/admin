@@ -9,6 +9,7 @@ import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
 import { ensureFeeRateSchema } from "@/lib/fee-rate-schema";
 import { formatKoreanDateTime } from "@/lib/korean-time";
 import {
+  getMasterOwnedBankAccountCondition,
   getMasterOwnedCompanyExistsCondition,
   getScopedDistributorCondition,
 } from "@/lib/master-scope";
@@ -409,6 +410,10 @@ async function getChargeRequestScope(
 
 async function getDbChargeRequests(user: SessionUser) {
   const scope = await getChargeRequestScope(user);
+  const bankAccountScopeSql =
+    user.role === "MASTER"
+      ? `and ${getMasterOwnedBankAccountCondition("ba")}`
+      : "";
   const result = await query<ChargeRequestRow>(
     `
       select
@@ -436,6 +441,7 @@ async function getDbChargeRequests(user: SessionUser) {
         select ba.bank_name, ba.account_number
         from bank_accounts ba
         where ba.is_active = true
+          ${bankAccountScopeSql}
           and (
             (
               ba.company_id = cr.company_id

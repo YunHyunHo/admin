@@ -1,4 +1,5 @@
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
+import { getDomainWithdrawAccount } from "@/lib/domain-withdraw-account";
 import { formatKoreanDateTime } from "@/lib/korean-time";
 import { getScopedDataCondition } from "@/lib/master-scope";
 import type { PoolClient, QueryResultRow } from "pg";
@@ -553,13 +554,21 @@ export async function createIntegrationDomainExchange(input: CreateDomainExchang
 
   const scope = await findIntegrationExchangeScope(input);
   const balance = await getDomainExchangeBalance({ query }, scope.domain_id);
+  const configuredAccount = await getDomainWithdrawAccount(scope.domain_id);
 
   if (input.amount > balance.withdrawableBalance) {
     throw new Error("보유금보다 큰 금액은 신청할 수 없습니다.");
   }
 
+  if (!configuredAccount) {
+    throw new Error("마스터 어드민에서 도메인 출금 수신 계좌를 먼저 설정해주세요.");
+  }
+
   return insertExchangeRequest({
     ...input,
+    bankName: configuredAccount.bankName,
+    accountHolder: configuredAccount.accountHolder,
+    accountNumber: configuredAccount.accountNumber,
     companyId: scope.company_id,
     domainId: scope.domain_id,
     distributorId: scope.distributor_id,

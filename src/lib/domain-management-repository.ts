@@ -1,6 +1,7 @@
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
 import { formatKoreanDateTime } from "@/lib/korean-time";
 import {
+  getMasterOwnedBankAccountCondition,
   getMasterOwnedCompanyExistsCondition,
   getScopedDataCondition,
   type ScopedClause,
@@ -27,6 +28,9 @@ type DomainDbRow = {
   bank_name: string | null;
   account_number: string | null;
   account_holder: string | null;
+  withdraw_bank_name: string | null;
+  withdraw_account_holder: string | null;
+  withdraw_account_number: string | null;
   status: "ACTIVE" | "SUSPENDED" | "DELETED";
   created_at: Date | string;
 };
@@ -59,6 +63,9 @@ function toDomainRow(row: DomainDbRow): DomainRow {
     bankName: row.bank_name ?? "-",
     accountNumber: row.account_number ?? "-",
     accountHolder: row.account_holder ?? "-",
+    withdrawBankName: row.withdraw_bank_name ?? "-",
+    withdrawAccountHolder: row.withdraw_account_holder ?? "-",
+    withdrawAccountNumber: row.withdraw_account_number ?? "-",
     accountLinked: Boolean(row.bank_name || row.account_number || row.account_holder),
     depositEnabled: row.status === "ACTIVE",
     createdAt: formatStamp(row.created_at),
@@ -76,6 +83,10 @@ export async function getDomainManagementRows(
   const scope = user
     ? await getDomainManagementScopeCondition(user)
     : { sql: "", values: [] as string[] };
+  const bankAccountScopeSql =
+    user?.role === "MASTER"
+      ? `and ${getMasterOwnedBankAccountCondition("ba")}`
+      : "";
 
   const result = await query<DomainDbRow>(
     `
@@ -93,6 +104,9 @@ export async function getDomainManagementRows(
         ba.bank_name,
         ba.account_number,
         ba.account_holder,
+        dom.withdraw_bank_name,
+        dom.withdraw_account_holder,
+        dom.withdraw_account_number,
         dom.status::text as status,
         dom.created_at
       from domains dom
@@ -112,6 +126,7 @@ export async function getDomainManagementRows(
         where ba.company_id = dom.company_id
           and (ba.distributor_id = dom.distributor_id or ba.distributor_id is null)
           and ba.is_active = true
+          ${bankAccountScopeSql}
         order by
           case when ba.distributor_id = dom.distributor_id then 0 else 1 end,
           ba.created_at desc

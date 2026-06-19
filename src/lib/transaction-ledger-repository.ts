@@ -1,6 +1,9 @@
 import { hasDatabaseUrl, query } from "@/lib/db";
 import { formatKoreanDateTime } from "@/lib/korean-time";
-import { getScopedDataCondition } from "@/lib/master-scope";
+import {
+  getMasterOwnedBankAccountCondition,
+  getScopedDataCondition,
+} from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
 import type { LedgerRow, TransactionStatus } from "@/lib/transaction-ledger-types";
 
@@ -93,6 +96,10 @@ export async function getTransactionLedgerRows(
         distributorAdmin: "dist_admin",
       })
     : { sql: "", values: [] as string[] };
+  const bankAccountScopeSql =
+    user?.role === "MASTER"
+      ? `and ${getMasterOwnedBankAccountCondition("ba")}`
+      : "";
 
   const result = await query<TransactionLedgerDbRow>(
     `
@@ -113,6 +120,7 @@ export async function getTransactionLedgerRows(
               select ba.account_holder
               from bank_accounts ba
               where ba.distributor_id = dist.id
+                ${bankAccountScopeSql}
                 and ba.bank_name = coalesce(nullif(cr.bank_name, ''), charge_account.bank_name)
                 and ba.account_number = coalesce(nullif(cr.account_number, ''), charge_account.account_number)
               order by ba.is_active desc, ba.created_at desc
@@ -134,6 +142,7 @@ export async function getTransactionLedgerRows(
           select ba.bank_name, ba.account_number, ba.account_holder
           from bank_accounts ba
           where ba.is_active = true
+            ${bankAccountScopeSql}
             and (
               (
                 ba.company_id = cr.company_id

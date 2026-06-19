@@ -24,6 +24,9 @@ export type DomainRow = {
   bankName: string;
   accountNumber: string;
   accountHolder: string;
+  withdrawBankName: string;
+  withdrawAccountHolder: string;
+  withdrawAccountNumber: string;
   accountLinked: boolean;
   depositEnabled: boolean;
   createdAt: string;

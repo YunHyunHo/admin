@@ -34,6 +34,12 @@ type ApiResponse =
     }
   | { message?: string };
 
+type WithdrawAccountDraft = {
+  bankName: string;
+  accountHolder: string;
+  accountNumber: string;
+};
+
 function formatKoreanWon(value: number) {
   return `${value.toLocaleString("ko-KR")}원`;
 }
@@ -97,12 +103,43 @@ export function DomainListBoard({
   const [balanceAmount, setBalanceAmount] = useState("");
   const [balanceModalMessage, setBalanceModalMessage] = useState("");
   const [isAdjustingBalance, setIsAdjustingBalance] = useState(false);
+  const [withdrawAccountDrafts, setWithdrawAccountDrafts] = useState<
+    Record<string, WithdrawAccountDraft>
+  >({});
+  const [savingWithdrawAccountId, setSavingWithdrawAccountId] = useState<string | null>(
+    null,
+  );
 
   const pageCount = Math.max(1, Math.ceil(rows.length / rowsPerPage));
   const visibleRows = useMemo(
     () => rows.slice((page - 1) * rowsPerPage, page * rowsPerPage),
     [page, rows],
   );
+
+  function getWithdrawAccountDraft(row: DomainListRow) {
+    return (
+      withdrawAccountDrafts[row.id] ?? {
+        bankName: row.withdrawBankName === "-" ? "" : row.withdrawBankName,
+        accountHolder:
+          row.withdrawAccountHolder === "-" ? "" : row.withdrawAccountHolder,
+        accountNumber:
+          row.withdrawAccountNumber === "-" ? "" : row.withdrawAccountNumber,
+      }
+    );
+  }
+
+  function updateWithdrawAccountDraft(
+    row: DomainListRow,
+    patch: Partial<WithdrawAccountDraft>,
+  ) {
+    setWithdrawAccountDrafts((current) => ({
+      ...current,
+      [row.id]: {
+        ...getWithdrawAccountDraft(row),
+        ...patch,
+      },
+    }));
+  }
 
   function closeCreateModal() {
     setIsCreateModalOpen(false);
@@ -384,6 +421,57 @@ export function DomainListBoard({
     }
   }
 
+  async function handleUpdateWithdrawAccount(row: DomainListRow) {
+    if (savingWithdrawAccountId) {
+      return;
+    }
+
+    const draft = getWithdrawAccountDraft(row);
+
+    if (
+      !draft.bankName.trim() ||
+      !draft.accountHolder.trim() ||
+      !draft.accountNumber.trim()
+    ) {
+      setMessage("출금은행, 예금주, 계좌번호를 모두 입력해주세요.");
+      return;
+    }
+
+    setSavingWithdrawAccountId(row.id);
+    setMessage("");
+
+    try {
+      const response = await fetch("/api/domain-list", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: row.id,
+          action: "update-withdraw-account",
+          bankName: draft.bankName,
+          accountHolder: draft.accountHolder,
+          accountNumber: draft.accountNumber,
+        }),
+      });
+      const text = await response.text();
+      const data = safeParseJson(text);
+
+      if (!response.ok || !("rows" in data)) {
+        setMessage(data.message ?? "업체 출금 계좌 수정에 실패했습니다.");
+        return;
+      }
+
+      applyPayload(data);
+      setWithdrawAccountDrafts((current) => {
+        const next = { ...current };
+        delete next[row.id];
+        return next;
+      });
+      setMessage(data.message ?? "업체 출금 계좌가 수정되었습니다.");
+    } finally {
+      setSavingWithdrawAccountId(null);
+    }
+  }
+
   return (
     <section className="rounded-[32px] border border-white/8 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
       <div className="flex flex-col gap-3 border-b border-white/8 px-5 py-6 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
@@ -419,7 +507,7 @@ export function DomainListBoard({
 
         <div className="overflow-hidden rounded-[26px] border border-white/8 bg-black/18">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1500px] border-collapse text-sm">
+            <table className="w-full min-w-[1680px] border-collapse text-sm">
               <thead className="bg-black/48 text-white/72">
               <tr>
                 {[
@@ -488,10 +576,55 @@ export function DomainListBoard({
                     {row.url || "-"}
                   </td>
                   <td className="px-4 py-5">
-                    <div className="mx-auto max-w-[260px] rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3 text-center text-xs leading-5 text-white/80">
-                      <div>{row.bankName}</div>
-                      <div>{row.accountNumber}</div>
-                      <div>{row.accountHolder}</div>
+                    <div className="mx-auto flex max-w-[300px] flex-col gap-2">
+                      <select
+                        value={getWithdrawAccountDraft(row).bankName}
+                        onChange={(event) =>
+                          updateWithdrawAccountDraft(row, {
+                            bankName: event.target.value,
+                          })
+                        }
+                        className="h-9 rounded-lg border border-white/12 bg-black/36 px-2 text-xs text-white outline-none"
+                      >
+                        <option value="">은행 선택</option>
+                        {bankOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="flex gap-2">
+                        <input
+                          value={getWithdrawAccountDraft(row).accountHolder}
+                          onChange={(event) =>
+                            updateWithdrawAccountDraft(row, {
+                              accountHolder: event.target.value,
+                            })
+                          }
+                          placeholder="예금주"
+                          className="h-9 min-w-0 flex-1 rounded-lg border border-white/12 bg-black/36 px-2 text-xs text-white outline-none placeholder:text-white/30"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void handleUpdateWithdrawAccount(row);
+                          }}
+                          disabled={savingWithdrawAccountId === row.id}
+                          className="h-9 rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/40"
+                        >
+                          {savingWithdrawAccountId === row.id ? "저장중" : "수정"}
+                        </button>
+                      </div>
+                      <input
+                        value={getWithdrawAccountDraft(row).accountNumber}
+                        onChange={(event) =>
+                          updateWithdrawAccountDraft(row, {
+                            accountNumber: event.target.value,
+                          })
+                        }
+                        placeholder="계좌번호"
+                        className="h-9 rounded-lg border border-white/12 bg-black/36 px-2 text-xs text-white outline-none placeholder:text-white/30"
+                      />
                     </div>
                   </td>
                   <td className="px-4 py-5 text-center font-semibold text-white">
@@ -740,7 +873,7 @@ export function DomainListBoard({
               계좌관리
             </h3>
             <p className="mt-2 text-sm text-slate-500">
-              {accountModalRow.companyName} 계정에 연결할 계좌를 선택한 뒤 연동할 수 있습니다.
+              {accountModalRow.companyName} 계정에 연결할 입금 계좌를 선택한 뒤 연동할 수 있습니다.
             </p>
 
             <div className="mt-7 space-y-5">

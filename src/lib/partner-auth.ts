@@ -1,6 +1,10 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { query } from "@/lib/db";
+import {
+  getDomainWithdrawAccount,
+  type DomainWithdrawAccount,
+} from "@/lib/domain-withdraw-account";
 import { verifyPassword } from "@/lib/password";
 
 const PARTNER_TOKEN_TTL_SECONDS = 60 * 60 * 24;
@@ -30,6 +34,7 @@ export type PartnerLoginSuccess = {
     name: string;
     domainId: string;
     domain: string;
+    withdrawAccount: DomainWithdrawAccount | null;
   };
 };
 
@@ -250,6 +255,7 @@ export async function loginPartnerAccount(input: {
     permissions: defaultPermissions,
     menus: defaultMenus,
   });
+  const withdrawAccount = await getDomainWithdrawAccount(matchedRow.domain_id);
 
   return {
     token,
@@ -265,6 +271,7 @@ export async function loginPartnerAccount(input: {
       name: matchedRow.company_name,
       domainId: matchedRow.domain_id,
       domain: normalizePartnerDomain(matchedRow.domain_name ?? ""),
+      withdrawAccount,
     },
     audit: {
       adminId: matchedRow.admin_id,

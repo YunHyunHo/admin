@@ -41,6 +41,27 @@ export function getMasterOwnedCompanyExistsCondition(
   `;
 }
 
+export function getMasterOwnedBankAccountCondition(
+  bankAccountAlias: string,
+  param = "$1",
+) {
+  return `
+    (
+      ${bankAccountAlias}.created_by = ${param}::uuid
+      or (
+        ${bankAccountAlias}.distributor_id is not null
+        and exists (
+          select 1
+          from distributors scoped_bank_dist
+          join admins scoped_bank_dist_admin on scoped_bank_dist_admin.id = scoped_bank_dist.admin_id
+          where scoped_bank_dist.id = ${bankAccountAlias}.distributor_id
+            and scoped_bank_dist_admin.created_by = ${param}::uuid
+        )
+      )
+    )
+  `;
+}
+
 export function getScopedMasterNameExpression(
   user: Pick<SessionUser, "role">,
   fallbackExpression = "owner_master.name",

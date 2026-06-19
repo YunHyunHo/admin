@@ -3,6 +3,7 @@ import { decryptVisiblePassword, encryptVisiblePassword } from "@/lib/admin-acco
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
 import { getDomainManagementRows } from "@/lib/domain-management-repository";
 import {
+  getMasterOwnedBankAccountCondition,
   getMasterOwnedCompanyExistsCondition,
   getScopedDistributorCondition,
 } from "@/lib/master-scope";
@@ -35,6 +36,9 @@ export type DomainListRow = {
   bankName: string;
   accountNumber: string;
   accountHolder: string;
+  withdrawBankName: string;
+  withdrawAccountHolder: string;
+  withdrawAccountNumber: string;
   balance: number;
   depositEnabled: boolean;
   createdAt: string;
@@ -158,6 +162,9 @@ export async function getDomainListBoardData(user: SessionUser) {
       bankName: row.bankName,
       accountNumber: row.accountNumber,
       accountHolder: row.accountHolder,
+      withdrawBankName: row.withdrawBankName,
+      withdrawAccountHolder: row.withdrawAccountHolder,
+      withdrawAccountNumber: row.withdrawAccountNumber,
       balance: row.balance,
       depositEnabled: row.depositEnabled,
       createdAt: row.createdAt,
@@ -428,6 +435,14 @@ export async function updateDomainEntryAccount(input: {
   }
 
   await withTransaction(async (client) => {
+    const bankAccountScopeSql =
+      input.user.role === "MASTER"
+        ? `and ${getMasterOwnedBankAccountCondition("ba", "$2")}`
+        : "";
+    const updateAccountScopeSql =
+      input.user.role === "MASTER"
+        ? `and ${getMasterOwnedBankAccountCondition("bank_accounts", "$5")}`
+        : "";
     const domainResult = await client.query<{
       company_id: string;
       distributor_id: string | null;
@@ -442,6 +457,7 @@ export async function updateDomainEntryAccount(input: {
             from bank_accounts ba
             where ba.company_id = dom.company_id
               and (ba.distributor_id = dom.distributor_id or ba.distributor_id is null)
+              ${bankAccountScopeSql}
             order by
               case when ba.distributor_id = dom.distributor_id then 0 else 1 end,
               ba.created_at desc
@@ -474,6 +490,7 @@ export async function updateDomainEntryAccount(input: {
             is_active = true,
             updated_at = now()
           where id = $1::uuid
+            ${updateAccountScopeSql}
         `,
         [
           domain.account_id,
@@ -511,6 +528,47 @@ export async function updateDomainEntryAccount(input: {
   });
 }
 
+export async function updateDomainWithdrawAccount(input: {
+  id: string;
+  bankName: string;
+  accountHolder: string;
+  accountNumber: string;
+  user: SessionUser;
+}) {
+  if (!isUuid(input.id)) {
+    throw new Error("도메인 정보를 확인해주세요.");
+  }
+
+  if (!input.bankName.trim() || !input.accountHolder.trim() || !input.accountNumber.trim()) {
+    throw new Error("출금은행, 예금주, 계좌번호를 모두 입력해주세요.");
+  }
+
+  const result = await query(
+    `
+      update domains dom
+      set
+        withdraw_bank_name = $2,
+        withdraw_account_holder = $3,
+        withdraw_account_number = $4,
+        updated_at = now()
+      where dom.id = $1::uuid
+        and dom.status <> 'DELETED'
+        and ${getMasterOwnedCompanyExistsCondition("dom.company_id", "$5")}
+    `,
+    [
+      input.id,
+      input.bankName.trim(),
+      input.accountHolder.trim(),
+      input.accountNumber.trim(),
+      input.user.id,
+    ],
+  );
+
+  if (!result.rowCount) {
+    throw new Error("출금 계좌를 수정할 도메인을 찾지 못했습니다.");
+  }
+}
+
 export async function linkDomainEntryAccount(input: {
   id: string;
   accountId: string;
@@ -520,6 +578,10 @@ export async function linkDomainEntryAccount(input: {
     throw new Error("도메인 또는 계좌 정보를 확인해주세요.");
   }
 
+  const bankAccountScopeSql =
+    input.user.role === "MASTER"
+      ? `and ${getMasterOwnedBankAccountCondition("ba", "$3")}`
+      : "";
   const accountResult = await query<{
     bank_name: string;
     account_number: string;
@@ -536,6 +598,7 @@ export async function linkDomainEntryAccount(input: {
         and dom.status <> 'DELETED'
         and ba.is_active = true
         and ${getMasterOwnedCompanyExistsCondition("dom.company_id", "$3")}
+        ${bankAccountScopeSql}
         and (
           (ba.company_id is null and ba.distributor_id is null and ba.created_by = $3::uuid)
           or ba.company_id = dom.company_id
@@ -571,6 +634,14 @@ async function deleteDomainEntryWithAccount(id: string, hardDelete: boolean, use
   }
 
   await withTransaction(async (client) => {
+    const bankAccountScopeSql =
+      user.role === "MASTER"
+        ? `and ${getMasterOwnedBankAccountCondition("ba", "$2")}`
+        : "";
+    const deleteBankAccountScopeSql =
+      user.role === "MASTER"
+        ? `and ${getMasterOwnedBankAccountCondition("bank_accounts", "$2")}`
+        : "";
     const domainRow = await client.query<DomainCompanyAdminRow>(
       `
         select
@@ -594,6 +665,7 @@ async function deleteDomainEntryWithAccount(id: string, hardDelete: boolean, use
           select bank_name, account_number, account_holder
           from bank_accounts ba
           where ba.company_id = dom.company_id
+            ${bankAccountScopeSql}
           order by ba.created_at desc
           limit 1
         ) ba on true
@@ -641,8 +713,9 @@ async function deleteDomainEntryWithAccount(id: string, hardDelete: boolean, use
             from domains
             where id = $1::uuid
           )
+            ${deleteBankAccountScopeSql}
         `,
-        [id],
+        [id, user.id],
       );
       await client.query(`delete from domains where id = $1::uuid`, [id]);
       await client.query(

@@ -69,6 +69,15 @@ async function applySchema(client) {
   await client.query(schemaSql);
 }
 
+async function applySchemaUpgrades(client) {
+  await client.query(`
+    alter table domains
+      add column if not exists withdraw_bank_name text,
+      add column if not exists withdraw_account_holder text,
+      add column if not exists withdraw_account_number text
+  `);
+}
+
 async function seedBaseData(client) {
   const masterPassword = process.env.MASTER_PASSWORD ?? "0000";
   const passwordHash = await hashPassword(masterPassword);
@@ -210,6 +219,7 @@ async function main() {
       console.log("Schema created.");
     }
 
+    await applySchemaUpgrades(client);
     await seedBaseData(client);
     await client.query("commit");
     console.log("Seeded master account and default scope.");

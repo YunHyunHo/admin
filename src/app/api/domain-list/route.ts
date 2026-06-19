@@ -8,6 +8,7 @@ import {
   getDomainListBoardData,
   linkDomainEntryAccount,
   updateDomainEntryAccount,
+  updateDomainWithdrawAccount,
   updateDomainEntryStatus,
 } from "@/lib/domain-list-repository";
 
@@ -31,6 +32,7 @@ type PatchDomainEntryPayload = {
     | "toggle-status"
     | "delete"
     | "update-account"
+    | "update-withdraw-account"
     | "link-account"
     | "adjust-balance";
   depositEnabled?: boolean;
@@ -154,6 +156,14 @@ export async function PATCH(request: Request) {
         accountNumber: payload.accountNumber?.trim() ?? "",
         user,
       });
+    } else if (payload.action === "update-withdraw-account") {
+      await updateDomainWithdrawAccount({
+        id: payload.id,
+        bankName: payload.bankName?.trim() ?? "",
+        accountHolder: payload.accountHolder?.trim() ?? "",
+        accountNumber: payload.accountNumber?.trim() ?? "",
+        user,
+      });
     } else {
       await updateDomainEntryStatus({
         id: payload.id,
@@ -182,6 +192,8 @@ export async function PATCH(request: Request) {
             ? "계좌가 연동되었습니다."
           : payload.action === "update-account"
             ? "계좌 정보가 수정되었습니다."
+          : payload.action === "update-withdraw-account"
+            ? "업체 출금 계좌가 수정되었습니다."
             : "도메인 상태가 변경되었습니다.",
   });
 }

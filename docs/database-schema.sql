@@ -83,6 +83,9 @@ create table domains (
   company_id uuid not null references companies(id),
   distributor_id uuid references distributors(id),
   current_balance numeric(18, 0) not null default 0,
+  withdraw_bank_name text,
+  withdraw_account_holder text,
+  withdraw_account_number text,
   status admin_status not null default 'ACTIVE',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

@@ -1,7 +1,7 @@
 import { hasDatabaseUrl, query } from "@/lib/db";
 import { formatKoreanDateTime } from "@/lib/korean-time";
 import {
-  getMasterOwnedCompanyExistsCondition,
+  getMasterOwnedBankAccountCondition,
   getScopedDistributorCondition,
 } from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
@@ -62,14 +62,7 @@ export async function getBankAccountBoardData(user?: SessionUser) {
     : { sql: "", values: [] as string[] };
   const accountScopeSql =
     user?.role === "MASTER"
-      ? `and (
-          ba.created_by = $1::uuid
-          or dist_admin.created_by = $1::uuid
-          or (
-            ba.company_id is not null
-            and ${getMasterOwnedCompanyExistsCondition("ba.company_id")}
-          )
-        )`
+      ? `and ${getMasterOwnedBankAccountCondition("ba")}`
       : scope.sql.replaceAll("dist.", "d.");
 
   const [accounts, branchOptions] = await Promise.all([
@@ -186,23 +179,7 @@ export async function updateBankAccount(input: {
         is_active = coalesce($4, is_active),
         updated_at = now()
       where ba.id = $1::uuid
-        and (
-          ba.created_by = $5::uuid
-          or (
-            ba.distributor_id is not null
-            and exists (
-              select 1
-              from distributors d
-              join admins dist_admin on dist_admin.id = d.admin_id
-              where d.id = ba.distributor_id
-                and dist_admin.created_by = $5::uuid
-            )
-          )
-          or (
-            ba.company_id is not null
-            and ${getMasterOwnedCompanyExistsCondition("ba.company_id", "$5")}
-          )
-        )
+        and ${getMasterOwnedBankAccountCondition("ba", "$5")}
     `,
     [
       input.id,
@@ -219,23 +196,7 @@ export async function deleteBankAccount(id: string, user: SessionUser) {
     `
       delete from bank_accounts ba
       where ba.id = $1::uuid
-        and (
-          ba.created_by = $2::uuid
-          or (
-            ba.distributor_id is not null
-            and exists (
-              select 1
-              from distributors d
-              join admins dist_admin on dist_admin.id = d.admin_id
-              where d.id = ba.distributor_id
-                and dist_admin.created_by = $2::uuid
-            )
-          )
-          or (
-            ba.company_id is not null
-            and ${getMasterOwnedCompanyExistsCondition("ba.company_id", "$2")}
-          )
-        )
+        and ${getMasterOwnedBankAccountCondition("ba", "$2")}
     `,
     [id, user.id],
   );
