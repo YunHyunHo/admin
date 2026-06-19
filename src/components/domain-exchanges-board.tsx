@@ -443,14 +443,14 @@ export function DomainExchangesBoard({
                           <button
                             type="button"
                             onClick={() => approveRow(row.id)}
-                            className="text-sm font-semibold text-blue-300 transition hover:text-blue-200"
+                            className="rounded-lg bg-cyan-400 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             승인
                           </button>
                           <button
                             type="button"
                             onClick={() => rejectRow(row.id)}
-                            className="rounded-lg bg-white px-3 py-1 text-xs font-semibold text-slate-950 transition hover:bg-red-100"
+                            className="rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             거절
                           </button>
@@ -461,7 +461,7 @@ export function DomainExchangesBoard({
                           <button
                             type="button"
                             onClick={() => cancelRow(row.id)}
-                            className="rounded-lg bg-red-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-red-500"
+                            className="rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             승인취소
                           </button>

@@ -86,6 +86,23 @@ export function GlobalRequestNotifier() {
     }
   }, [playNoticeSound]);
 
+  const unlockNoticeSound = useCallback(async () => {
+    try {
+      const audio = ensureAudio();
+      audio.muted = true;
+      audio.currentTime = 0;
+      await audio.play();
+      audio.pause();
+      audio.currentTime = 0;
+      audio.muted = false;
+      setIsSoundReady(true);
+      setNoticeMessage("알림 대기중");
+    } catch {
+      setIsSoundReady(false);
+      setNoticeMessage("알림음 다시 켜기");
+    }
+  }, [ensureAudio]);
+
   const syncRequests = useCallback(async () => {
     const [chargeData, domainExchangeData, distributorWithdrawalData] =
       await Promise.all([
@@ -148,13 +165,36 @@ export function GlobalRequestNotifier() {
     };
   }, [ensureAudio, syncRequests]);
 
+  useEffect(() => {
+    let isUnlocked = false;
+
+    function handleUserGesture() {
+      if (isUnlocked) {
+        return;
+      }
+
+      isUnlocked = true;
+      void unlockNoticeSound();
+      window.removeEventListener("pointerdown", handleUserGesture);
+      window.removeEventListener("keydown", handleUserGesture);
+    }
+
+    window.addEventListener("pointerdown", handleUserGesture);
+    window.addEventListener("keydown", handleUserGesture);
+
+    return () => {
+      window.removeEventListener("pointerdown", handleUserGesture);
+      window.removeEventListener("keydown", handleUserGesture);
+    };
+  }, [unlockNoticeSound]);
+
   return (
     <button
       type="button"
       onClick={activateNoticeSound}
       className={`hidden h-10 items-center rounded-2xl border px-3 text-xs font-semibold transition sm:inline-flex ${
         isSoundReady
-          ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-100 hover:bg-emerald-400/14"
+          ? "border-cyan-300/24 bg-cyan-400/12 text-cyan-50 hover:bg-cyan-400/18"
           : "border-amber-300/24 bg-amber-400/12 text-amber-100 hover:bg-amber-400/18"
       }`}
       title="충전신청, 도메인환전, 총판환전 신규 신청 알림음"

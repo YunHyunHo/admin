@@ -18,6 +18,21 @@ export function getScopedDistributorCondition(
     };
   }
 
+  if (user.role === "TOP_DISTRIBUTOR") {
+    return {
+      sql: `and (
+        ${distributorAlias}.admin_id = $1::uuid
+        or exists (
+          select 1
+          from distributors scoped_parent_dist
+          where scoped_parent_dist.id = ${distributorAlias}.parent_distributor_id
+            and scoped_parent_dist.admin_id = $1::uuid
+        )
+      )`,
+      values: [user.id],
+    };
+  }
+
   return {
     sql: `and ${distributorAlias}.admin_id = $1::uuid`,
     values: [user.id],

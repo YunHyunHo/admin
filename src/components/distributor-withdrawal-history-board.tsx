@@ -444,7 +444,7 @@ export function DistributorWithdrawalHistoryBoard({
                         <button
                           type="button"
                           onClick={() => void processWithdrawal(row.id, "approve")}
-                          className="block w-full text-sm font-semibold text-sky-400 transition hover:text-sky-300"
+                          className="rounded-lg bg-cyan-400 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-cyan-300"
                         >
                           승인
                         </button>

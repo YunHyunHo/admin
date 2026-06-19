@@ -611,7 +611,7 @@ export function ChargeRequestsBoard({
                                 type="button"
                                 onClick={() => moveRequest(row, "승인")}
                                 disabled={processingId === row.id}
-                                className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+                                className="rounded-lg bg-cyan-400 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
                               >
                                 승인
                               </button>
