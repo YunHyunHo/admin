@@ -403,6 +403,8 @@ export async function PATCH(request: Request) {
     if (payload.action === "set-companies") {
       const managedCompanies = normalizeManagedCompanies(
         payload.managedCompanies ?? [],
+        undefined,
+        { allowEmpty: true },
       );
 
       nextAccounts = issuedAccounts.map((account) =>

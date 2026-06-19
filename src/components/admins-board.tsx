@@ -242,11 +242,6 @@ export function AdminsBoard({
       return;
     }
 
-    if (!selectedManagedCompanies.length) {
-      setCompanyModalMessage("업체를 하나 이상 선택해주세요.");
-      return;
-    }
-
     setIsSavingCompany(true);
     setCompanyModalMessage("");
 
