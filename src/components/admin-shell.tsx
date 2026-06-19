@@ -5,6 +5,7 @@ import { logoutAction } from "@/app/actions/auth";
 import { DashboardSummaryToggle } from "@/components/dashboard-summary-toggle";
 import { GlobalDashboardSummaryPanel } from "@/components/global-dashboard-summary-panel";
 import { GlobalRequestNotifier } from "@/components/global-request-notifier";
+import { QuickActionNav } from "@/components/quick-action-nav";
 import type { SessionUser } from "@/lib/auth";
 import {
   getDashboardPartnerSummariesForUser,
@@ -305,29 +306,10 @@ export async function AdminShell({
                   </p>
                   <p className="mt-1 text-xs text-white/42">{user.username}</p>
                 </div>
-                <nav
-                  aria-label="거래 바로가기"
-                  className="flex min-w-0 flex-1 flex-wrap items-center gap-2 lg:justify-center"
-                >
-                  {visibleQuickActions.map((action) => {
-                    const isActive = action.key === activeItem;
-
-                    return (
-                      <Link
-                        key={action.key}
-                        href={action.href}
-                        aria-current={isActive ? "page" : undefined}
-                        className={`inline-flex h-10 min-w-[5.5rem] items-center justify-center rounded-2xl border px-4 text-sm font-semibold transition sm:min-w-[6.25rem] ${
-                          isActive
-                            ? "border-cyan-300/34 bg-cyan-400/16 text-cyan-50 shadow-[0_0_0_1px_rgba(103,232,249,0.10)]"
-                            : "border-white/10 bg-white/[0.04] text-white/78 hover:border-white/18 hover:bg-white/[0.08] hover:text-white"
-                        }`}
-                      >
-                        {action.title}
-                      </Link>
-                    );
-                  })}
-                </nav>
+                <QuickActionNav
+                  actions={visibleQuickActions}
+                  activeItem={activeItem}
+                />
                 <div className="absolute right-4 top-4 flex items-center gap-2 sm:right-6 lg:static">
                   <GlobalRequestNotifier />
                   <DashboardSummaryToggle />

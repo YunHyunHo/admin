@@ -13,6 +13,14 @@ type PendingRowsResponse = {
   rows?: Array<{ id: string; status?: string }>;
 };
 
+export type PendingRequestCounts = {
+  charges: number;
+  domainExchanges: number;
+  distributorWithdrawals: number;
+};
+
+export const pendingRequestCountsEventName = "pending-request-counts";
+
 function isPendingStatus(status: string | undefined) {
   return status === "승인중" || status === "PENDING";
 }
@@ -27,30 +35,38 @@ async function fetchJson<T>(url: string) {
   return (await response.json().catch(() => null)) as T | null;
 }
 
-function collectPendingIds(
+function collectPendingSnapshot(
   chargeData: ChargeRequestsResponse | null,
   domainExchangeData: PendingRowsResponse | null,
   distributorWithdrawalData: PendingRowsResponse | null,
 ) {
   const ids = new Set<string>();
+  const counts: PendingRequestCounts = {
+    charges: 0,
+    domainExchanges: 0,
+    distributorWithdrawals: 0,
+  };
 
   for (const request of chargeData?.pending ?? []) {
     ids.add(`charge:${request.id}`);
+    counts.charges += 1;
   }
 
   for (const row of domainExchangeData?.rows ?? []) {
     if (isPendingStatus(row.status)) {
       ids.add(`domain-exchange:${row.id}`);
+      counts.domainExchanges += 1;
     }
   }
 
   for (const row of distributorWithdrawalData?.rows ?? []) {
     if (isPendingStatus(row.status)) {
       ids.add(`distributor-withdrawal:${row.id}`);
+      counts.distributorWithdrawals += 1;
     }
   }
 
-  return ids;
+  return { ids, counts };
 }
 
 export function GlobalRequestNotifier() {
@@ -111,16 +127,22 @@ export function GlobalRequestNotifier() {
         fetchJson<PendingRowsResponse>("/api/distributor-withdrawals"),
       ]);
 
-    const nextPendingIds = collectPendingIds(
+    const pendingSnapshot = collectPendingSnapshot(
       chargeData,
       domainExchangeData,
       distributorWithdrawalData,
     );
+    const nextPendingIds = pendingSnapshot.ids;
     const newPendingCount = [...nextPendingIds].filter(
       (id) => !knownPendingIdsRef.current.has(id),
     ).length;
 
     knownPendingIdsRef.current = nextPendingIds;
+    window.dispatchEvent(
+      new CustomEvent<PendingRequestCounts>(pendingRequestCountsEventName, {
+        detail: pendingSnapshot.counts,
+      }),
+    );
 
     if (!hasInitializedRef.current) {
       hasInitializedRef.current = true;
