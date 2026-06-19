@@ -256,7 +256,7 @@ export function ChargeRequestsBoard({
           return;
         }
 
-        applyServerData(data, { notifyNewPending: true, resetPages: false });
+        applyServerData(data, { notifyNewPending: false, resetPages: false });
         setLastSyncedAt(getCurrentTimeLabel());
       } catch {
         if (!isCancelled) {

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { logoutAction } from "@/app/actions/auth";
 import { DashboardSummaryToggle } from "@/components/dashboard-summary-toggle";
 import { GlobalDashboardSummaryPanel } from "@/components/global-dashboard-summary-panel";
+import { GlobalRequestNotifier } from "@/components/global-request-notifier";
 import type { SessionUser } from "@/lib/auth";
 import {
   getDashboardPartnerSummariesForUser,
@@ -328,6 +329,7 @@ export async function AdminShell({
                   })}
                 </nav>
                 <div className="absolute right-4 top-4 flex items-center gap-2 sm:right-6 lg:static">
+                  <GlobalRequestNotifier />
                   <DashboardSummaryToggle />
                   <ThemeToggle />
                 </div>
