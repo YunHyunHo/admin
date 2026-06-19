@@ -252,9 +252,9 @@ async function getScopedCompanyIdsByNames(
   }
 
   if (user?.role === "MASTER") {
-    const result = await query<{ id: string }>(
+    const result = await query<{ id: string; company_name: string }>(
       `
-        select distinct c.id::text as id
+        select distinct c.id::text as id, c.company_name
         from companies c
         join admin_company_mappings acm on acm.company_id = c.id
         join admins a on a.id = acm.admin_id
@@ -271,9 +271,9 @@ async function getScopedCompanyIdsByNames(
   }
 
   if (user?.role === "DOMAIN_ADMIN") {
-    const result = await query<{ id: string }>(
+    const result = await query<{ id: string; company_name: string }>(
       `
-        select distinct c.id::text as id
+        select distinct c.id::text as id, c.company_name
         from companies c
         join admin_company_mappings acm on acm.company_id = c.id
         where c.status = 'ACTIVE'
