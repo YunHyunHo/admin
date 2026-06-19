@@ -10,6 +10,7 @@ import type {
 } from "@/lib/domain-exchanges-types";
 
 const DEFAULT_ROW_LIMIT = 200;
+const domainExchangeEventsChannel = "domain_exchange_events";
 
 function shiftSqlParams(sql: string, offset: number) {
   return sql.replace(/\$(\d+)/g, (_, indexText) => `$${Number(indexText) + offset}`);
@@ -716,7 +717,12 @@ export async function approveDomainExchange(id: string, processedBy: SessionUser
       );
     }
 
-    await client.query(
+    const approvedResult = await client.query<{
+      id: string;
+      domain_id: string | null;
+      amount: string;
+      approved_at: string;
+    }>(
       `
         update exchange_requests
         set status = 'APPROVED',
@@ -725,9 +731,29 @@ export async function approveDomainExchange(id: string, processedBy: SessionUser
             updated_at = now()
         where id = $1::uuid
           and status = 'PENDING'
+        returning
+          id::text,
+          domain_id::text,
+          amount::text,
+          to_char(processed_at at time zone 'Asia/Seoul', 'YYYY-MM-DD HH24:MI:SS') as approved_at
       `,
       [id, processedBy.id],
     );
+
+    const approvedExchange = approvedResult.rows[0];
+
+    if (approvedExchange?.domain_id) {
+      await client.query("select pg_notify($1, $2)", [
+        domainExchangeEventsChannel,
+        JSON.stringify({
+          id: approvedExchange.id,
+          domainId: approvedExchange.domain_id,
+          amount: Number(approvedExchange.amount),
+          status: "APPROVED",
+          approvedAt: approvedExchange.approved_at,
+        }),
+      ]);
+    }
   });
 }
 
