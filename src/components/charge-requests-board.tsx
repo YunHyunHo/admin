@@ -141,6 +141,7 @@ export function ChargeRequestsBoard({
   const [rejectedPage, setRejectedPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [armedApprovalId, setArmedApprovalId] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createDomainId, setCreateDomainId] = useState(domainOptions[0]?.id ?? "");
   const [createDepositorName, setCreateDepositorName] = useState("");
@@ -203,6 +204,11 @@ export function ChargeRequestsBoard({
       setPendingRequests(data.pending);
       setApprovedRequests(data.approved);
       setRejectedRequests(data.rejected);
+      setArmedApprovalId((current) =>
+        current && data.pending.some((request) => request.id === current)
+          ? current
+          : null,
+      );
 
       if (shouldResetPages) {
         setPendingPage(1);
@@ -420,15 +426,12 @@ export function ChargeRequestsBoard({
     setConfirmAction({ row, nextStatus, subjectLabel, actionLabel });
   }
 
-  async function processConfirmedRequest() {
-    if (!confirmAction) {
-      return;
-    }
-
-    const { row, nextStatus, subjectLabel, actionLabel } = confirmAction;
+  async function processRequest(action: ChargeConfirmAction) {
+    const { row, nextStatus, subjectLabel, actionLabel } = action;
     const targetId = row.id;
 
     setConfirmAction(null);
+    setArmedApprovalId(null);
     setProcessingId(targetId);
     setMessage(`${subjectLabel} 요청을 ${actionLabel} 처리 중입니다.`);
 
@@ -440,6 +443,29 @@ export function ChargeRequestsBoard({
     } finally {
       setProcessingId(null);
     }
+  }
+
+  function processConfirmedRequest() {
+    if (confirmAction) {
+      void processRequest(confirmAction);
+    }
+  }
+
+  function approvePendingRequest(row: PendingRequest) {
+    if (armedApprovalId !== row.id) {
+      setArmedApprovalId(row.id);
+      setMessage(
+        `${row.depositor?.trim() || row.id} 요청을 승인하려면 승인 버튼을 한 번 더 눌러주세요.`,
+      );
+      return;
+    }
+
+    void processRequest({
+      row,
+      nextStatus: "승인",
+      subjectLabel: row.depositor?.trim() || row.id,
+      actionLabel: "승인",
+    });
   }
 
   return (
@@ -475,7 +501,8 @@ export function ChargeRequestsBoard({
               </button>
               <button
                 type="button"
-                onClick={() => void processConfirmedRequest()}
+                onClick={processConfirmedRequest}
+                autoFocus
                 className="h-11 rounded-xl bg-cyan-400 px-5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
               >
                 확인
@@ -609,15 +636,28 @@ export function ChargeRequestsBoard({
                             <div className="flex gap-2">
                               <button
                                 type="button"
-                                onClick={() => moveRequest(row, "승인")}
+                                onClick={() => approvePendingRequest(row)}
                                 disabled={processingId === row.id}
-                                className="rounded-lg bg-cyan-400 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+                                aria-pressed={armedApprovalId === row.id}
+                                title={
+                                  armedApprovalId === row.id
+                                    ? "한 번 더 누르면 승인됩니다."
+                                    : "승인하려면 두 번 눌러주세요."
+                                }
+                                className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-950 transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                                  armedApprovalId === row.id
+                                    ? "bg-amber-300 hover:bg-amber-200"
+                                    : "bg-cyan-400 hover:bg-cyan-300"
+                                }`}
                               >
                                 승인
                               </button>
                               <button
                                 type="button"
-                                onClick={() => moveRequest(row, "승인거절")}
+                                onClick={() => {
+                                  setArmedApprovalId(null);
+                                  moveRequest(row, "승인거절");
+                                }}
                                 disabled={processingId === row.id}
                                 className="rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                               >

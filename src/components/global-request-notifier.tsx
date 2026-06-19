@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import type { DomainExchangeRow } from "@/lib/domain-exchanges-types";
+
 const noticeSoundPath = "/sounds/notice.mp3";
 const pollIntervalMs = 5000;
 const noticeSoundReadyKey = "winpay-notice-sound-ready";
@@ -18,6 +20,10 @@ type PendingRowsResponse = {
   rows?: Array<{ id: string; status?: string }>;
 };
 
+type DomainExchangeRowsResponse = {
+  rows?: DomainExchangeRow[];
+};
+
 export type PendingRequestCounts = {
   charges: number;
   domainExchanges: number;
@@ -25,6 +31,7 @@ export type PendingRequestCounts = {
 };
 
 export const pendingRequestCountsEventName = "pending-request-counts";
+export const domainExchangeRowsEventName = "domain-exchange-rows";
 
 function isPendingStatus(status: string | undefined) {
   return status === "승인중" || status === "PENDING";
@@ -188,7 +195,7 @@ export function GlobalRequestNotifier() {
     const [chargeData, domainExchangeData, distributorWithdrawalData] =
       await Promise.all([
         fetchJson<ChargeRequestsResponse>("/api/charge-requests"),
-        fetchJson<PendingRowsResponse>("/api/domain-exchanges"),
+        fetchJson<DomainExchangeRowsResponse>("/api/domain-exchanges"),
         fetchJson<PendingRowsResponse>("/api/distributor-withdrawals"),
       ]);
 
@@ -208,6 +215,14 @@ export function GlobalRequestNotifier() {
         detail: pendingSnapshot.counts,
       }),
     );
+
+    if (domainExchangeData?.rows) {
+      window.dispatchEvent(
+        new CustomEvent<DomainExchangeRow[]>(domainExchangeRowsEventName, {
+          detail: domainExchangeData.rows,
+        }),
+      );
+    }
 
     if (!hasInitializedRef.current) {
       hasInitializedRef.current = true;

@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { domainExchangeRowsEventName } from "@/components/global-request-notifier";
 import { ModalFeedback } from "@/components/modal-feedback";
 import type {
   DomainExchangeOption,
@@ -238,10 +239,33 @@ export function DomainExchangesBoard({
   const [accountHolder, setAccountHolder] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const pageCount = Math.max(1, Math.ceil(rows.length / rowsPerPage));
+  const currentPage = Math.min(page, pageCount);
   const pageRows = useMemo(
-    () => rows.slice((page - 1) * rowsPerPage, page * rowsPerPage),
-    [rows, page],
+    () =>
+      rows.slice(
+        (currentPage - 1) * rowsPerPage,
+        currentPage * rowsPerPage,
+      ),
+    [currentPage, rows],
   );
+
+  useEffect(() => {
+    function handleRowsUpdate(event: Event) {
+      const nextRows = (event as CustomEvent<DomainExchangeRow[]>).detail;
+
+      if (!Array.isArray(nextRows)) {
+        return;
+      }
+
+      setRows(nextRows.map(normalizeExchangeRow));
+    }
+
+    window.addEventListener(domainExchangeRowsEventName, handleRowsUpdate);
+
+    return () => {
+      window.removeEventListener(domainExchangeRowsEventName, handleRowsUpdate);
+    };
+  }, []);
 
   async function createExchange() {
     if (isSubmitting) {
@@ -488,7 +512,7 @@ export function DomainExchangesBoard({
               type="button"
               onClick={() => setPage(1)}
               className="h-10 min-w-10 rounded-xl bg-black px-3 font-semibold text-white disabled:opacity-35"
-              disabled={page === 1}
+              disabled={currentPage === 1}
             >
               |‹
             </button>
@@ -496,7 +520,7 @@ export function DomainExchangesBoard({
               type="button"
               onClick={() => setPage((current) => Math.max(1, current - 1))}
               className="h-10 min-w-10 rounded-xl bg-black px-3 font-semibold text-white disabled:opacity-35"
-              disabled={page === 1}
+              disabled={currentPage === 1}
             >
               ‹
             </button>
@@ -510,7 +534,7 @@ export function DomainExchangesBoard({
                   type="button"
                   onClick={() => setPage(pageNumber)}
                   className={`h-10 min-w-10 rounded-xl px-3 font-semibold ${
-                    page === pageNumber
+                    currentPage === pageNumber
                       ? "bg-white text-slate-950"
                       : "bg-black text-white"
                   }`}
@@ -526,7 +550,7 @@ export function DomainExchangesBoard({
                 setPage((current) => Math.min(pageCount, current + 1))
               }
               className="h-10 min-w-10 rounded-xl bg-black px-3 font-semibold text-white disabled:opacity-35"
-              disabled={page === pageCount}
+              disabled={currentPage === pageCount}
             >
               ›
             </button>
@@ -534,7 +558,7 @@ export function DomainExchangesBoard({
               type="button"
               onClick={() => setPage(pageCount)}
               className="h-10 min-w-10 rounded-xl bg-black px-3 font-semibold text-white disabled:opacity-35"
-              disabled={page === pageCount}
+              disabled={currentPage === pageCount}
             >
               ›|
             </button>
