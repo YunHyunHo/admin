@@ -163,15 +163,53 @@ export function getMasterAccount(): AdminAccountRecord {
   };
 }
 
-export async function getManagedCompanyOptions() {
+export async function getManagedCompanyOptions(
+  user?: Pick<SessionUser, "id" | "role"> | null,
+) {
   if (!hasDatabaseUrl()) {
     return managedCompanyOptions;
   }
 
-  return getDbManagedCompanyOptions();
+  return getDbManagedCompanyOptions(user);
 }
 
-async function getDbManagedCompanyOptions() {
+async function getDbManagedCompanyOptions(
+  user?: Pick<SessionUser, "id" | "role"> | null,
+) {
+  if (user?.role === "MASTER") {
+    const result = await query<{ company_name: string }>(
+      `
+        select distinct c.company_name
+        from companies c
+        join admin_company_mappings acm on acm.company_id = c.id
+        join admins a on a.id = acm.admin_id
+        where c.status = 'ACTIVE'
+          and a.status <> 'DELETED'
+          and a.created_by = $1::uuid
+        order by c.company_name asc
+      `,
+      [user.id],
+    );
+
+    return result.rows.map((row) => row.company_name);
+  }
+
+  if (user?.role === "DOMAIN_ADMIN") {
+    const result = await query<{ company_name: string }>(
+      `
+        select c.company_name
+        from admin_company_mappings acm
+        join companies c on c.id = acm.company_id
+        where acm.admin_id = $1::uuid
+          and c.status = 'ACTIVE'
+        order by c.company_name asc
+      `,
+      [user.id],
+    );
+
+    return result.rows.map((row) => row.company_name);
+  }
+
   const result = await query<{ company_name: string }>(
     `
       select company_name
@@ -184,6 +222,83 @@ async function getDbManagedCompanyOptions() {
   return result.rows.length
     ? result.rows.map((row) => row.company_name)
     : managedCompanyOptions;
+}
+
+async function getDbAdminActor(adminId?: string | null) {
+  if (!adminId) {
+    return null;
+  }
+
+  const result = await query<{ id: string; role: SessionUser["role"] }>(
+    `
+      select id::text, role::text as role
+      from admins
+      where id = $1::uuid
+        and status <> 'DELETED'
+      limit 1
+    `,
+    [adminId],
+  );
+
+  return result.rows[0] ?? null;
+}
+
+async function getScopedCompanyIdsByNames(
+  companyNames: string[],
+  user?: Pick<SessionUser, "id" | "role"> | null,
+) {
+  if (!companyNames.length) {
+    return [] as string[];
+  }
+
+  if (user?.role === "MASTER") {
+    const result = await query<{ id: string }>(
+      `
+        select distinct c.id::text as id
+        from companies c
+        join admin_company_mappings acm on acm.company_id = c.id
+        join admins a on a.id = acm.admin_id
+        where c.status = 'ACTIVE'
+          and c.company_name = any($1::text[])
+          and a.status <> 'DELETED'
+          and a.created_by = $2::uuid
+        order by c.company_name asc
+      `,
+      [companyNames, user.id],
+    );
+
+    return result.rows.map((row) => row.id);
+  }
+
+  if (user?.role === "DOMAIN_ADMIN") {
+    const result = await query<{ id: string }>(
+      `
+        select distinct c.id::text as id
+        from companies c
+        join admin_company_mappings acm on acm.company_id = c.id
+        where c.status = 'ACTIVE'
+          and c.company_name = any($1::text[])
+          and acm.admin_id = $2::uuid
+        order by c.company_name asc
+      `,
+      [companyNames, user.id],
+    );
+
+    return result.rows.map((row) => row.id);
+  }
+
+  const result = await query<{ id: string }>(
+    `
+      select id::text as id
+      from companies
+      where status = 'ACTIVE'
+        and company_name = any($1::text[])
+      order by company_name asc
+    `,
+    [companyNames],
+  );
+
+  return result.rows.map((row) => row.id);
 }
 
 function toAdminAccountRecord(
@@ -252,7 +367,7 @@ function filterAccountsForUser(
 }
 
 async function getDbAdminAccounts(user?: Pick<SessionUser, "id" | "role"> | null) {
-  const companyOptions = await getDbManagedCompanyOptions();
+  const companyOptions = await getDbManagedCompanyOptions(user);
   const result = await query<DbAdminRow>(
     `
       select
@@ -470,7 +585,8 @@ export async function createPersistedAdminAccount(input: {
     return createIssuedAdminAccount(input);
   }
 
-  const companyOptions = await getDbManagedCompanyOptions();
+  const ownerScope = await getDbAdminActor(input.createdById);
+  const companyOptions = await getDbManagedCompanyOptions(ownerScope);
   const normalizedCompanies =
     input.role === "DOMAIN_ADMIN"
       ? normalizeManagedCompanies(input.managedCompanies, companyOptions, {
@@ -516,19 +632,11 @@ export async function createPersistedAdminAccount(input: {
     throw new Error("어드민 계정 생성에 실패했습니다.");
   }
 
-  let primaryCompanyId =
-    (
-      await query<{ id: string }>(
-        `
-          select id::text
-          from companies
-          where company_name = any($1::text[])
-          order by company_name asc
-          limit 1
-        `,
-        [normalizedCompanies],
-      )
-    ).rows[0]?.id ?? null;
+  const scopedCompanyIds = await getScopedCompanyIdsByNames(
+    normalizedCompanies,
+    ownerScope,
+  );
+  let primaryCompanyId = scopedCompanyIds[0] ?? null;
 
   if (!primaryCompanyId && normalizedCompanies.length) {
     const createdCompany = await query<{ id: string }>(
@@ -540,18 +648,19 @@ export async function createPersistedAdminAccount(input: {
       [normalizedCompanies[0]],
     );
     primaryCompanyId = createdCompany.rows[0]?.id ?? null;
+    if (primaryCompanyId) {
+      scopedCompanyIds.push(primaryCompanyId);
+    }
   }
 
   if (normalizedCompanies.length) {
     await query(
       `
         insert into admin_company_mappings (admin_id, company_id)
-        select $1::uuid, id
-        from companies
-        where company_name = any($2::text[])
+        select $1::uuid, unnest($2::uuid[])
         on conflict (admin_id, company_id) do nothing
       `,
-      [adminId, normalizedCompanies],
+      [adminId, scopedCompanyIds],
     );
   }
 
@@ -627,7 +736,7 @@ export async function createPersistedAdminAccount(input: {
     );
   }
 
-  return (await getAllAdminAccounts()).find((account) => account.id === adminId);
+  return (await getAllAdminAccounts(ownerScope)).find((account) => account.id === adminId);
 }
 
 export async function updatePersistedAdminAccount(input: {
@@ -642,11 +751,12 @@ export async function updatePersistedAdminAccount(input: {
     return null;
   }
 
-  const accounts = await getIssuedAdminAccountsFromCookie();
+  const actor = await getDbAdminActor(input.processedBy);
+  const accounts = await getAllAdminAccounts(actor);
   const targetAccount = accounts.find((account) => account.id === input.id);
 
   if (!targetAccount) {
-    return null;
+    throw new Error("수정할 하부계정을 찾을 수 없습니다.");
   }
 
   if (input.action === "adjust-balance") {
@@ -738,6 +848,16 @@ export async function updatePersistedAdminAccount(input: {
   }
 
   if (input.action === "delete") {
+    const distributorRows = await query<{ id: string }>(
+      `
+        select id::text
+        from distributors
+        where admin_id = $1::uuid
+      `,
+      [input.id],
+    );
+    const distributorIds = distributorRows.rows.map((row) => row.id);
+
     if (targetAccount.role === "TOP_DISTRIBUTOR") {
       await query(
         `
@@ -750,6 +870,27 @@ export async function updatePersistedAdminAccount(input: {
           )
         `,
         [input.id],
+      );
+    }
+
+    if (distributorIds.length) {
+      await query(
+        `
+          update fee_rates
+          set ends_at = now(), updated_at = now()
+          where ends_at is null
+            and (
+              distributor_id = any($1::uuid[])
+              or sub_distributor_id = any($1::uuid[])
+              or exists (
+                select 1
+                from fee_rate_partners fp
+                where fp.fee_rate_id = fee_rates.id
+                  and fp.distributor_id = any($1::uuid[])
+              )
+            )
+        `,
+        [distributorIds],
       );
     }
 
@@ -801,9 +942,8 @@ export async function updatePersistedAdminAccount(input: {
               `
                 select id::text
                 from charge_requests
-                where
-                  (${distributorIds.length ? "distributor_id = any($1::uuid[])" : "false"})
-                  or (${domainIds.length ? "domain_id = any($2::uuid[])" : "false"})
+                where distributor_id = any($1::uuid[])
+                  or domain_id = any($2::uuid[])
               `,
               [distributorIds, domainIds],
             )
@@ -835,10 +975,9 @@ export async function updatePersistedAdminAccount(input: {
         await client.query(
           `
             delete from commission_records
-            where
-              (${chargeIds.length ? "charge_request_id = any($1::uuid[])" : "false"})
-              or (${distributorIds.length ? "distributor_id = any($2::uuid[])" : "false"})
-              or (${domainIds.length ? "domain_id = any($3::uuid[])" : "false"})
+            where charge_request_id = any($1::uuid[])
+              or distributor_id = any($2::uuid[])
+              or domain_id = any($3::uuid[])
           `,
           [chargeIds, distributorIds, domainIds],
         );
@@ -882,8 +1021,15 @@ export async function updatePersistedAdminAccount(input: {
           `
             delete from fee_rates
             where created_by = $1::uuid
-              or (${distributorIds.length ? "distributor_id = any($2::uuid[])" : "false"})
-              or (${domainIds.length ? "domain_id = any($3::uuid[])" : "false"})
+              or distributor_id = any($2::uuid[])
+              or sub_distributor_id = any($2::uuid[])
+              or domain_id = any($3::uuid[])
+              or exists (
+                select 1
+                from fee_rate_partners fp
+                where fp.fee_rate_id = fee_rates.id
+                  and fp.distributor_id = any($2::uuid[])
+              )
           `,
           [input.id, distributorIds, domainIds],
         );
@@ -931,11 +1077,15 @@ export async function updatePersistedAdminAccount(input: {
   }
 
   if (input.action === "set-companies") {
-    const companyOptions = await getDbManagedCompanyOptions();
+    const companyOptions = await getDbManagedCompanyOptions(actor);
     const managedCompanies = normalizeManagedCompanies(
       input.managedCompanies ?? [],
       companyOptions,
       { allowEmpty: true },
+    );
+    const scopedCompanyIds = await getScopedCompanyIdsByNames(
+      managedCompanies,
+      actor,
     );
 
     await query("delete from admin_company_mappings where admin_id = $1::uuid", [
@@ -944,12 +1094,10 @@ export async function updatePersistedAdminAccount(input: {
     await query(
       `
         insert into admin_company_mappings (admin_id, company_id)
-        select $1::uuid, id
-        from companies
-        where company_name = any($2::text[])
+        select $1::uuid, unnest($2::uuid[])
         on conflict (admin_id, company_id) do nothing
       `,
-      [input.id, managedCompanies],
+      [input.id, scopedCompanyIds],
     );
   }
 

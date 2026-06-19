@@ -89,7 +89,7 @@ export async function GET() {
 
     const [allAccounts, managedCompanies] = await Promise.all([
       getAllAdminAccounts(user),
-      getManagedCompanyOptions(),
+      getManagedCompanyOptions(user),
     ]);
 
     return NextResponse.json({
@@ -130,7 +130,7 @@ export async function POST(request: Request) {
     const role = payload.role;
     const parentAdminId = payload.parentAdminId?.trim() ?? "";
     const parentDistributorName = payload.parentDistributorName?.trim() ?? "";
-    const managedCompanyOptions = await getManagedCompanyOptions();
+    const managedCompanyOptions = await getManagedCompanyOptions(user);
     const managedCompanies =
       payload.managedCompanies?.filter((company) =>
         managedCompanyOptions.includes(company),
@@ -296,7 +296,10 @@ export async function PATCH(request: Request) {
   }
 
   const issuedAccounts = await getIssuedAdminAccountsFromCookie(user);
-  const targetAccount = issuedAccounts.find((account) => account.id === payload.id);
+  const dbAccounts = hasDatabaseUrl() ? await getAllAdminAccounts(user) : [];
+  const targetAccount = hasDatabaseUrl()
+    ? dbAccounts.find((account) => account.id === payload.id)
+    : issuedAccounts.find((account) => account.id === payload.id);
 
   if (!targetAccount) {
     return NextResponse.json(
@@ -345,7 +348,7 @@ export async function PATCH(request: Request) {
     });
     const [updatedAccounts, managedCompanies] = await Promise.all([
       getAllAdminAccounts(user),
-      getManagedCompanyOptions(),
+      getManagedCompanyOptions(user),
     ]);
 
     return NextResponse.json({
@@ -443,7 +446,7 @@ export async function PATCH(request: Request) {
 
   const response = NextResponse.json({
     accounts: toVisiblePasswordList([...(await getAllAdminAccounts(user)).slice(0, 1), ...nextAccounts]),
-    managedCompanies: await getManagedCompanyOptions(),
+    managedCompanies: await getManagedCompanyOptions(user),
     message,
   });
 

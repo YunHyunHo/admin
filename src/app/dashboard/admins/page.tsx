@@ -32,7 +32,7 @@ export default async function AdminsPage() {
         return visibleAccount;
       }),
     ),
-    getManagedCompanyOptions(),
+    getManagedCompanyOptions(user),
   ]);
 
   return (

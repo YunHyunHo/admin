@@ -26,6 +26,14 @@ import type { QueryResultRow } from "pg";
 import type { SessionUser } from "@/lib/auth";
 
 const DEFAULT_ROW_LIMIT = 300;
+const RATE_SCALE = 10000;
+const PERCENT_SCALE = 100;
+
+function calculateCommissionAmount(amount: number, rate: number) {
+  const scaledRate = Math.round(rate * RATE_SCALE);
+
+  return Math.floor((amount * scaledRate) / (RATE_SCALE * PERCENT_SCALE));
+}
 
 type ScopedClause = {
   sql: string;
@@ -1276,7 +1284,7 @@ export async function processDbChargeRequest(input: {
         return {
           distributorId: partner.distributor_id,
           rate,
-          amount: Math.floor(amount * (rate / 100)),
+          amount: calculateCommissionAmount(amount, rate),
           sourceType: `COMMISSION_PARTNER_${partner.position}`,
           memo: `충전 승인 파트너${partner.position} 수수료 적립`,
         };
@@ -1289,16 +1297,16 @@ export async function processDbChargeRequest(input: {
     const totalRate = partnerCredits.length
       ? companyRate + partnerTotalRate
       : companyRate + distributorRate + agencyRate + subDistributorRate;
-    const companyFee = Math.floor(amount * (companyRate / 100));
+    const companyFee = calculateCommissionAmount(amount, companyRate);
     const topDistributorFee = partnerCredits.length
       ? (partnerCredits[0]?.amount ?? 0)
-      : Math.floor(amount * (distributorRate / 100));
+      : calculateCommissionAmount(amount, distributorRate);
     const distributorFee = partnerCredits.length
       ? partnerCredits.slice(1).reduce((sum, partner) => sum + partner.amount, 0)
-      : Math.floor(amount * (agencyRate / 100));
+      : calculateCommissionAmount(amount, agencyRate);
     const subDistributorFee = partnerCredits.length
       ? 0
-      : Math.floor(amount * (subDistributorRate / 100));
+      : calculateCommissionAmount(amount, subDistributorRate);
     const savedCommission =
       companyFee +
       (partnerCredits.length

@@ -42,6 +42,7 @@ export type DomainListRow = {
 
 type DomainCompanyAdminRow = {
   id: string;
+  company_id: string;
   domain_name: string | null;
   company_name: string;
   distributor_name: string | null;
@@ -222,12 +223,13 @@ export async function createDomainEntry(input: CreateDomainEntryInput) {
 
       const duplicateCompany = await client.query<{ id: string }>(
         `
-          select id::text
-          from companies
-          where company_name = $1
+          select c.id::text
+          from companies c
+          where c.company_name = $1
+            and ${getMasterOwnedCompanyExistsCondition("c.id", "$2")}
           limit 1
         `,
-        [domainName],
+        [domainName, input.createdById],
       );
 
       if (duplicateCompany.rows[0]) {
@@ -253,13 +255,15 @@ export async function createDomainEntry(input: CreateDomainEntryInput) {
       if (ownerDistributorId) {
         const distributorResult = await client.query<{ id: string }>(
           `
-            select id::text
+            select distributors.id::text
             from distributors
-            where id = $1::uuid
-              and status = 'ACTIVE'
+            join admins dist_admin on dist_admin.id = distributors.admin_id
+            where distributors.id = $1::uuid
+              and distributors.status = 'ACTIVE'
+              and dist_admin.created_by = $2::uuid
             limit 1
           `,
-          [ownerDistributorId],
+          [ownerDistributorId, input.createdById],
         );
 
         if (!distributorResult.rows[0]) {
@@ -571,6 +575,7 @@ async function deleteDomainEntryWithAccount(id: string, hardDelete: boolean, use
       `
         select
           dom.id::text,
+          dom.company_id::text,
           dom.domain_name,
           c.company_name,
           dist.name as distributor_name,
@@ -599,9 +604,10 @@ async function deleteDomainEntryWithAccount(id: string, hardDelete: boolean, use
       [id, user.id],
     );
 
+    const companyId = domainRow.rows[0]?.company_id;
     const companyName = domainRow.rows[0]?.company_name;
 
-    if (!companyName) {
+    if (!companyId || !companyName) {
       throw new Error("도메인 정보를 찾지 못했습니다.");
     }
 
@@ -610,12 +616,12 @@ async function deleteDomainEntryWithAccount(id: string, hardDelete: boolean, use
         select a.id::text
         from admins a
         join admin_company_mappings acm on acm.admin_id = a.id
-        join companies c on c.id = acm.company_id
         where a.role = 'DOMAIN_ADMIN'
-          and c.company_name = $1
+          and acm.company_id = $1::uuid
+          and a.created_by = $2::uuid
         limit 1
       `,
-      [companyName],
+      [companyId, user.id],
     );
 
     const adminId = adminResult.rows[0]?.id ?? null;
@@ -642,9 +648,9 @@ async function deleteDomainEntryWithAccount(id: string, hardDelete: boolean, use
       await client.query(
         `
           delete from companies
-          where company_name = $1
+          where id = $1::uuid
         `,
-        [companyName],
+        [companyId],
       );
       return;
     }

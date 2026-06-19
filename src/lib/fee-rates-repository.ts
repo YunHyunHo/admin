@@ -43,11 +43,6 @@ type FeePartner = {
   rate: number;
 };
 
-type DistributorLookupRow = {
-  id: string;
-  parent_distributor_id: string | null;
-};
-
 type TransactionClient = {
   query<T = unknown>(text: string, values?: unknown[]): Promise<{ rows: T[] }>;
 };
@@ -397,77 +392,6 @@ async function getCurrentFeePartners(
   ] satisfies FeePartner[];
 }
 
-async function normalizeFeePartners(
-  client: TransactionClient,
-  partners: FeePartner[],
-  changedPosition?: 1 | 2 | 3,
-) {
-  const nextPartners = partners.map((partner) => ({ ...partner }));
-  const selectedPartner = changedPosition
-    ? nextPartners.find((partner) => partner.position === changedPosition)
-    : undefined;
-
-  if (!selectedPartner?.distributorId) {
-    return nextPartners;
-  }
-
-  const selectedResult = await client.query<DistributorLookupRow>(
-    `
-      select id::text, parent_distributor_id::text
-      from distributors
-      where id = $1::uuid
-        and status = 'ACTIVE'
-      limit 1
-    `,
-    [selectedPartner.distributorId],
-  );
-  const selected = selectedResult.rows[0];
-
-  if (!selected) {
-    return nextPartners;
-  }
-
-  if (selected.parent_distributor_id) {
-    const previous = nextPartners.find(
-      (partner) => partner.position === Math.max(1, selectedPartner.position - 1),
-    );
-
-    if (selectedPartner.position === 1) {
-      const second = nextPartners.find((partner) => partner.position === 2);
-      selectedPartner.distributorId = selected.parent_distributor_id;
-      if (second && !second.distributorId) {
-        second.distributorId = selected.id;
-      }
-    } else if (previous && !previous.distributorId) {
-      previous.distributorId = selected.parent_distributor_id;
-    }
-
-    return nextPartners;
-  }
-
-  const next = nextPartners.find(
-    (partner) => partner.position === selectedPartner.position + 1,
-  );
-
-  if (next && !next.distributorId) {
-    const childResult = await client.query<{ id: string }>(
-      `
-        select id::text
-        from distributors
-        where parent_distributor_id = $1::uuid
-          and status = 'ACTIVE'
-        order by created_at asc, name asc
-        limit 1
-      `,
-      [selected.id],
-    );
-
-    next.distributorId = childResult.rows[0]?.id ?? next.distributorId;
-  }
-
-  return nextPartners;
-}
-
 async function insertFeeRatePartners(
   client: TransactionClient,
   feeRateId: string,
@@ -523,9 +447,10 @@ export async function updateFeeRateDomainDistributor(input: {
       `
         select dist.id::text
         from distributors dist
+        left join admins dist_admin on dist_admin.id = dist.admin_id
         where dist.id = $1::uuid
           and dist.status = 'ACTIVE'
-          and ${getMasterOwnedCompanyExistsCondition("dist.company_id", "$2")}
+          and dist_admin.created_by = $2::uuid
         limit 1
       `,
       [input.distributorId, input.user.id],
@@ -575,7 +500,7 @@ export async function updateFeeRateDomainDistributor(input: {
           and dom.status <> 'DELETED'
           and ${getMasterOwnedCompanyExistsCondition("dom.company_id", "$2")}
         limit 1
-        for update
+        for update of dom
       `,
       [input.domainId, input.user.id],
     );
@@ -601,14 +526,10 @@ export async function updateFeeRateDomainDistributor(input: {
         subDistributorRate: Number(domain.sub_distributor_rate ?? 0),
       },
     );
-    const nextPartners = await normalizeFeePartners(
-      client,
-      currentPartners.map((partner) =>
-        partner.position === targetPosition
-          ? { ...partner, distributorId: input.distributorId ?? null }
-          : partner,
-      ),
-      targetPosition,
+    const nextPartners = currentPartners.map((partner) =>
+      partner.position === targetPosition
+        ? { ...partner, distributorId: input.distributorId ?? null }
+        : partner,
     );
 
     if (domain.fee_id) {
@@ -716,7 +637,7 @@ export async function saveFeeRateSettings(input: {
           and dom.status <> 'DELETED'
           and ${getMasterOwnedCompanyExistsCondition("dom.company_id", "$2")}
         limit 1
-        for update
+        for update of dom
       `,
       [input.domainId, input.user.id],
     );
