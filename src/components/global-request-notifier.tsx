@@ -4,9 +4,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const noticeSoundPath = "/sounds/notice.mp3";
 const pollIntervalMs = 5000;
+const noticeSoundReadyKey = "winpay-notice-sound-ready";
+const noticeRetryDelayMs = 1200;
+const maxNoticePlayAttempts = 3;
 
 type ChargeRequestsResponse = {
   pending?: Array<{ id: string }>;
+  approved?: Array<{ id: string }>;
+  rejected?: Array<{ id: string }>;
 };
 
 type PendingRowsResponse = {
@@ -52,6 +57,14 @@ function collectPendingSnapshot(
     counts.charges += 1;
   }
 
+  for (const request of chargeData?.approved ?? []) {
+    ids.add(`charge:${request.id}`);
+  }
+
+  for (const request of chargeData?.rejected ?? []) {
+    ids.add(`charge:${request.id}`);
+  }
+
   for (const row of domainExchangeData?.rows ?? []) {
     if (isPendingStatus(row.status)) {
       ids.add(`domain-exchange:${row.id}`);
@@ -73,6 +86,7 @@ export function GlobalRequestNotifier() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const knownPendingIdsRef = useRef<Set<string>>(new Set());
   const hasInitializedRef = useRef(false);
+  const retryTimeoutRef = useRef<number | null>(null);
   const [isSoundReady, setIsSoundReady] = useState(true);
   const [noticeMessage, setNoticeMessage] = useState("알림 대기중");
 
@@ -85,22 +99,75 @@ export function GlobalRequestNotifier() {
     return audioRef.current;
   }, []);
 
+  const clearNoticeRetry = useCallback(() => {
+    if (retryTimeoutRef.current === null) {
+      return;
+    }
+
+    window.clearTimeout(retryTimeoutRef.current);
+    retryTimeoutRef.current = null;
+  }, []);
+
+  const markNoticeReady = useCallback((message: string) => {
+    setIsSoundReady(true);
+    setNoticeMessage(message);
+
+    try {
+      window.localStorage.setItem(noticeSoundReadyKey, "1");
+    } catch {
+      // Local storage can be unavailable in restricted browser modes.
+    }
+  }, []);
+
+  const markNoticeBlocked = useCallback(() => {
+    setIsSoundReady(false);
+    setNoticeMessage("알림음 다시 켜기");
+  }, []);
+
   const playNoticeSound = useCallback(async () => {
     const audio = ensureAudio();
+    audio.muted = false;
     audio.currentTime = 0;
     await audio.play();
-    setIsSoundReady(true);
-  }, [ensureAudio]);
+    markNoticeReady("알림 대기중");
+  }, [ensureAudio, markNoticeReady]);
+
+  const playNoticeSoundWithRetry = useCallback(
+    async () => {
+      clearNoticeRetry();
+
+      for (let attempt = 1; attempt <= maxNoticePlayAttempts; attempt += 1) {
+        try {
+          await playNoticeSound();
+          return;
+        } catch {
+          markNoticeBlocked();
+        }
+
+        if (attempt >= maxNoticePlayAttempts) {
+          return;
+        }
+
+        await new Promise<void>((resolve) => {
+          retryTimeoutRef.current = window.setTimeout(() => {
+            retryTimeoutRef.current = null;
+            resolve();
+          }, noticeRetryDelayMs);
+        });
+      }
+    },
+    [clearNoticeRetry, markNoticeBlocked, playNoticeSound],
+  );
 
   const activateNoticeSound = useCallback(async () => {
     try {
+      clearNoticeRetry();
       await playNoticeSound();
-      setNoticeMessage("알림음 켜짐");
+      markNoticeReady("알림음 켜짐");
     } catch {
-      setIsSoundReady(false);
-      setNoticeMessage("알림음 다시 켜기");
+      markNoticeBlocked();
     }
-  }, [playNoticeSound]);
+  }, [clearNoticeRetry, markNoticeBlocked, markNoticeReady, playNoticeSound]);
 
   const unlockNoticeSound = useCallback(async () => {
     try {
@@ -111,13 +178,11 @@ export function GlobalRequestNotifier() {
       audio.pause();
       audio.currentTime = 0;
       audio.muted = false;
-      setIsSoundReady(true);
-      setNoticeMessage("알림 대기중");
+      markNoticeReady("알림 대기중");
     } catch {
-      setIsSoundReady(false);
-      setNoticeMessage("알림음 다시 켜기");
+      markNoticeBlocked();
     }
-  }, [ensureAudio]);
+  }, [ensureAudio, markNoticeBlocked, markNoticeReady]);
 
   const syncRequests = useCallback(async () => {
     const [chargeData, domainExchangeData, distributorWithdrawalData] =
@@ -154,14 +219,8 @@ export function GlobalRequestNotifier() {
     }
 
     setNoticeMessage(`${newPendingCount}건 신규 신청`);
-
-    try {
-      await playNoticeSound();
-    } catch {
-      setIsSoundReady(false);
-      setNoticeMessage("알림음 다시 켜기");
-    }
-  }, [playNoticeSound]);
+    void playNoticeSoundWithRetry();
+  }, [playNoticeSoundWithRetry]);
 
   useEffect(() => {
     ensureAudio();
@@ -184,8 +243,20 @@ export function GlobalRequestNotifier() {
     return () => {
       isCancelled = true;
       window.clearInterval(intervalId);
+      clearNoticeRetry();
     };
-  }, [ensureAudio, syncRequests]);
+  }, [clearNoticeRetry, ensureAudio, syncRequests]);
+
+  useEffect(() => {
+    ensureAudio();
+    const timeoutId = window.setTimeout(() => {
+      void unlockNoticeSound();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [ensureAudio, unlockNoticeSound]);
 
   useEffect(() => {
     let isUnlocked = false;
