@@ -36,6 +36,13 @@ type ChargeRequestPayload = {
   domainName?: string;
 };
 
+type ChargeConfirmAction = {
+  row: PendingRequest | ProcessedRequest;
+  nextStatus: "승인" | "승인거절";
+  subjectLabel: string;
+  actionLabel: "승인" | "거절" | "승인취소";
+};
+
 const rowsPerPage = 10;
 const chargeNoticeSoundPath = "/sounds/notice.mp3";
 
@@ -150,6 +157,9 @@ export function ChargeRequestsBoard({
   const [lastSyncedAt, setLastSyncedAt] = useState("");
   const [isSoundReady, setIsSoundReady] = useState(true);
   const [soundMessage, setSoundMessage] = useState("");
+  const [confirmAction, setConfirmAction] = useState<ChargeConfirmAction | null>(
+    null,
+  );
   const noticeAudioRef = useRef<HTMLAudioElement | null>(null);
   const knownPendingIdsRef = useRef(
     new Set(initialPendingRequests.map((request) => request.id)),
@@ -394,7 +404,7 @@ export function ChargeRequestsBoard({
     rejectedPage * rowsPerPage,
   );
 
-  async function moveRequest(
+  function moveRequest(
     row: PendingRequest | ProcessedRequest,
     nextStatus: "승인" | "승인거절",
   ) {
@@ -407,10 +417,18 @@ export function ChargeRequestsBoard({
           ? "승인"
           : "거절";
 
-    if (!window.confirm(`${subjectLabel} 요청을 ${actionLabel}할까요?`)) {
+    setConfirmAction({ row, nextStatus, subjectLabel, actionLabel });
+  }
+
+  async function processConfirmedRequest() {
+    if (!confirmAction) {
       return;
     }
 
+    const { row, nextStatus, subjectLabel, actionLabel } = confirmAction;
+    const targetId = row.id;
+
+    setConfirmAction(null);
     setProcessingId(targetId);
     setMessage(`${subjectLabel} 요청을 ${actionLabel} 처리 중입니다.`);
 
@@ -426,6 +444,46 @@ export function ChargeRequestsBoard({
 
   return (
     <div className="space-y-5">
+      {confirmAction ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="charge-confirm-title"
+        >
+          <div className="w-full max-w-md rounded-[28px] border border-white/12 bg-[linear-gradient(180deg,_rgba(18,24,34,0.98)_0%,_rgba(8,10,16,0.98)_100%)] p-6 text-white shadow-[0_24px_90px_rgba(0,0,0,0.55)]">
+            <p className="text-xs uppercase tracking-[0.22em] text-cyan-300/62">
+              Confirm
+            </p>
+            <h3
+              id="charge-confirm-title"
+              className="mt-2 text-2xl font-semibold tracking-[-0.04em]"
+            >
+              요청 {confirmAction.actionLabel}
+            </h3>
+            <p className="mt-4 text-sm leading-6 text-white/68">
+              {confirmAction.subjectLabel} 요청을 {confirmAction.actionLabel}
+              할까요?
+            </p>
+            <div className="mt-7 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmAction(null)}
+                className="h-11 rounded-xl border border-white/12 bg-white/8 px-5 text-sm font-semibold text-white/78 transition hover:bg-white/12"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => void processConfirmedRequest()}
+                className="h-11 rounded-xl bg-cyan-400 px-5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+              >
+                확인
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="grid gap-5">
         <div className="space-y-5">
           <SectionCard title="충전신청" count={filteredPendingRequests.length}>
