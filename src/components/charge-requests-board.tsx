@@ -66,8 +66,8 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.34)]">
-      <div className="flex items-center justify-between border-b border-white/8 px-5 py-4 sm:px-6">
+    <section className="rounded-[28px] border border-cyan-300/30 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.34)] ring-1 ring-cyan-400/12">
+      <div className="flex items-center justify-between border-b border-cyan-300/24 px-5 py-4 sm:px-6">
         <div>
           <p className="text-xs uppercase tracking-[0.22em] text-cyan-300/55">
             Table View
@@ -76,7 +76,7 @@ function SectionCard({
             {title}
           </h3>
         </div>
-        <div className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-1 text-sm text-white/72">
+        <div className="rounded-full border border-cyan-300/24 bg-white/[0.03] px-3 py-1 text-sm text-white/72">
           {count}건
         </div>
       </div>
@@ -87,7 +87,7 @@ function SectionCard({
 
 function Table({ children }: { children: React.ReactNode }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/8">
+    <div className="overflow-hidden rounded-2xl border border-cyan-300/24">
       <div className="overflow-x-auto">{children}</div>
     </div>
   );
@@ -103,7 +103,7 @@ function PaginationControls({
   onPageChange: (page: number) => void;
 }) {
   return (
-    <div className="flex items-center justify-center gap-2 border-x border-b border-white/8 px-4 py-5">
+    <div className="flex items-center justify-center gap-2 border-x border-b border-cyan-300/24 px-4 py-5">
       {Array.from({ length: pageCount }, (_, index) => index + 1).map(
         (pageNumber) => (
           <button
@@ -583,7 +583,7 @@ export function ChargeRequestsBoard({
                     ].map((head) => (
                       <th
                         key={head}
-                        className="border-b border-white/8 px-4 py-3 font-medium"
+                        className="border-b border-cyan-300/22 px-4 py-3 font-medium"
                       >
                         {head}
                       </th>
@@ -593,7 +593,7 @@ export function ChargeRequestsBoard({
                 <tbody>
                   {filteredPendingRequests.length ? (
                     visiblePendingRequests.map((row) => (
-                      <tr key={row.id} className="border-t border-white/8 text-white/82">
+                      <tr key={row.id} className="border-t border-cyan-300/18 text-white/82">
                         <td className="px-4 py-4">{row.branch}</td>
                         <td className="px-4 py-4">{row.userId}</td>
                         <td className="px-4 py-4">{row.topAgent}</td>
@@ -670,7 +670,7 @@ export function ChargeRequestsBoard({
                       ].map((head) => (
                         <th
                           key={head}
-                          className="border-b border-white/8 px-4 py-3 font-medium"
+                          className="border-b border-cyan-300/22 px-4 py-3 font-medium"
                         >
                           {head}
                         </th>
@@ -679,7 +679,7 @@ export function ChargeRequestsBoard({
                   </thead>
                   <tbody>
                     {visibleApprovedRequests.map((row) => (
-                      <tr key={row.id} className="border-t border-white/8 text-white/82">
+                      <tr key={row.id} className="border-t border-cyan-300/18 text-white/82">
                         <td className="px-4 py-4">{row.userId}</td>
                         <td className="px-4 py-4">{row.bankName}</td>
                         <td className="px-4 py-4">{row.accountNumber}</td>
@@ -735,7 +735,7 @@ export function ChargeRequestsBoard({
                       ].map((head) => (
                         <th
                           key={head}
-                          className="border-b border-white/8 px-4 py-3 font-medium"
+                          className="border-b border-cyan-300/22 px-4 py-3 font-medium"
                         >
                           {head}
                         </th>
@@ -744,7 +744,7 @@ export function ChargeRequestsBoard({
                   </thead>
                   <tbody>
                     {visibleRejectedRequests.map((row) => (
-                      <tr key={row.id} className="border-t border-white/8 text-white/82">
+                      <tr key={row.id} className="border-t border-cyan-300/18 text-white/82">
                         <td className="px-4 py-4">{row.userId}</td>
                         <td className="px-4 py-4">{row.bankName}</td>
                         <td className="px-4 py-4">{row.accountNumber}</td>

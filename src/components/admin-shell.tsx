@@ -197,8 +197,8 @@ export async function AdminShell({
     <main className="admin-app-shell min-h-screen bg-[#09090b] text-white">
       <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(6,182,212,0.12),_transparent_22%),radial-gradient(circle_at_top_right,_rgba(59,130,246,0.12),_transparent_24%),linear-gradient(180deg,_#09090b_0%,_#0f1117_100%)]">
         <div className="flex min-h-screen">
-          <aside className="hidden w-[308px] shrink-0 border-r border-white/8 bg-[linear-gradient(180deg,_rgba(19,23,31,0.96)_0%,_rgba(12,14,19,0.98)_100%)] xl:flex xl:flex-col">
-            <div className="border-b border-white/8 px-7 pb-7 pt-8">
+          <aside className="hidden w-[308px] shrink-0 border-r border-cyan-300/30 bg-[linear-gradient(180deg,_rgba(19,23,31,0.96)_0%,_rgba(12,14,19,0.98)_100%)] xl:flex xl:flex-col">
+            <div className="border-b border-cyan-300/24 px-7 pb-7 pt-8">
               <div className="flex items-center gap-3">
                 <div className="grid h-11 w-11 place-items-center rounded-2xl bg-cyan-500/16 text-sm font-semibold text-cyan-200 ring-1 ring-cyan-400/20">
                   VA
@@ -213,7 +213,7 @@ export async function AdminShell({
                 </div>
               </div>
 
-              <div className="mt-7 rounded-3xl border border-white/8 bg-white/[0.03] p-4">
+              <div className="mt-7 rounded-3xl border border-cyan-300/24 bg-white/[0.03] p-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs uppercase tracking-[0.24em] text-white/38">
@@ -244,7 +244,7 @@ export async function AdminShell({
                       className={`rounded-[24px] border p-2 ${
                         isGroupActive
                           ? "border-cyan-400/14 bg-cyan-500/[0.04]"
-                          : "border-white/6 bg-white/[0.025]"
+                          : "border-cyan-300/20 bg-white/[0.025]"
                       }`}
                     >
                       <summary className="group flex cursor-pointer list-none items-center justify-between rounded-2xl px-3 py-2 transition hover:bg-white/[0.04] [&::-webkit-details-marker]:hidden">
@@ -279,7 +279,7 @@ export async function AdminShell({
           </aside>
 
           <section className="flex min-h-screen min-w-0 flex-1 flex-col">
-            <header className="sticky top-0 z-30 border-b border-white/8 bg-[#0b0d12]/92 shadow-[0_16px_42px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+            <header className="sticky top-0 z-30 border-b border-cyan-300/24 bg-[#0b0d12]/92 shadow-[0_16px_42px_rgba(0,0,0,0.28)] backdrop-blur-xl">
               <div className="flex min-h-[72px] flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex shrink-0 items-center gap-2">
                   <button
@@ -338,7 +338,7 @@ export async function AdminShell({
               <GlobalDashboardSummaryPanel
                 partnerSummaries={partnerSummaries}
               />
-              <div className="flex flex-col gap-3 border-b border-white/8 px-4 py-4 text-sm text-white/68 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-col gap-3 border-b border-cyan-300/24 px-4 py-4 text-sm text-white/68 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-1 text-xs uppercase tracking-[0.2em] text-white/42">
                     {badge}
