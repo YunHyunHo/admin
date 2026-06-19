@@ -309,8 +309,13 @@ function toAdminAccountRecord(
     return null;
   }
 
+  const managedCompanySource = row.managed_companies?.length
+    ? row.managed_companies
+    : row.role === "DOMAIN_ADMIN"
+      ? []
+      : companyOptions;
   const managedCompanies = normalizeManagedCompanies(
-    row.managed_companies?.length ? row.managed_companies : companyOptions,
+    managedCompanySource,
     companyOptions,
     { allowEmpty: row.role === "DOMAIN_ADMIN" },
   );
