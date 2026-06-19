@@ -43,6 +43,11 @@ type FeePartner = {
   rate: number;
 };
 
+type DistributorRelation = {
+  id: string;
+  parent_distributor_id: string | null;
+};
+
 type TransactionClient = {
   query<T = unknown>(text: string, values?: unknown[]): Promise<{ rows: T[] }>;
 };
@@ -426,39 +431,139 @@ async function insertFeeRatePartners(
   }
 }
 
+async function getScopedDistributorRelation(
+  client: TransactionClient,
+  distributorId: string,
+  user: SessionUser,
+) {
+  const result = await client.query<DistributorRelation>(
+    `
+      select
+        dist.id::text as id,
+        dist.parent_distributor_id::text as parent_distributor_id
+      from distributors dist
+      left join admins dist_admin on dist_admin.id = dist.admin_id
+      where dist.id = $1::uuid
+        and dist.status = 'ACTIVE'
+        and (
+          dist_admin.created_by = $2::uuid
+          or ${getMasterOwnedCompanyExistsCondition("dist.company_id", "$2")}
+        )
+      limit 1
+    `,
+    [distributorId, user.id],
+  );
+
+  return result.rows[0] ?? null;
+}
+
+async function getFirstScopedChildDistributorId(
+  client: TransactionClient,
+  distributorId: string,
+  user: SessionUser,
+) {
+  const result = await client.query<{ id: string }>(
+    `
+      select child.id::text as id
+      from distributors child
+      left join admins child_admin on child_admin.id = child.admin_id
+      where child.parent_distributor_id = $1::uuid
+        and child.status = 'ACTIVE'
+        and (
+          child_admin.created_by = $2::uuid
+          or ${getMasterOwnedCompanyExistsCondition("child.company_id", "$2")}
+        )
+      order by child.created_at asc, child.name asc
+      limit 1
+    `,
+    [distributorId, user.id],
+  );
+
+  return result.rows[0]?.id ?? null;
+}
+
+async function applyPartnerAutoFill(
+  client: TransactionClient,
+  partners: FeePartner[],
+  targetPosition: 1 | 2 | 3,
+  selectedDistributorId: string | null,
+  user: SessionUser,
+) {
+  const nextPartners = partners.map((partner) =>
+    partner.position === targetPosition
+      ? { ...partner, distributorId: selectedDistributorId }
+      : partner,
+  );
+
+  if (!selectedDistributorId) {
+    return nextPartners;
+  }
+
+  const selected = await getScopedDistributorRelation(
+    client,
+    selectedDistributorId,
+    user,
+  );
+
+  if (!selected) {
+    throw new Error("선택한 총판 정보를 찾을 수 없습니다.");
+  }
+
+  if (selected.parent_distributor_id && targetPosition > 1) {
+    const previousPartner = nextPartners.find(
+      (partner) => partner.position === targetPosition - 1,
+    );
+
+    if (
+      previousPartner &&
+      !previousPartner.distributorId &&
+      !nextPartners.some(
+        (partner) => partner.distributorId === selected.parent_distributor_id,
+      )
+    ) {
+      previousPartner.distributorId = selected.parent_distributor_id;
+    }
+  }
+
+  if (!selected.parent_distributor_id && targetPosition < 3) {
+    const nextPartner = nextPartners.find(
+      (partner) => partner.position === targetPosition + 1,
+    );
+    const childDistributorId = await getFirstScopedChildDistributorId(
+      client,
+      selectedDistributorId,
+      user,
+    );
+
+    if (
+      nextPartner &&
+      childDistributorId &&
+      !nextPartner.distributorId &&
+      !nextPartners.some((partner) => partner.distributorId === childDistributorId)
+    ) {
+      nextPartner.distributorId = childDistributorId;
+    }
+  }
+
+  return nextPartners;
+}
+
 export async function updateFeeRateDomainDistributor(input: {
   user: SessionUser;
   domainId?: string;
-  distributorId?: string;
+  distributorId?: string | null;
   target?: "topDistributor" | "distributor" | "subDistributor";
 }) {
   if (!hasDatabaseUrl()) {
     return;
   }
 
-  if (!input.domainId || !input.distributorId) {
-    throw new Error("변경할 도메인과 총판 정보를 확인해주세요.");
+  if (!input.domainId) {
+    throw new Error("변경할 도메인 정보를 확인해주세요.");
   }
 
   await withTransaction(async (client) => {
     await ensureFeeRateSchema(client);
-
-    const distributorResult = await client.query<{ id: string }>(
-      `
-        select dist.id::text
-        from distributors dist
-        left join admins dist_admin on dist_admin.id = dist.admin_id
-        where dist.id = $1::uuid
-          and dist.status = 'ACTIVE'
-          and dist_admin.created_by = $2::uuid
-        limit 1
-      `,
-      [input.distributorId, input.user.id],
-    );
-
-    if (!distributorResult.rows[0]) {
-      throw new Error("선택한 총판 정보를 찾을 수 없습니다.");
-    }
 
     const domainResult = await client.query<{
       id: string;
@@ -526,10 +631,12 @@ export async function updateFeeRateDomainDistributor(input: {
         subDistributorRate: Number(domain.sub_distributor_rate ?? 0),
       },
     );
-    const nextPartners = currentPartners.map((partner) =>
-      partner.position === targetPosition
-        ? { ...partner, distributorId: input.distributorId ?? null }
-        : partner,
+    const nextPartners = await applyPartnerAutoFill(
+      client,
+      currentPartners,
+      targetPosition,
+      input.distributorId ?? null,
+      input.user,
     );
 
     if (domain.fee_id) {

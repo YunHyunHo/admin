@@ -378,7 +378,7 @@ export function AdminsBoard({
                       type="button"
                       onClick={() => {
                         setCompanySettingsAdmin(admin);
-                        setSelectedManagedCompanies([]);
+                        setSelectedManagedCompanies(admin.managedCompanies ?? []);
                         setCompanyModalMessage("");
                       }}
                       disabled={!canManageAdmins}

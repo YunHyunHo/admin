@@ -188,8 +188,8 @@ export function FeeRateSettingsBoard({
       return;
     }
 
-    if (!modalSelection || !row.domainId) {
-      setModalMessage("변경할 대상을 선택해주세요.");
+    if (!row.domainId) {
+      setModalMessage("변경할 도메인을 찾지 못했습니다.");
       return;
     }
 
@@ -202,7 +202,7 @@ export function FeeRateSettingsBoard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           domainId: row.domainId,
-          distributorId: modalSelection,
+          distributorId: modalSelection || null,
           target: editModal.target,
         }),
       });
@@ -662,7 +662,7 @@ function EditTargetModal({
               onChange={(event) => onSelectionChange(event.target.value)}
               className="h-24 w-full rounded-2xl border border-slate-300 px-6 text-2xl text-slate-950 outline-none transition focus:border-slate-500"
             >
-              <option value="">선택</option>
+              <option value="">없음</option>
               {options.map((option) => (
                 <option key={option.id} value={option.id}>
                   {option.name}
