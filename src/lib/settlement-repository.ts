@@ -40,6 +40,26 @@ type ProfitSectionSeedRow = {
   category: "업체" | "상위총판" | "총판";
 };
 
+type DistributorProfitRow = {
+  date: string;
+  distributor_id: string;
+  distributor_name: string;
+  top_distributor_id: string | null;
+  top_distributor_name: string | null;
+  category: "상위총판" | "총판";
+  charge_total: string;
+  fee_total: string;
+};
+
+const commissionSourceTypes = `
+  'COMMISSION_TOP_DISTRIBUTOR',
+  'COMMISSION_DISTRIBUTOR',
+  'COMMISSION_SUB_DISTRIBUTOR',
+  'COMMISSION_PARTNER_1',
+  'COMMISSION_PARTNER_2',
+  'COMMISSION_PARTNER_3'
+`;
+
 function toMmDd(isoDate: string) {
   return isoDate.slice(5);
 }
@@ -265,6 +285,141 @@ async function getCommissionAggregates(
   return result.rows;
 }
 
+async function getDistributorProfitRows(
+  user: SessionUser,
+  startDate: string,
+  endDate: string,
+) {
+  const ledgerScope = await getScopedDataCondition(user, {
+    company: "cr",
+    distributor: "recipient_dist",
+    distributorAdmin: "recipient_admin",
+  });
+  const fallbackScope = await getScopedDataCondition(user, {
+    company: "cr",
+    distributor: "recipient_dist",
+    distributorAdmin: "recipient_admin",
+  });
+  const ledgerScopeSql = ledgerScope.sql.replaceAll("$1", "$3");
+  const fallbackScopeSql = fallbackScope.sql.replaceAll("$1", "$3");
+  const values = [startDate, endDate, ...ledgerScope.values];
+
+  const result = await query<DistributorProfitRow>(
+    `
+      with fee_rows as (
+        select
+          (coalesce(cr.processed_at, t.created_at) at time zone '${KOREA_TIME_ZONE}')::date as date,
+          recipient_dist.id::text as distributor_id,
+          recipient_dist.name as distributor_name,
+          recipient_parent.id::text as top_distributor_id,
+          recipient_parent.name as top_distributor_name,
+          case
+            when recipient_parent.id is null then '상위총판'
+            else '총판'
+          end as category,
+          cr.amount as charge_total,
+          t.amount as fee_total
+        from distributor_balance_transactions t
+        join charge_requests cr on cr.id = t.source_id
+        join distributors recipient_dist on recipient_dist.id = t.distributor_id
+        left join distributors recipient_parent
+          on recipient_parent.id = recipient_dist.parent_distributor_id
+        left join admins recipient_admin on recipient_admin.id = recipient_dist.admin_id
+        where
+          cr.status in ('APPROVED', 'COMPLETED')
+          and t.source_type in (${commissionSourceTypes})
+          and t.amount > 0
+          and (coalesce(cr.processed_at, t.created_at) at time zone '${KOREA_TIME_ZONE}')::date >= $1::date
+          and (coalesce(cr.processed_at, t.created_at) at time zone '${KOREA_TIME_ZONE}')::date <= $2::date
+          ${ledgerScopeSql}
+
+        union all
+
+        select
+          (coalesce(cr.processed_at, co.created_at) at time zone '${KOREA_TIME_ZONE}')::date as date,
+          recipient_dist.id::text as distributor_id,
+          recipient_dist.name as distributor_name,
+          recipient_parent.id::text as top_distributor_id,
+          recipient_parent.name as top_distributor_name,
+          case
+            when recipient_parent.id is null then '상위총판'
+            else '총판'
+          end as category,
+          co.charge_amount as charge_total,
+          co.distributor_fee as fee_total
+        from commission_records co
+        join charge_requests cr on cr.id = co.charge_request_id
+        join distributors dist on dist.id = co.distributor_id
+        left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
+        join distributors recipient_dist on recipient_dist.id = coalesce(parent_dist.id, dist.id)
+        left join distributors recipient_parent
+          on recipient_parent.id = recipient_dist.parent_distributor_id
+        left join admins recipient_admin on recipient_admin.id = recipient_dist.admin_id
+        where
+          co.status in ('APPROVED', 'COMPLETED')
+          and cr.status in ('APPROVED', 'COMPLETED')
+          and co.distributor_fee > 0
+          and (coalesce(cr.processed_at, co.created_at) at time zone '${KOREA_TIME_ZONE}')::date >= $1::date
+          and (coalesce(cr.processed_at, co.created_at) at time zone '${KOREA_TIME_ZONE}')::date <= $2::date
+          and not exists (
+            select 1
+            from distributor_balance_transactions split
+            where split.source_id = co.charge_request_id
+              and split.source_type in (${commissionSourceTypes})
+              and split.amount > 0
+          )
+          ${fallbackScopeSql}
+
+        union all
+
+        select
+          (coalesce(cr.processed_at, co.created_at) at time zone '${KOREA_TIME_ZONE}')::date as date,
+          recipient_dist.id::text as distributor_id,
+          recipient_dist.name as distributor_name,
+          parent_dist.id::text as top_distributor_id,
+          parent_dist.name as top_distributor_name,
+          '총판' as category,
+          co.charge_amount as charge_total,
+          greatest(co.saved_commission - co.company_fee - co.distributor_fee, 0) as fee_total
+        from commission_records co
+        join charge_requests cr on cr.id = co.charge_request_id
+        join distributors recipient_dist on recipient_dist.id = co.distributor_id
+        join distributors parent_dist on parent_dist.id = recipient_dist.parent_distributor_id
+        left join admins recipient_admin on recipient_admin.id = recipient_dist.admin_id
+        where
+          co.status in ('APPROVED', 'COMPLETED')
+          and cr.status in ('APPROVED', 'COMPLETED')
+          and greatest(co.saved_commission - co.company_fee - co.distributor_fee, 0) > 0
+          and (coalesce(cr.processed_at, co.created_at) at time zone '${KOREA_TIME_ZONE}')::date >= $1::date
+          and (coalesce(cr.processed_at, co.created_at) at time zone '${KOREA_TIME_ZONE}')::date <= $2::date
+          and not exists (
+            select 1
+            from distributor_balance_transactions split
+            where split.source_id = co.charge_request_id
+              and split.source_type in (${commissionSourceTypes})
+              and split.amount > 0
+          )
+          ${fallbackScopeSql}
+      )
+      select
+        date::text,
+        distributor_id,
+        max(distributor_name) as distributor_name,
+        max(top_distributor_id) as top_distributor_id,
+        max(top_distributor_name) as top_distributor_name,
+        max(category) as category,
+        coalesce(sum(charge_total), 0)::text as charge_total,
+        coalesce(sum(fee_total), 0)::text as fee_total
+      from fee_rows
+      group by date, distributor_id
+      order by date asc, distributor_name asc
+    `,
+    values,
+  );
+
+  return result.rows;
+}
+
 export async function getSettlementProfitForUser(
   user: SessionUser,
   startDate: string,
@@ -277,9 +432,12 @@ export async function getSettlementProfitForUser(
     return getSettlementProfit(user.companyName, startDate, endDate, state, settings);
   }
 
-  const aggregateRows = await getCommissionAggregates(user, startDate, endDate, {
-    profitScope: true,
-  });
+  const [aggregateRows, distributorProfitRows] = await Promise.all([
+    getCommissionAggregates(user, startDate, endDate, {
+      profitScope: true,
+    }),
+    getDistributorProfitRows(user, startDate, endDate),
+  ]);
   const domainName = aggregateRows[0]?.domain_name ?? "전체";
   const rows = aggregateRows.map((row) => {
     const chargeTotal = Number(row.charge_total);
@@ -383,8 +541,6 @@ export async function getSettlementProfitForUser(
     const chargeTotal = Number(row.charge_total);
     const exchangeTotal = Number(row.exchange_total);
     const companyFeeTotal = Number(row.company_fee_total);
-    const topDistributorFeeTotal = Number(row.top_distributor_fee_total);
-    const distributorFeeTotal = Number(row.distributor_fee_total);
     const base = {
       date: toMmDd(row.date),
       chargeTotal,
@@ -399,9 +555,13 @@ export async function getSettlementProfitForUser(
 
       addSectionRow(companySectionId, companySectionTitle, "업체", {
         ...base,
-        feeTotal: companyFeeTotal + topDistributorFeeTotal + distributorFeeTotal,
+        feeTotal: Number(row.company_fee_total) +
+          Number(row.top_distributor_fee_total) +
+          Number(row.distributor_fee_total),
         companyFeeTotal,
-        distributorFeeTotal: topDistributorFeeTotal + distributorFeeTotal,
+        distributorFeeTotal:
+          Number(row.top_distributor_fee_total) +
+          Number(row.distributor_fee_total),
       });
       continue;
     }
@@ -415,30 +575,37 @@ export async function getSettlementProfitForUser(
       });
     }
 
-    if (
-      row.top_distributor_id &&
-      row.top_distributor_name &&
-      user.role !== "ADMIN"
-    ) {
-      addSectionRow(`top:${row.top_distributor_id}`, row.top_distributor_name, "상위총판", {
-        ...base,
-        feeTotal: topDistributorFeeTotal,
-        companyFeeTotal: 0,
-        distributorFeeTotal: topDistributorFeeTotal,
-      });
-    }
+  }
 
-    if (
-      row.distributor_id &&
-      row.distributor_name &&
-      user.role !== "TOP_DISTRIBUTOR"
-    ) {
-      addSectionRow(`dist:${row.distributor_id}`, row.distributor_name, "총판", {
-        ...base,
-        feeTotal: distributorFeeTotal,
-        companyFeeTotal: 0,
-        distributorFeeTotal,
-      });
+  if (!showCompanyScopedProfit) {
+    for (const row of distributorProfitRows) {
+      if (showOnlyOwnDistributorProfit && Number(row.fee_total) === 0) {
+        continue;
+      }
+
+      const category = row.category;
+      if (category === "상위총판" && user.role === "ADMIN") {
+        continue;
+      }
+      if (category === "총판" && user.role === "TOP_DISTRIBUTOR") {
+        continue;
+      }
+
+      addSectionRow(
+        category === "상위총판"
+          ? `top:${row.distributor_id}`
+          : `dist:${row.distributor_id}`,
+        row.distributor_name,
+        category,
+        {
+          date: toMmDd(row.date),
+          chargeTotal: Number(row.charge_total),
+          feeTotal: Number(row.fee_total),
+          companyFeeTotal: 0,
+          distributorFeeTotal: Number(row.fee_total),
+          payoutTotal: 0,
+        },
+      );
     }
   }
   const sections = [...sectionMap.values()].map((section) => ({

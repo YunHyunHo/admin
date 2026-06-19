@@ -473,6 +473,15 @@ async function insertFeeRatePartners(
   feeRateId: string,
   partners: FeePartner[],
 ) {
+  const distributorIds = partners
+    .map((partner) => partner.distributorId)
+    .filter((id): id is string => Boolean(id));
+  const uniqueDistributorIds = new Set(distributorIds);
+
+  if (uniqueDistributorIds.size !== distributorIds.length) {
+    throw new Error("같은 총판은 수수료 칸에 중복으로 설정할 수 없습니다.");
+  }
+
   for (const partner of partners) {
     if (!partner.distributorId) {
       continue;

@@ -266,10 +266,16 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
             'COMMISSION_TOP_DISTRIBUTOR',
             'COMMISSION_DISTRIBUTOR',
             'COMMISSION_SUB_DISTRIBUTOR',
+            'COMMISSION_PARTNER_1',
+            'COMMISSION_PARTNER_2',
+            'COMMISSION_PARTNER_3',
             'COMMISSION_REVERSAL',
             'COMMISSION_TOP_DISTRIBUTOR_REVERSAL',
             'COMMISSION_DISTRIBUTOR_REVERSAL',
-            'COMMISSION_SUB_DISTRIBUTOR_REVERSAL'
+            'COMMISSION_SUB_DISTRIBUTOR_REVERSAL',
+            'COMMISSION_PARTNER_1_REVERSAL',
+            'COMMISSION_PARTNER_2_REVERSAL',
+            'COMMISSION_PARTNER_3_REVERSAL'
           )
           and (t.created_at at time zone 'Asia/Seoul') >= $1::date
           and (t.created_at at time zone 'Asia/Seoul') < $2::date
