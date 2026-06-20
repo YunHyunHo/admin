@@ -6,6 +6,8 @@ import {
   type ProcessedRequest,
 } from "@/lib/charge-utils";
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
+import { ensureDomainChargeIntegrationSchema } from "@/lib/domain-charge-integration";
+import { getDomainWithdrawAccount } from "@/lib/domain-withdraw-account";
 import { ensureFeeRateSchema } from "@/lib/fee-rate-schema";
 import { formatKoreanDateTime } from "@/lib/korean-time";
 import {
@@ -70,6 +72,7 @@ type CreateChargeRequestInput = {
   depositor?: string;
   bankName?: string;
   accountNumber?: string;
+  accountHolder?: string;
   domainId?: string | null;
   domainName?: string;
   distributorId?: string | null;
@@ -752,8 +755,11 @@ async function insertChargeRequest(input: CreateChargeRequestInput & {
   domainId: string | null;
   distributorId: string | null;
 }) {
+  await ensureDomainChargeIntegrationSchema();
+
   const inputBankName = input.bankName?.trim() || null;
   const inputAccountNumber = input.accountNumber?.trim() || null;
+  const inputAccountHolder = input.accountHolder?.trim() || null;
   const linkedAccount =
     inputBankName && inputAccountNumber
       ? null
@@ -774,6 +780,7 @@ async function insertChargeRequest(input: CreateChargeRequestInput & {
         user_uid,
         bank_name,
         account_number,
+        account_holder,
         depositor,
         amount,
         status,
@@ -790,9 +797,10 @@ async function insertChargeRequest(input: CreateChargeRequestInput & {
         $7,
         $8,
         $9,
+        $10,
         'PENDING',
         now(),
-        $10::jsonb
+        $11::jsonb
       )
       returning id::text
     `,
@@ -804,6 +812,7 @@ async function insertChargeRequest(input: CreateChargeRequestInput & {
       input.userId,
       bankName,
       accountNumber,
+      inputAccountHolder,
       input.depositor ?? null,
       input.amount,
       JSON.stringify(input.rawPayload ?? input),
@@ -828,19 +837,102 @@ export async function createDbChargeRequest(input: CreateChargeRequestInput & { 
   });
 }
 
-export async function createIntegrationChargeRequest(input: CreateChargeRequestInput) {
+type IntegrationChargeRequestResult = {
+  requestId: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "COMPLETED" | "CANCELED";
+  duplicate: boolean;
+};
+
+async function findIntegrationChargeRequest(
+  externalId: string,
+  domainId: string,
+): Promise<IntegrationChargeRequestResult | null> {
+  const result = await query<{
+    id: string;
+    status: IntegrationChargeRequestResult["status"];
+  }>(
+    `
+      select id::text, status::text as status
+      from charge_requests
+      where external_id = $1
+        and domain_id = $2::uuid
+      limit 1
+    `,
+    [externalId, domainId],
+  );
+  const existing = result.rows[0];
+
+  return existing
+    ? { requestId: existing.id, status: existing.status, duplicate: true }
+    : null;
+}
+
+export async function createIntegrationChargeRequest(
+  input: CreateChargeRequestInput & { useDomainWithdrawAccount?: boolean },
+): Promise<IntegrationChargeRequestResult> {
   const { companyId, domainId, distributorId } = await ensureIntegrationDbScope({
     domainId: input.domainId,
     domainName: input.domainName,
     distributorId: input.distributorId,
   });
 
-  return insertChargeRequest({
-    ...input,
-    companyId,
-    domainId,
-    distributorId,
-  });
+  if (input.useDomainWithdrawAccount && !domainId) {
+    throw new Error("API 연동 도메인 정보를 찾을 수 없습니다.");
+  }
+
+  if (input.externalId && domainId) {
+    const existing = await findIntegrationChargeRequest(input.externalId, domainId);
+
+    if (existing) {
+      return existing;
+    }
+  }
+
+  const configuredAccount = input.useDomainWithdrawAccount && domainId
+    ? await getDomainWithdrawAccount(domainId)
+    : null;
+
+  if (input.useDomainWithdrawAccount && !configuredAccount) {
+    throw new Error("마스터 어드민에서 업체 출금은행 정보를 먼저 설정해주세요.");
+  }
+
+  let requestId: string | undefined;
+
+  try {
+    requestId = await insertChargeRequest({
+      ...input,
+      bankName: configuredAccount?.bankName ?? input.bankName,
+      accountHolder: configuredAccount?.accountHolder ?? input.accountHolder,
+      accountNumber: configuredAccount?.accountNumber ?? input.accountNumber,
+      companyId,
+      domainId,
+      distributorId,
+    });
+  } catch (error) {
+    const postgresError = error as { code?: string };
+
+    if (
+      postgresError.code !== "23505" ||
+      !input.externalId ||
+      !domainId
+    ) {
+      throw error;
+    }
+
+    const existing = await findIntegrationChargeRequest(input.externalId, domainId);
+
+    if (existing) {
+      return existing;
+    }
+
+    throw new Error("이미 사용된 요청 UUID입니다.");
+  }
+
+  if (!requestId) {
+    throw new Error("충전신청을 생성하지 못했습니다.");
+  }
+
+  return { requestId, status: "PENDING", duplicate: false };
 }
 
 export async function getIntegrationChargeDomainOptions() {

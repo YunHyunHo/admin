@@ -1,5 +1,7 @@
 # 충전신청 연동 API 문서
 
+> 이 문서는 이전 연동 방식입니다. 신규 외부 업체에는 [`external-charge-integration-api.md`](./external-charge-integration-api.md)를 전달하세요.
+
 상대 개발사가 충전신청 내역을 관리자에 자동으로 전달할 때 사용하는 API입니다.
 
 ## 개요

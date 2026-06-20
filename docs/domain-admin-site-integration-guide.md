@@ -1,5 +1,7 @@
 # 도메인 관리자 사이트 연동 가이드
 
+> 충전 자동 연동의 최신 계약은 [`external-charge-integration-api.md`](./external-charge-integration-api.md)와 [`domain-admin-charge-integration.md`](./domain-admin-charge-integration.md)를 기준으로 합니다.
+
 이 문서는 `https://www.laylow.org/` 도메인 관리자 사이트에서 발생하는 충전/출금 신청을 `https://laylow.me/` 마스터 관리자에 전달하기 위한 기능 기준입니다.
 
 ## 전달 배경

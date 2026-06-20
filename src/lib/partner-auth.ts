@@ -2,6 +2,10 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { query } from "@/lib/db";
 import {
+  getDomainChargeMode,
+  type DomainChargeMode,
+} from "@/lib/domain-charge-integration";
+import {
   getDomainWithdrawAccount,
   type DomainWithdrawAccount,
 } from "@/lib/domain-withdraw-account";
@@ -34,6 +38,7 @@ export type PartnerLoginSuccess = {
     name: string;
     domainId: string;
     domain: string;
+    chargeMode: DomainChargeMode;
     withdrawAccount: DomainWithdrawAccount | null;
   };
 };
@@ -255,7 +260,10 @@ export async function loginPartnerAccount(input: {
     permissions: defaultPermissions,
     menus: defaultMenus,
   });
-  const withdrawAccount = await getDomainWithdrawAccount(matchedRow.domain_id);
+  const [withdrawAccount, chargeMode] = await Promise.all([
+    getDomainWithdrawAccount(matchedRow.domain_id),
+    getDomainChargeMode(matchedRow.domain_id),
+  ]);
 
   return {
     token,
@@ -271,6 +279,7 @@ export async function loginPartnerAccount(input: {
       name: matchedRow.company_name,
       domainId: matchedRow.domain_id,
       domain: normalizePartnerDomain(matchedRow.domain_name ?? ""),
+      chargeMode,
       withdrawAccount,
     },
     audit: {

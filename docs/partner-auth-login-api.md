@@ -51,10 +51,13 @@
     "id": "업체ID",
     "name": "업체명",
     "domainId": "도메인ID",
-    "domain": "www.laylow.org"
+    "domain": "www.laylow.org",
+    "chargeMode": "MANUAL"
   }
 }
 ```
+
+`partner.chargeMode`가 `API`이면 수동 충전신청 화면을 숨기고, `MANUAL`이면 기존 수동 충전신청 화면을 표시합니다.
 
 ## 실패 응답
 

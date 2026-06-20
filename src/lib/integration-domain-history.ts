@@ -1,3 +1,5 @@
+import { createHmac } from "node:crypto";
+
 import { hasDatabaseUrl, query } from "@/lib/db";
 import { KOREA_TIME_ZONE } from "@/lib/korean-time";
 
@@ -26,6 +28,7 @@ type ChargeHistoryRow = {
   id: string;
   bank_name: string | null;
   account_number: string | null;
+  account_holder: string | null;
   depositor: string | null;
   user_uid: string | null;
   amount: string;
@@ -33,6 +36,7 @@ type ChargeHistoryRow = {
   processed_at: Date | string | null;
   updated_at: Date | string;
   status: RequestStatus;
+  domain_admin_login_id: string | null;
 };
 
 type ExchangeHistoryRow = {
@@ -115,6 +119,17 @@ function formatApiDateTime(value: Date | string | null) {
 
 function formatApiDate(value: string) {
   return value.slice(2);
+}
+
+function getPublicChargeId(requestId: string, domainAdminLoginId: string | null) {
+  const secret =
+    process.env.PARTNER_TOKEN_SECRET?.trim() ||
+    process.env.SESSION_SECRET?.trim() ||
+    "local-dev-secret-change-me";
+
+  return createHmac("sha256", secret)
+    .update(`${domainAdminLoginId ?? "domain"}:${requestId}`)
+    .digest("hex");
 }
 
 function dateRange(startDate: string, endDate: string) {
@@ -231,6 +246,7 @@ export async function getIntegrationChargeHistory(input: DomainHistoryQuery) {
         id::text,
         bank_name,
         account_number,
+        account_holder,
         depositor,
         user_uid,
         amount::text,
@@ -238,8 +254,19 @@ export async function getIntegrationChargeHistory(input: DomainHistoryQuery) {
         processed_at,
         updated_at,
         status::text as status,
+        domain_admin.login_id as domain_admin_login_id,
         count(*) over()::text as total_count
       from charge_requests
+      left join lateral (
+        select a.login_id
+        from admin_domain_mappings adm
+        join admins a on a.id = adm.admin_id
+        where adm.domain_id = charge_requests.domain_id
+          and a.role = 'DOMAIN_ADMIN'
+          and a.status = 'ACTIVE'
+        order by a.created_at desc
+        limit 1
+      ) domain_admin on true
       where ${whereSql}
       order by requested_at desc
       limit $${pageSizeParam}
@@ -252,14 +279,15 @@ export async function getIntegrationChargeHistory(input: DomainHistoryQuery) {
   return {
     ok: true,
     items: result.rows.map((row) => ({
-      id: row.id,
+      id: getPublicChargeId(row.id, row.domain_admin_login_id),
       bankName: row.bank_name ?? "-",
-      depositorName: row.depositor ?? "-",
+      accountHolder: row.account_holder ?? "-",
+      depositorName: row.account_holder ?? "-",
       accountNumber: row.account_number ?? "-",
       amount: Number(row.amount),
-      buyer: row.user_uid ?? row.depositor ?? "-",
+      buyer: row.depositor ?? "-",
       requestedAt: formatApiDateTime(row.requested_at),
-      changedAt: formatApiDateTime(row.processed_at ?? row.updated_at),
+      changedAt: formatApiDateTime(row.processed_at ?? row.requested_at),
       status: row.status,
     })),
     pagination: {

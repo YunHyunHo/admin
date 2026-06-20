@@ -11,6 +11,7 @@
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:optimize": "node scripts/db-optimize.mjs",
     "db:clean-smoke": "node scripts/db-clean-smoke.mjs",
+    "integration:key": "node scripts/manage-domain-charge-integration.mjs",
     "ops:check": "node scripts/ops-check.mjs"
   },
   "dependencies": {

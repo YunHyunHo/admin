@@ -1,0 +1,125 @@
+openapi: 3.1.0
+info:
+  title: WinPay External Charge Integration API
+  version: 1.0.0
+servers:
+  - url: https://laylow.me
+paths:
+  /api/integration/charge-requests:
+    post:
+      summary: 외부 충전신청 생성
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateChargeRequest'
+      responses:
+        '201':
+          description: 신규 충전신청 접수
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChargeRequestResponse'
+        '200':
+          description: 동일 externalId의 기존 신청 반환
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChargeRequestResponse'
+        '400':
+          description: 요청값 오류
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: API 키 오류
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: API 키 없이 API 연동 도메인에 요청
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  schemas:
+    CreateChargeRequest:
+      type: object
+      additionalProperties: false
+      dependentRequired:
+        bankName: [accountHolder, accountNumber]
+        accountHolder: [bankName, accountNumber]
+        accountNumber: [bankName, accountHolder]
+      required:
+        - externalId
+        - depositorName
+        - amount
+      properties:
+        externalId:
+          type: string
+          format: uuid
+        depositorName:
+          type: string
+          minLength: 1
+        amount:
+          type: integer
+          minimum: 10000
+          description: Mancoin result.price
+        bankName:
+          type: string
+          minLength: 1
+          description: Mancoin result.bank_name
+        accountHolder:
+          type: string
+          minLength: 1
+          description: Mancoin result.bank_holder
+        accountNumber:
+          type: string
+          minLength: 1
+          description: Mancoin result.bank_account
+    ChargeRequestResponse:
+      type: object
+      required:
+        - ok
+        - requestId
+        - externalId
+        - status
+        - duplicate
+        - message
+      properties:
+        ok:
+          type: boolean
+          const: true
+        requestId:
+          type: string
+          format: uuid
+        externalId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED, COMPLETED, CANCELED]
+        duplicate:
+          type: boolean
+        message:
+          type: string
+    ErrorResponse:
+      type: object
+      required: [ok, message]
+      properties:
+        ok:
+          type: boolean
+          const: false
+        message:
+          type: string

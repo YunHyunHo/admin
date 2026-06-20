@@ -62,6 +62,34 @@ async function main() {
         add column if not exists withdraw_account_holder text,
         add column if not exists withdraw_account_number text
     `);
+    await pool.query(`
+      alter table charge_requests
+        add column if not exists account_holder text
+    `);
+    await pool.query(`
+      create table if not exists domain_charge_integrations (
+        id uuid primary key default gen_random_uuid(),
+        master_admin_id uuid not null references admins(id),
+        domain_id uuid not null references domains(id) on delete cascade,
+        label text,
+        api_key_prefix text not null,
+        api_key_hash text not null unique,
+        status text not null default 'ACTIVE',
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        revoked_at timestamptz,
+        check (status in ('ACTIVE', 'REVOKED'))
+      )
+    `);
+    await pool.query(`
+      create unique index if not exists domain_charge_integrations_active_domain_idx
+        on domain_charge_integrations (domain_id)
+        where status = 'ACTIVE'
+    `);
+    await pool.query(`
+      create index if not exists domain_charge_integrations_master_status_idx
+        on domain_charge_integrations (master_admin_id, status, created_at desc)
+    `);
 
     console.log("Database migrations applied.");
   } finally {

@@ -143,6 +143,7 @@ create table charge_requests (
   user_uid text not null,
   bank_name text,
   account_number text,
+  account_holder text,
   depositor text,
   amount numeric(18, 0) not null,
   status request_status not null default 'PENDING',
@@ -153,6 +154,20 @@ create table charge_requests (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   check (amount >= 0)
+);
+
+create table domain_charge_integrations (
+  id uuid primary key default gen_random_uuid(),
+  master_admin_id uuid not null references admins(id),
+  domain_id uuid not null references domains(id) on delete cascade,
+  label text,
+  api_key_prefix text not null,
+  api_key_hash text not null unique,
+  status text not null default 'ACTIVE',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  revoked_at timestamptz,
+  check (status in ('ACTIVE', 'REVOKED'))
 );
 
 create table exchange_requests (
@@ -286,6 +301,11 @@ create unique index distributors_admin_id_idx on distributors (admin_id) where a
 create index domains_company_idx on domains (company_id);
 create index domains_distributor_idx on domains (distributor_id);
 create index charge_requests_scope_idx on charge_requests (company_id, domain_id, status, requested_at);
+create unique index domain_charge_integrations_active_domain_idx
+  on domain_charge_integrations (domain_id)
+  where status = 'ACTIVE';
+create index domain_charge_integrations_master_status_idx
+  on domain_charge_integrations (master_admin_id, status, created_at desc);
 create index exchange_requests_scope_idx on exchange_requests (company_id, domain_id, status, requested_at);
 create index commission_records_scope_idx on commission_records (company_id, domain_id, distributor_id, created_at);
 create index distributor_settlements_date_idx on distributor_settlements (settlement_date, distributor_id);
