@@ -387,6 +387,7 @@ async function getDomainExchangeBalance(
   domainId: string,
 ): Promise<DomainExchangeBalance> {
   const result = await executor.query<{
+    current_balance: string;
     charge_amount: string;
     fee_amount: string;
     approved_exchange_amount: string;
@@ -394,6 +395,12 @@ async function getDomainExchangeBalance(
   }>(
     `
       select
+        coalesce((
+          select dom.current_balance
+          from domains dom
+          where dom.id = $1::uuid
+            and dom.status <> 'DELETED'
+        ), 0)::text as current_balance,
         coalesce(sum(source.charge_amount), 0)::text as charge_amount,
         coalesce(sum(source.fee_amount), 0)::text as fee_amount,
         coalesce(sum(source.approved_exchange_amount), 0)::text as approved_exchange_amount,
@@ -435,11 +442,12 @@ async function getDomainExchangeBalance(
     [domainId],
   );
   const row = result.rows[0];
+  const currentBalance = Number(row?.current_balance ?? 0);
   const chargeAmount = Number(row?.charge_amount ?? 0);
   const feeAmount = Number(row?.fee_amount ?? 0);
   const approvedExchangeAmount = Number(row?.approved_exchange_amount ?? 0);
   const pendingExchangeAmount = Number(row?.pending_exchange_amount ?? 0);
-  const approvedBalance = chargeAmount - feeAmount - approvedExchangeAmount;
+  const approvedBalance = currentBalance;
 
   return {
     chargeAmount,
