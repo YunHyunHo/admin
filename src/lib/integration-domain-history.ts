@@ -55,6 +55,7 @@ type SettlementAggregateRow = {
   charge_amount: string;
   fee_amount: string;
   exchange_amount: string;
+  adjustment_amount: string;
 };
 
 function isUuid(value: string | null | undefined) {
@@ -370,17 +371,20 @@ export async function getIntegrationDomainSettlementHistory(input: {
     charge_amount: string;
     fee_amount: string;
     exchange_amount: string;
+    adjustment_amount: string;
   }>(
     `
       select
         coalesce(sum(source.charge_amount), 0)::text as charge_amount,
         coalesce(sum(source.fee_amount), 0)::text as fee_amount,
-        coalesce(sum(source.exchange_amount), 0)::text as exchange_amount
+        coalesce(sum(source.exchange_amount), 0)::text as exchange_amount,
+        coalesce(sum(source.adjustment_amount), 0)::text as adjustment_amount
       from (
         select
           cr.amount as charge_amount,
           coalesce(comm.saved_commission, 0) as fee_amount,
-          0::numeric as exchange_amount
+          0::numeric as exchange_amount,
+          0::numeric as adjustment_amount
         from charge_requests cr
         left join commission_records comm on comm.charge_request_id = cr.id
         where cr.domain_id = $1::uuid
@@ -393,12 +397,26 @@ export async function getIntegrationDomainSettlementHistory(input: {
         select
           0::numeric as charge_amount,
           0::numeric as fee_amount,
-          er.amount as exchange_amount
+          er.amount as exchange_amount,
+          0::numeric as adjustment_amount
         from exchange_requests er
         where er.domain_id = $1::uuid
           and er.status in ('APPROVED', 'COMPLETED')
           and er.processed_at is not null
           and (er.processed_at at time zone '${KOREA_TIME_ZONE}')::date < $2::date
+
+        union all
+
+        select
+          0::numeric as charge_amount,
+          0::numeric as fee_amount,
+          0::numeric as exchange_amount,
+          coalesce((audit.after_data ->> 'amount')::numeric, 0) as adjustment_amount
+        from admin_audit_logs audit
+        where audit.resource_id = $1::uuid
+          and audit.resource_type = 'domain'
+          and audit.action = 'domain_balance_adjustment'
+          and (audit.created_at at time zone '${KOREA_TIME_ZONE}')::date < $2::date
       ) source
     `,
     [scope.domainId, from],
@@ -409,13 +427,15 @@ export async function getIntegrationDomainSettlementHistory(input: {
         source.date::text,
         coalesce(sum(source.charge_amount), 0)::text as charge_amount,
         coalesce(sum(source.fee_amount), 0)::text as fee_amount,
-        coalesce(sum(source.exchange_amount), 0)::text as exchange_amount
+        coalesce(sum(source.exchange_amount), 0)::text as exchange_amount,
+        coalesce(sum(source.adjustment_amount), 0)::text as adjustment_amount
       from (
         select
           (cr.processed_at at time zone '${KOREA_TIME_ZONE}')::date as date,
           cr.amount as charge_amount,
           coalesce(comm.saved_commission, 0) as fee_amount,
-          0::numeric as exchange_amount
+          0::numeric as exchange_amount,
+          0::numeric as adjustment_amount
         from charge_requests cr
         left join commission_records comm on comm.charge_request_id = cr.id
         where cr.domain_id = $1::uuid
@@ -430,13 +450,29 @@ export async function getIntegrationDomainSettlementHistory(input: {
           (er.processed_at at time zone '${KOREA_TIME_ZONE}')::date as date,
           0::numeric as charge_amount,
           0::numeric as fee_amount,
-          er.amount as exchange_amount
+          er.amount as exchange_amount,
+          0::numeric as adjustment_amount
         from exchange_requests er
         where er.domain_id = $1::uuid
           and er.status in ('APPROVED', 'COMPLETED')
           and er.processed_at is not null
           and (er.processed_at at time zone '${KOREA_TIME_ZONE}')::date >= $2::date
           and (er.processed_at at time zone '${KOREA_TIME_ZONE}')::date <= $3::date
+
+        union all
+
+        select
+          (audit.created_at at time zone '${KOREA_TIME_ZONE}')::date as date,
+          0::numeric as charge_amount,
+          0::numeric as fee_amount,
+          0::numeric as exchange_amount,
+          coalesce((audit.after_data ->> 'amount')::numeric, 0) as adjustment_amount
+        from admin_audit_logs audit
+        where audit.resource_id = $1::uuid
+          and audit.resource_type = 'domain'
+          and audit.action = 'domain_balance_adjustment'
+          and (audit.created_at at time zone '${KOREA_TIME_ZONE}')::date >= $2::date
+          and (audit.created_at at time zone '${KOREA_TIME_ZONE}')::date <= $3::date
       ) source
       group by source.date
       order by source.date asc
@@ -448,7 +484,8 @@ export async function getIntegrationDomainSettlementHistory(input: {
   let balanceAmount =
     Number(baseline?.charge_amount ?? 0) -
     Number(baseline?.fee_amount ?? 0) -
-    Number(baseline?.exchange_amount ?? 0);
+    Number(baseline?.exchange_amount ?? 0) +
+    Number(baseline?.adjustment_amount ?? 0);
   const total = {
     chargeAmount: 0,
     feeAmount: 0,
@@ -462,8 +499,9 @@ export async function getIntegrationDomainSettlementHistory(input: {
     const feeAmount = Number(aggregate?.fee_amount ?? 0);
     const netChargeAmount = chargeAmount - feeAmount;
     const exchangeAmount = Number(aggregate?.exchange_amount ?? 0);
+    const adjustmentAmount = Number(aggregate?.adjustment_amount ?? 0);
 
-    balanceAmount += netChargeAmount - exchangeAmount;
+    balanceAmount += netChargeAmount - exchangeAmount + adjustmentAmount;
     total.chargeAmount += chargeAmount;
     total.feeAmount += feeAmount;
     total.netChargeAmount += netChargeAmount;
