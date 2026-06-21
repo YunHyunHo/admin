@@ -44,6 +44,7 @@ type ChargeConfirmAction = {
 };
 
 const rowsPerPage = 10;
+const pagesPerGroup = 10;
 const chargeNoticeSoundPath = "/sounds/notice.mp3";
 
 function getCurrentTimeLabel() {
@@ -102,24 +103,51 @@ function PaginationControls({
   pageCount: number;
   onPageChange: (page: number) => void;
 }) {
+  const groupStart = Math.floor((page - 1) / pagesPerGroup) * pagesPerGroup + 1;
+  const groupEnd = Math.min(groupStart + pagesPerGroup - 1, pageCount);
+  const pageNumbers = Array.from(
+    { length: groupEnd - groupStart + 1 },
+    (_, index) => groupStart + index,
+  );
+  const hasPreviousGroup = groupStart > 1;
+  const hasNextGroup = groupEnd < pageCount;
+
   return (
     <div className="flex items-center justify-center gap-2 border-x border-b border-cyan-300/24 px-4 py-5">
-      {Array.from({ length: pageCount }, (_, index) => index + 1).map(
-        (pageNumber) => (
-          <button
-            key={pageNumber}
-            type="button"
-            onClick={() => onPageChange(pageNumber)}
-            className={`h-10 min-w-10 rounded-xl px-3 text-lg font-semibold ${
-              page === pageNumber
-                ? "bg-white text-slate-950"
-                : "bg-black text-white"
-            }`}
-          >
-            {pageNumber}
-          </button>
-        ),
-      )}
+      <button
+        type="button"
+        aria-label="이전 페이지 묶음"
+        title="이전 10페이지"
+        onClick={() => onPageChange(Math.max(1, groupStart - pagesPerGroup))}
+        disabled={!hasPreviousGroup}
+        className="h-10 min-w-10 rounded-xl bg-black px-3 text-lg font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30"
+      >
+        &lsaquo;
+      </button>
+      {pageNumbers.map((pageNumber) => (
+        <button
+          key={pageNumber}
+          type="button"
+          onClick={() => onPageChange(pageNumber)}
+          className={`h-10 min-w-10 rounded-xl px-3 text-lg font-semibold ${
+            page === pageNumber
+              ? "bg-white text-slate-950"
+              : "bg-black text-white"
+          }`}
+        >
+          {pageNumber}
+        </button>
+      ))}
+      <button
+        type="button"
+        aria-label="다음 페이지 묶음"
+        title="다음 10페이지"
+        onClick={() => onPageChange(groupEnd + 1)}
+        disabled={!hasNextGroup}
+        className="h-10 min-w-10 rounded-xl bg-black px-3 text-lg font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-30"
+      >
+        &rsaquo;
+      </button>
     </div>
   );
 }
