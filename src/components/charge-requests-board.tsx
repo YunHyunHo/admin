@@ -399,7 +399,7 @@ export function ChargeRequestsBoard({
   const filteredPendingRequests = useMemo(() => {
     const keyword = searchKeyword.trim().toLowerCase();
     const source = [...pendingRequests].sort((left, right) =>
-      left.requestedAt.localeCompare(right.requestedAt),
+      right.requestedAt.localeCompare(left.requestedAt),
     );
 
     if (!keyword) {
