@@ -28,7 +28,7 @@ import {
 import type { QueryResultRow } from "pg";
 import type { SessionUser } from "@/lib/auth";
 
-const DEFAULT_ROW_LIMIT = 300;
+const OPTION_ROW_LIMIT = 300;
 const RATE_SCALE = 10000;
 const PERCENT_SCALE = 100;
 
@@ -477,7 +477,6 @@ async function getDbChargeRequests(user: SessionUser) {
       where 1 = 1
         ${scope.sql}
       order by cr.requested_at desc, cr.created_at desc
-      limit ${DEFAULT_ROW_LIMIT}
     `,
     scope.values,
   );
@@ -952,7 +951,7 @@ export async function getIntegrationChargeDomainOptions() {
       where dom.status = 'ACTIVE'
         and dist.status = 'ACTIVE'
       order by dom.created_at desc
-      limit ${DEFAULT_ROW_LIMIT}
+      limit ${OPTION_ROW_LIMIT}
     `,
   );
 
@@ -970,7 +969,7 @@ export async function getIntegrationChargeDistributorOptions() {
       from distributors dist
       where dist.status = 'ACTIVE'
       order by dist.created_at desc
-      limit ${DEFAULT_ROW_LIMIT}
+      limit ${OPTION_ROW_LIMIT}
     `,
   );
 
