@@ -40,7 +40,7 @@ export function GlobalDashboardSummaryPanel({
 }: {
   partnerSummaries?: DashboardPartnerSummary[];
 }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
   const [partnerSummaries, setPartnerSummaries] = useState<
     DashboardPartnerSummary[] | null
   >(initialPartnerSummaries ?? null);
