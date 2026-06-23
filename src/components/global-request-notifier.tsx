@@ -33,6 +33,7 @@ export type PendingRequestCounts = {
 export const pendingRequestCountsEventName = "pending-request-counts";
 export const domainExchangeRowsEventName = "domain-exchange-rows";
 export const requestNotifierRefreshEventName = "request-notifier-refresh";
+export const pendingRequestCountsStorageKey = "pending-request-counts-snapshot";
 
 function isPendingStatus(status: string | undefined) {
   return status === "승인중" || status === "PENDING";
@@ -211,6 +212,16 @@ export function GlobalRequestNotifier() {
     ).length;
 
     knownPendingIdsRef.current = nextPendingIds;
+
+    try {
+      window.sessionStorage.setItem(
+        pendingRequestCountsStorageKey,
+        JSON.stringify(pendingSnapshot.counts),
+      );
+    } catch {
+      // Session storage can be unavailable in restricted browser modes.
+    }
+
     window.dispatchEvent(
       new CustomEvent<PendingRequestCounts>(pendingRequestCountsEventName, {
         detail: pendingSnapshot.counts,
