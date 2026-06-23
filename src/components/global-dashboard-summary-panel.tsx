@@ -87,7 +87,7 @@ export function GlobalDashboardSummaryPanel({
   }, []);
 
   useEffect(() => {
-    if (!isOpen || partnerSummaries !== null || isLoading) {
+    if (!isOpen || partnerSummaries !== null) {
       return;
     }
 
@@ -134,7 +134,7 @@ export function GlobalDashboardSummaryPanel({
     return () => {
       ignore = true;
     };
-  }, [isLoading, isOpen, partnerSummaries]);
+  }, [isOpen, partnerSummaries]);
 
   if (!isOpen) {
     return null;
