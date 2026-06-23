@@ -193,7 +193,7 @@ export async function AdminShell({
           : group.items.filter((item) => !masterOnlyMenuKeys.has(item.key)),
     }))
     .filter((group) => group.items.length > 0);
-  const visibleQuickActions = isSettlementOnlyUser ? [] : quickActions;
+  const visibleQuickActions = quickActions;
 
   return (
     <main className="admin-app-shell min-h-screen bg-[#09090b] text-white">
