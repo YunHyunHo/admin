@@ -457,32 +457,7 @@ async function getScopedDistributorRelation(
   return result.rows[0] ?? null;
 }
 
-async function getFirstScopedChildDistributorId(
-  client: TransactionClient,
-  distributorId: string,
-  user: SessionUser,
-) {
-  const result = await client.query<{ id: string }>(
-    `
-      select child.id::text as id
-      from distributors child
-      left join admins child_admin on child_admin.id = child.admin_id
-      where child.parent_distributor_id = $1::uuid
-        and child.status = 'ACTIVE'
-        and (
-          child_admin.created_by = $2::uuid
-          or ${getMasterOwnedCompanyExistsCondition("child.company_id", "$2")}
-        )
-      order by child.created_at asc, child.name asc
-      limit 1
-    `,
-    [distributorId, user.id],
-  );
-
-  return result.rows[0]?.id ?? null;
-}
-
-async function applyPartnerAutoFill(
+async function applyPartnerSelection(
   client: TransactionClient,
   partners: FeePartner[],
   targetPosition: 1 | 2 | 3,
@@ -495,53 +470,31 @@ async function applyPartnerAutoFill(
       : partner,
   );
 
-  if (!selectedDistributorId) {
-    return nextPartners;
-  }
-
-  const selected = await getScopedDistributorRelation(
-    client,
-    selectedDistributorId,
-    user,
-  );
-
-  if (!selected) {
-    throw new Error("선택한 총판 정보를 찾을 수 없습니다.");
-  }
-
-  if (selected.parent_distributor_id && targetPosition > 1) {
-    const previousPartner = nextPartners.find(
-      (partner) => partner.position === targetPosition - 1,
-    );
-
-    if (
-      previousPartner &&
-      !previousPartner.distributorId &&
-      !nextPartners.some(
-        (partner) => partner.distributorId === selected.parent_distributor_id,
-      )
-    ) {
-      previousPartner.distributorId = selected.parent_distributor_id;
-    }
-  }
-
-  if (!selected.parent_distributor_id && targetPosition < 3) {
-    const nextPartner = nextPartners.find(
-      (partner) => partner.position === targetPosition + 1,
-    );
-    const childDistributorId = await getFirstScopedChildDistributorId(
+  if (selectedDistributorId) {
+    const selected = await getScopedDistributorRelation(
       client,
       selectedDistributorId,
       user,
     );
 
-    if (
-      nextPartner &&
-      childDistributorId &&
-      !nextPartner.distributorId &&
-      !nextPartners.some((partner) => partner.distributorId === childDistributorId)
-    ) {
-      nextPartner.distributorId = childDistributorId;
+    if (!selected) {
+      throw new Error("선택한 총판 정보를 찾을 수 없습니다.");
+    }
+
+    if (selected.parent_distributor_id && targetPosition > 1) {
+      const previousPartner = nextPartners.find(
+        (partner) => partner.position === targetPosition - 1,
+      );
+
+      if (
+        previousPartner &&
+        !previousPartner.distributorId &&
+        !nextPartners.some(
+          (partner) => partner.distributorId === selected.parent_distributor_id,
+        )
+      ) {
+        previousPartner.distributorId = selected.parent_distributor_id;
+      }
     }
   }
 
@@ -631,7 +584,7 @@ export async function updateFeeRateDomainDistributor(input: {
         subDistributorRate: Number(domain.sub_distributor_rate ?? 0),
       },
     );
-    const nextPartners = await applyPartnerAutoFill(
+    const nextPartners = await applyPartnerSelection(
       client,
       currentPartners,
       targetPosition,
