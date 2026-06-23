@@ -46,6 +46,7 @@ type ChargeConfirmAction = {
 const rowsPerPage = 10;
 const pagesPerGroup = 10;
 const chargeNoticeSoundPath = "/sounds/notice.mp3";
+const dashboardSummaryRefreshEvent = "dashboard-summary-refresh";
 
 function getCurrentTimeLabel() {
   return new Intl.DateTimeFormat("ko-KR", {
@@ -465,6 +466,7 @@ export function ChargeRequestsBoard({
 
     try {
       applyServerData(await requestChargeData({ id: targetId, status: nextStatus }));
+      window.dispatchEvent(new Event(dashboardSummaryRefreshEvent));
       setMessage(`${subjectLabel} 요청이 ${actionLabel} 처리되었습니다.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "처리에 실패했습니다.");

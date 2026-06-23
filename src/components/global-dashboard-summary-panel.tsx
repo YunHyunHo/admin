@@ -6,6 +6,7 @@ import { formatKoreanWon } from "@/lib/charge-utils";
 import type { DashboardPartnerSummary } from "@/lib/dashboard-summary-repository";
 
 const summaryToggleEvent = "dashboard-summary-toggle";
+const summaryRefreshEvent = "dashboard-summary-refresh";
 const metricLabels = ["충전", "수수료", "환전", "보유"] as const;
 
 function getSummaryTotals(items: DashboardPartnerSummary[]) {
@@ -72,10 +73,16 @@ export function GlobalDashboardSummaryPanel({
       setIsOpen((current) => !current);
     }
 
+    function handleSummaryRefresh() {
+      setPartnerSummaries(null);
+    }
+
     window.addEventListener(summaryToggleEvent, handleSummaryToggle);
+    window.addEventListener(summaryRefreshEvent, handleSummaryRefresh);
 
     return () => {
       window.removeEventListener(summaryToggleEvent, handleSummaryToggle);
+      window.removeEventListener(summaryRefreshEvent, handleSummaryRefresh);
     };
   }, []);
 
