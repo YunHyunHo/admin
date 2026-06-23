@@ -195,6 +195,7 @@ export async function POST(request: Request) {
 
   if (
     !integration &&
+    !partnerAccess.access &&
     (await getDomainChargeModeByIdentifier({ domainId, domainName })) === "API"
   ) {
     return NextResponse.json(
