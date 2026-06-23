@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { domainExchangeRowsEventName } from "@/components/global-request-notifier";
+import {
+  domainExchangeRowsEventName,
+  requestNotifierRefreshEventName,
+} from "@/components/global-request-notifier";
 import { ModalFeedback } from "@/components/modal-feedback";
 import type {
   DomainExchangeOption,
@@ -193,6 +196,7 @@ export const fallbackDomainExchanges: DomainExchangeRow[] = [
 ];
 
 const rowsPerPage = 10;
+const dashboardSummaryRefreshEventName = "dashboard-summary-refresh";
 
 type DomainExchangesBoardProps = {
   initialRows?: DomainExchangeRow[];
@@ -318,6 +322,8 @@ export function DomainExchangesBoard({
         setRows(data.rows.map(normalizeExchangeRow));
       }
 
+      window.dispatchEvent(new Event(requestNotifierRefreshEventName));
+
       setPage(1);
       setDomainId(defaultDomainId ?? "");
       setAmount("");
@@ -350,6 +356,9 @@ export function DomainExchangesBoard({
     if (data.rows) {
       setRows(data.rows.map(normalizeExchangeRow));
     }
+
+    window.dispatchEvent(new Event(requestNotifierRefreshEventName));
+    window.dispatchEvent(new Event(dashboardSummaryRefreshEventName));
 
     if (data.message) {
       setMessage(data.message);

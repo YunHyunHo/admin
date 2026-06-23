@@ -32,6 +32,7 @@ export type PendingRequestCounts = {
 
 export const pendingRequestCountsEventName = "pending-request-counts";
 export const domainExchangeRowsEventName = "domain-exchange-rows";
+export const requestNotifierRefreshEventName = "request-notifier-refresh";
 
 function isPendingStatus(status: string | undefined) {
   return status === "승인중" || status === "PENDING";
@@ -261,6 +262,24 @@ export function GlobalRequestNotifier() {
       clearNoticeRetry();
     };
   }, [clearNoticeRetry, ensureAudio, syncRequests]);
+
+  useEffect(() => {
+    function handleRefreshRequest() {
+      void syncRequests();
+    }
+
+    window.addEventListener(
+      requestNotifierRefreshEventName,
+      handleRefreshRequest,
+    );
+
+    return () => {
+      window.removeEventListener(
+        requestNotifierRefreshEventName,
+        handleRefreshRequest,
+      );
+    };
+  }, [syncRequests]);
 
   useEffect(() => {
     ensureAudio();
