@@ -175,80 +175,56 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
     return [] satisfies DashboardPartnerSummary[];
   }
 
-  if (user.role === "DOMAIN_ADMIN") {
-    return getDashboardCompanySummariesForDomainAdmin(user);
-  }
-
-  const dashboardScope =
-    user.role === "MASTER"
-      ? getScopedDistributorCondition(user)
-      : user.role === "TOP_DISTRIBUTOR"
-        ? {
-            sql: `
-              and (
-                dist.admin_id = $3::uuid
-                or dist.parent_distributor_id in (
-                  select parent_dist.id
-                  from distributors parent_dist
-                  where parent_dist.admin_id = $3::uuid
-                    and parent_dist.status = 'ACTIVE'
-                )
-              )
-            `,
-            values: [user.id],
-          }
-        : getScopedDistributorCondition(user);
+  const dashboardScope = await getScopedDataCondition(user, {
+    company: "dom",
+    distributor: "dist",
+    distributorAdmin: "dist_admin",
+  });
   const scopeSql = dashboardScope.sql.replaceAll("$1", "$3");
   const { startDate, endDateExclusive } = getCurrentKoreanDayRange();
   const result = await query<DashboardPartnerSummaryRow>(
     `
-      with scoped_distributors as (
+      with scoped_domains as (
         select
-          dist.id,
-          dist.name,
-          dist.current_balance,
-          dist.admin_id,
-          dist_admin.login_id
-        from distributors dist
+          dom.id,
+          c.company_name,
+          dom.current_balance,
+          domain_admin.login_id
+        from domains dom
+        join companies c on c.id = dom.company_id
+        left join distributors dist on dist.id = dom.distributor_id
         left join admins dist_admin on dist_admin.id = dist.admin_id
-        where dist.status = 'ACTIVE'
+        left join lateral (
+          select a.login_id
+          from admin_domain_mappings adm
+          join admins a on a.id = adm.admin_id
+          where adm.domain_id = dom.id
+            and a.role = 'DOMAIN_ADMIN'
+            and a.status <> 'DELETED'
+          order by a.created_at desc
+          limit 1
+        ) domain_admin on true
+        where dom.status <> 'DELETED'
+          and c.status = 'ACTIVE'
           ${scopeSql}
       ),
       scoped_entities as (
         select
-          concat('distributor:', dist.id::text) as entity_id,
-          dist.name as entity_name,
-          dist.login_id as entity_login_id,
-          case
-            when dist_admin.role = 'TOP_DISTRIBUTOR' then 'TOP_DISTRIBUTOR'::text
-            else 'DISTRIBUTOR'::text
-          end as entity_type,
-          exists (
-            select 1
-            from domains dom
-            where dom.distributor_id = dist.id
-              and dom.status <> 'DELETED'
-          ) as has_active_domain,
-          dist.id as distributor_id,
-          dist.current_balance
-        from scoped_distributors dist
-        left join admins dist_admin on dist_admin.id = dist.admin_id
+          concat('domain:', dom.id::text) as entity_id,
+          dom.company_name as entity_name,
+          dom.login_id as entity_login_id,
+          'COMPANY'::text as entity_type,
+          true as has_active_domain,
+          dom.id as domain_id,
+          dom.current_balance
+        from scoped_domains dom
       ),
       charge_totals as (
         select
           entity.entity_id,
           coalesce(sum(cr.amount), 0)::text as charge_total
         from scoped_entities entity
-        left join charge_requests cr on (
-          cr.distributor_id = entity.distributor_id
-          or exists (
-            select 1
-            from domains dom
-            where dom.id = cr.domain_id
-              and dom.distributor_id = entity.distributor_id
-              and dom.status <> 'DELETED'
-          )
-        )
+        left join charge_requests cr on cr.domain_id = entity.domain_id
           and cr.status in ('APPROVED', 'COMPLETED')
           and cr.processed_at is not null
           and (cr.processed_at at time zone 'Asia/Seoul') >= $1::date
@@ -258,61 +234,24 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
       fee_totals as (
         select
           entity.entity_id,
-          coalesce(sum(t.amount), 0)::text as fee_total
+          coalesce(sum(co.saved_commission), 0)::text as fee_total
         from scoped_entities entity
-        left join distributor_balance_transactions t on t.distributor_id = entity.distributor_id
-          and t.source_type in (
-            'COMMISSION',
-            'COMMISSION_TOP_DISTRIBUTOR',
-            'COMMISSION_DISTRIBUTOR',
-            'COMMISSION_SUB_DISTRIBUTOR',
-            'COMMISSION_PARTNER_1',
-            'COMMISSION_PARTNER_2',
-            'COMMISSION_PARTNER_3',
-            'COMMISSION_REVERSAL',
-            'COMMISSION_TOP_DISTRIBUTOR_REVERSAL',
-            'COMMISSION_DISTRIBUTOR_REVERSAL',
-            'COMMISSION_SUB_DISTRIBUTOR_REVERSAL',
-            'COMMISSION_PARTNER_1_REVERSAL',
-            'COMMISSION_PARTNER_2_REVERSAL',
-            'COMMISSION_PARTNER_3_REVERSAL'
-          )
-          and (t.created_at at time zone 'Asia/Seoul') >= $1::date
-          and (t.created_at at time zone 'Asia/Seoul') < $2::date
+        left join commission_records co on co.domain_id = entity.domain_id
+          and co.status in ('APPROVED', 'COMPLETED')
+          and (co.created_at at time zone 'Asia/Seoul') >= $1::date
+          and (co.created_at at time zone 'Asia/Seoul') < $2::date
         group by entity.entity_id
       ),
       exchange_totals as (
         select
           entity.entity_id,
-          coalesce(sum(summary.amount), 0)::text as exchange_total
+          coalesce(sum(er.amount), 0)::text as exchange_total
         from scoped_entities entity
-        left join (
-          select
-            concat('distributor:', dom.distributor_id::text) as entity_id,
-            er.amount
-          from exchange_requests er
-          join domains dom on dom.id = er.domain_id
-          where er.domain_id is not null
-            and dom.status <> 'DELETED'
-            and er.status in ('APPROVED', 'COMPLETED')
-            and er.processed_at is not null
-            and (er.processed_at at time zone 'Asia/Seoul') >= $1::date
-            and (er.processed_at at time zone 'Asia/Seoul') < $2::date
-
-          union all
-
-          select
-            concat('distributor-summary:', dw.distributor_id::text) as entity_id,
-            dw.request_amount as amount
-          from distributor_withdrawals dw
-          where dw.status in ('APPROVED', 'COMPLETED')
-            and dw.processed_at is not null
-            and (dw.processed_at at time zone 'Asia/Seoul') >= $1::date
-            and (dw.processed_at at time zone 'Asia/Seoul') < $2::date
-        ) summary on (
-          summary.entity_id = entity.entity_id
-          or summary.entity_id = concat('distributor-summary:', entity.distributor_id::text)
-        )
+        left join exchange_requests er on er.domain_id = entity.domain_id
+          and er.status in ('APPROVED', 'COMPLETED')
+          and er.processed_at is not null
+          and (er.processed_at at time zone 'Asia/Seoul') >= $1::date
+          and (er.processed_at at time zone 'Asia/Seoul') < $2::date
         group by entity.entity_id
       )
       select
@@ -332,80 +271,6 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
       order by entity.entity_name asc
     `,
     [startDate, endDateExclusive, ...dashboardScope.values],
-  );
-
-  return result.rows.map((row) => ({
-    id: row.entity_id,
-    name: row.entity_name,
-    loginId: row.entity_login_id ?? "-",
-    type: row.entity_type,
-    hasActiveDomain: row.has_active_domain,
-    chargeTotal: Number(row.charge_total),
-    feeTotal: Number(row.fee_total),
-    exchangeTotal: Number(row.exchange_total),
-    balanceTotal: Number(row.balance_total),
-  }));
-}
-
-async function getDashboardCompanySummariesForDomainAdmin(user: SessionUser) {
-  const companyIds = await getManagedCompanyIds(user.id);
-
-  if (!companyIds.length) {
-    return [] satisfies DashboardPartnerSummary[];
-  }
-
-  const { startDate, endDateExclusive } = getCurrentKoreanDayRange();
-  const result = await query<DashboardPartnerSummaryRow>(
-    `
-      select
-        concat('company:', c.id::text) as entity_id,
-        c.company_name as entity_name,
-        $4::text as entity_login_id,
-        'COMPANY'::text as entity_type,
-        exists (
-          select 1
-          from domains dom
-          where dom.company_id = c.id
-            and dom.status <> 'DELETED'
-        ) as has_active_domain,
-        coalesce((
-          select sum(cr.amount)
-          from charge_requests cr
-          where cr.company_id = c.id
-            and cr.status in ('APPROVED', 'COMPLETED')
-            and cr.processed_at is not null
-            and (cr.processed_at at time zone 'Asia/Seoul') >= $2::date
-            and (cr.processed_at at time zone 'Asia/Seoul') < $3::date
-        ), 0)::text as charge_total,
-        coalesce((
-          select sum(co.saved_commission)
-          from commission_records co
-          where co.company_id = c.id
-            and co.status in ('APPROVED', 'COMPLETED')
-            and (co.created_at at time zone 'Asia/Seoul') >= $2::date
-            and (co.created_at at time zone 'Asia/Seoul') < $3::date
-        ), 0)::text as fee_total,
-        coalesce((
-          select sum(er.amount)
-          from exchange_requests er
-          where er.company_id = c.id
-            and er.status in ('APPROVED', 'COMPLETED')
-            and er.processed_at is not null
-            and (er.processed_at at time zone 'Asia/Seoul') >= $2::date
-            and (er.processed_at at time zone 'Asia/Seoul') < $3::date
-        ), 0)::text as exchange_total,
-        coalesce((
-          select sum(dom.current_balance)
-          from domains dom
-          where dom.company_id = c.id
-            and dom.status <> 'DELETED'
-        ), 0)::text as balance_total
-      from companies c
-      where c.id = any($1::uuid[])
-        and c.status = 'ACTIVE'
-      order by c.company_name asc
-    `,
-    [companyIds, startDate, endDateExclusive, user.loginId],
   );
 
   return result.rows.map((row) => ({

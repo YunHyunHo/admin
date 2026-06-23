@@ -159,7 +159,7 @@ export function DashboardHistoryPanels({
               ) : (
                 <tr>
                   <td colSpan={8} className="px-4 py-10 text-center text-sm text-white/40">
-                    표시할 하청/업체 현황이 없습니다.
+                    표시할 도메인 업체 현황이 없습니다.
                   </td>
                 </tr>
               )}
@@ -229,7 +229,7 @@ export function DashboardHistoryPanels({
           })
         ) : (
           <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-5 py-10 text-center text-sm text-white/42 lg:col-span-2">
-            표시할 하청/업체 현황이 없습니다.
+            표시할 도메인 업체 현황이 없습니다.
           </div>
         )}
       </div>

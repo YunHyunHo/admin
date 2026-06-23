@@ -22,7 +22,7 @@ export function DashboardSummaryToggle() {
   return (
     <button
       type="button"
-      aria-label={isOpen ? "하청 업체 현황 닫기" : "하청 업체 현황 열기"}
+      aria-label={isOpen ? "도메인 업체 현황 닫기" : "도메인 업체 현황 열기"}
       aria-expanded={isOpen}
       title={isOpen ? "현황 닫기" : "현황 열기"}
       onClick={handleToggle}

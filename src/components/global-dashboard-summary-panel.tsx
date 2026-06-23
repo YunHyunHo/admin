@@ -145,7 +145,7 @@ export function GlobalDashboardSummaryPanel({
               Partner Summary
             </p>
             <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-white">
-              하청 / 업체 현황
+              도메인 업체 현황
             </h2>
           </div>
 
@@ -172,7 +172,7 @@ export function GlobalDashboardSummaryPanel({
         >
           {isLoading ? (
             <div className="px-4 py-10 text-center text-sm text-white/42 lg:col-span-2">
-              하청/업체 현황을 불러오는 중입니다.
+              도메인 업체 현황을 불러오는 중입니다.
             </div>
           ) : errorMessage ? (
             <div className="px-4 py-10 text-center text-sm text-rose-200/80 lg:col-span-2">
@@ -208,7 +208,7 @@ export function GlobalDashboardSummaryPanel({
             ))
           ) : (
             <div className="px-4 py-10 text-center text-sm text-white/42 lg:col-span-2">
-              표시할 하청/업체 현황이 없습니다.
+              표시할 도메인 업체 현황이 없습니다.
             </div>
           )}
         </div>
