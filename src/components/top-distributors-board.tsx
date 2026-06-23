@@ -47,9 +47,7 @@ function toRows(accounts: AdminAccountRecord[]): TopDistributorRow[] {
         nickname: account.nickname,
         loginId: account.loginId,
         password: account.visiblePassword,
-        managedAccountNames: childDistributors.map(
-          (candidate) => `${candidate.nickname} / ${candidate.loginId}`,
-        ),
+        managedAccountNames: account.managedCompanies,
         lastLoginAt: account.lastLoginAt,
         createdAt: account.createdAt,
         status: account.status,
@@ -525,12 +523,12 @@ export function TopDistributorsBoard({
               관리 업체
             </h3>
             <p className="mt-2 text-sm text-slate-500">
-              {managedCompaniesRow.nickname} 계정 하위에 연결된 계정 목록입니다.
+              수수료관리에 연결된 {managedCompaniesRow.nickname} 담당 업체 목록입니다.
             </p>
 
             <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div className="mb-3 flex items-center justify-between text-sm font-semibold text-slate-700">
-                <span>총 계정 수</span>
+                <span>총 업체 수</span>
                 <span>{managedCompaniesRow.managedAccountNames.length}개</span>
               </div>
               <div className="max-h-[260px] space-y-2 overflow-y-auto">

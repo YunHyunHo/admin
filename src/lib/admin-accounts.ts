@@ -61,6 +61,11 @@ type DbAdminRow = {
   current_balance: string | null;
 };
 
+type DbFeeManagedCompaniesRow = {
+  admin_id: string;
+  managed_companies: string[];
+};
+
 const hiddenPasswordMessage = "저장된 비밀번호를 확인할 수 없습니다.";
 
 function getPasswordCipherKey() {
@@ -309,15 +314,19 @@ function toAdminAccountRecord(
     return null;
   }
 
+  const allowEmptyManagedCompanies =
+    row.role === "DOMAIN_ADMIN" ||
+    row.role === "TOP_DISTRIBUTOR" ||
+    row.role === "ADMIN";
   const managedCompanySource = row.managed_companies?.length
     ? row.managed_companies
-    : row.role === "DOMAIN_ADMIN"
+    : allowEmptyManagedCompanies
       ? []
       : companyOptions;
   const managedCompanies = normalizeManagedCompanies(
     managedCompanySource,
     companyOptions,
-    { allowEmpty: row.role === "DOMAIN_ADMIN" },
+    { allowEmpty: allowEmptyManagedCompanies },
   );
   const isMaster = row.role === "MASTER";
   const companyName = isMaster
@@ -372,7 +381,52 @@ function filterAccountsForUser(
 }
 
 async function getDbAdminAccounts(user?: Pick<SessionUser, "id" | "role"> | null) {
-  const companyOptions = await getDbManagedCompanyOptions(user);
+  const [companyOptions, feeManagedCompaniesResult] = await Promise.all([
+    getDbManagedCompanyOptions(user),
+    query<DbFeeManagedCompaniesRow>(
+      `
+        with active_fee_links as (
+          select fr.company_id, fp.distributor_id
+          from fee_rates fr
+          join fee_rate_partners fp on fp.fee_rate_id = fr.id
+          where fr.starts_at <= now()
+            and (fr.ends_at is null or fr.ends_at > now())
+
+          union
+
+          select fr.company_id, fr.distributor_id
+          from fee_rates fr
+          where fr.distributor_id is not null
+            and fr.starts_at <= now()
+            and (fr.ends_at is null or fr.ends_at > now())
+
+          union
+
+          select fr.company_id, fr.sub_distributor_id
+          from fee_rates fr
+          where fr.sub_distributor_id is not null
+            and fr.starts_at <= now()
+            and (fr.ends_at is null or fr.ends_at > now())
+        )
+        select
+          dist.admin_id::text,
+          array_agg(distinct c.company_name order by c.company_name) as managed_companies
+        from active_fee_links link
+        join distributors dist on dist.id = link.distributor_id
+        join companies c on c.id = link.company_id
+        where dist.admin_id is not null
+          and dist.status = 'ACTIVE'
+          and c.status = 'ACTIVE'
+        group by dist.admin_id
+      `,
+    ),
+  ]);
+  const feeManagedCompaniesByAdmin = new Map(
+    feeManagedCompaniesResult.rows.map((row) => [
+      row.admin_id,
+      row.managed_companies,
+    ]),
+  );
   const result = await query<DbAdminRow>(
     `
       select
@@ -423,7 +477,18 @@ async function getDbAdminAccounts(user?: Pick<SessionUser, "id" | "role"> | null
     `,
   );
   const accounts = result.rows
-    .map((row) => toAdminAccountRecord(row, companyOptions))
+    .map((row) =>
+      toAdminAccountRecord(
+        row.role === "TOP_DISTRIBUTOR" || row.role === "ADMIN"
+          ? {
+              ...row,
+              managed_companies:
+                feeManagedCompaniesByAdmin.get(row.id) ?? [],
+            }
+          : row,
+        companyOptions,
+      ),
+    )
     .filter((account): account is AdminAccountRecord => Boolean(account));
 
   const nextAccounts = accounts.some((account) => account.role === "MASTER")
