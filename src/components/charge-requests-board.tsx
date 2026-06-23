@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ModalFeedback } from "@/components/modal-feedback";
-import type {
-  PendingRequest,
-  ProcessedRequest,
+import {
+  parseKoreanWon,
+  type PendingRequest,
+  type ProcessedRequest,
 } from "@/lib/charge-utils";
 import type { DomainExchangeOption } from "@/lib/domain-exchanges-types";
 
@@ -43,10 +44,90 @@ type ChargeConfirmAction = {
   actionLabel: "승인" | "거절" | "승인취소";
 };
 
+type HistoryFilters = {
+  startDate: string;
+  endDate: string;
+  amount: string;
+};
+
 const rowsPerPage = 10;
 const pagesPerGroup = 10;
 const chargeNoticeSoundPath = "/sounds/notice.mp3";
 const dashboardSummaryRefreshEvent = "dashboard-summary-refresh";
+const emptyHistoryFilters: HistoryFilters = {
+  startDate: "",
+  endDate: "",
+  amount: "",
+};
+
+function matchesHistoryFilters(row: ProcessedRequest, filters: HistoryFilters) {
+  const completedDate = row.completedDate ?? "";
+  const amount = Number(filters.amount.replaceAll(",", ""));
+
+  return (
+    (!filters.startDate || completedDate >= filters.startDate) &&
+    (!filters.endDate || completedDate <= filters.endDate) &&
+    (!amount || parseKoreanWon(row.amount) === amount)
+  );
+}
+
+function HistorySearch({
+  filters,
+  onChange,
+  onReset,
+}: {
+  filters: HistoryFilters;
+  onChange: (filters: HistoryFilters) => void;
+  onReset: () => void;
+}) {
+  return (
+    <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-white/8 bg-white/[0.025] p-4 lg:flex-row lg:items-end">
+      <label className="block">
+        <span className="mb-2 block text-xs font-medium text-white/45">시작일</span>
+        <input
+          type="date"
+          value={filters.startDate}
+          max={filters.endDate || undefined}
+          onChange={(event) => onChange({ ...filters, startDate: event.target.value })}
+          className="h-11 rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none [color-scheme:dark]"
+        />
+      </label>
+      <label className="block">
+        <span className="mb-2 block text-xs font-medium text-white/45">종료일</span>
+        <input
+          type="date"
+          value={filters.endDate}
+          min={filters.startDate || undefined}
+          onChange={(event) => onChange({ ...filters, endDate: event.target.value })}
+          className="h-11 rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none [color-scheme:dark]"
+        />
+      </label>
+      <label className="block flex-1">
+        <span className="mb-2 block text-xs font-medium text-white/45">신청금액</span>
+        <input
+          type="text"
+          inputMode="numeric"
+          value={filters.amount}
+          placeholder="금액 입력"
+          onChange={(event) =>
+            onChange({
+              ...filters,
+              amount: event.target.value.replace(/[^0-9,]/g, ""),
+            })
+          }
+          className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-4 text-sm text-white outline-none placeholder:text-white/30"
+        />
+      </label>
+      <button
+        type="button"
+        onClick={onReset}
+        className="h-11 rounded-xl border border-white/10 bg-white/[0.04] px-5 text-sm font-semibold text-white transition hover:bg-white/[0.08]"
+      >
+        초기화
+      </button>
+    </div>
+  );
+}
 
 function getCurrentTimeLabel() {
   return new Intl.DateTimeFormat("ko-KR", {
@@ -168,6 +249,12 @@ export function ChargeRequestsBoard({
   const [pendingPage, setPendingPage] = useState(1);
   const [approvedPage, setApprovedPage] = useState(1);
   const [rejectedPage, setRejectedPage] = useState(1);
+  const [approvedFilters, setApprovedFilters] = useState<HistoryFilters>({
+    ...emptyHistoryFilters,
+  });
+  const [rejectedFilters, setRejectedFilters] = useState<HistoryFilters>({
+    ...emptyHistoryFilters,
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [armedApprovalId, setArmedApprovalId] = useState<string | null>(null);
@@ -422,19 +509,33 @@ export function ChargeRequestsBoard({
     (pendingPage - 1) * rowsPerPage,
     pendingPage * rowsPerPage,
   );
+  const filteredApprovedRequests = useMemo(
+    () =>
+      approvedRequests.filter((row) =>
+        matchesHistoryFilters(row, approvedFilters),
+      ),
+    [approvedFilters, approvedRequests],
+  );
+  const filteredRejectedRequests = useMemo(
+    () =>
+      rejectedRequests.filter((row) =>
+        matchesHistoryFilters(row, rejectedFilters),
+      ),
+    [rejectedFilters, rejectedRequests],
+  );
   const approvedPageCount = Math.max(
     1,
-    Math.ceil(approvedRequests.length / rowsPerPage),
+    Math.ceil(filteredApprovedRequests.length / rowsPerPage),
   );
-  const visibleApprovedRequests = approvedRequests.slice(
+  const visibleApprovedRequests = filteredApprovedRequests.slice(
     (approvedPage - 1) * rowsPerPage,
     approvedPage * rowsPerPage,
   );
   const rejectedPageCount = Math.max(
     1,
-    Math.ceil(rejectedRequests.length / rowsPerPage),
+    Math.ceil(filteredRejectedRequests.length / rowsPerPage),
   );
-  const visibleRejectedRequests = rejectedRequests.slice(
+  const visibleRejectedRequests = filteredRejectedRequests.slice(
     (rejectedPage - 1) * rowsPerPage,
     rejectedPage * rowsPerPage,
   );
@@ -723,7 +824,18 @@ export function ChargeRequestsBoard({
           </SectionCard>
 
           <div className="space-y-5">
-            <SectionCard title="승인내역" count={approvedRequests.length}>
+            <SectionCard title="승인내역" count={filteredApprovedRequests.length}>
+              <HistorySearch
+                filters={approvedFilters}
+                onChange={(filters) => {
+                  setApprovedFilters(filters);
+                  setApprovedPage(1);
+                }}
+                onReset={() => {
+                  setApprovedFilters({ ...emptyHistoryFilters });
+                  setApprovedPage(1);
+                }}
+              />
               <Table>
                 <table className="min-w-full text-left text-sm">
                   <thead className="bg-black/30 text-white/58">
@@ -748,38 +860,46 @@ export function ChargeRequestsBoard({
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleApprovedRequests.map((row) => (
-                      <tr key={row.id} className="border-t border-cyan-300/18 text-white/82">
-                        <td className="px-4 py-4">{row.userId}</td>
-                        <td className="px-4 py-4">{row.bankName}</td>
-                        <td className="px-4 py-4">{row.accountNumber}</td>
-                        <td className="px-4 py-4">{row.depositor}</td>
-                        <td className="px-4 py-4">{row.amount}</td>
-                        <td className="px-4 py-4">{row.requestedAt}</td>
-                        <td className="px-4 py-4">{row.completedAt}</td>
-                        <td className="px-4 py-4">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="rounded-full bg-emerald-500/12 px-3 py-1 text-xs font-medium text-emerald-200">
-                              {row.status}
-                            </span>
-                            {canProcessCharges ? (
-                              <button
-                                type="button"
-                                onClick={() => moveRequest(row, "승인거절")}
-                                disabled={processingId === row.id}
-                                className="rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                승인취소
-                              </button>
-                            ) : null}
-                          </div>
+                    {visibleApprovedRequests.length ? (
+                      visibleApprovedRequests.map((row) => (
+                        <tr key={row.id} className="border-t border-cyan-300/18 text-white/82">
+                          <td className="px-4 py-4">{row.userId}</td>
+                          <td className="px-4 py-4">{row.bankName}</td>
+                          <td className="px-4 py-4">{row.accountNumber}</td>
+                          <td className="px-4 py-4">{row.depositor}</td>
+                          <td className="px-4 py-4">{row.amount}</td>
+                          <td className="px-4 py-4">{row.requestedAt}</td>
+                          <td className="px-4 py-4">{row.completedAt}</td>
+                          <td className="px-4 py-4">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="rounded-full bg-emerald-500/12 px-3 py-1 text-xs font-medium text-emerald-200">
+                                {row.status}
+                              </span>
+                              {canProcessCharges ? (
+                                <button
+                                  type="button"
+                                  onClick={() => moveRequest(row, "승인거절")}
+                                  disabled={processingId === row.id}
+                                  className="rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  승인취소
+                                </button>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={8} className="px-4 py-10 text-center text-sm text-white/40">
+                          검색 조건에 맞는 승인내역이 없습니다.
                         </td>
                       </tr>
-                    ))}
+                    )}
                   </tbody>
                 </table>
               </Table>
-              {approvedRequests.length > rowsPerPage ? (
+              {filteredApprovedRequests.length > rowsPerPage ? (
                 <PaginationControls
                   page={approvedPage}
                   pageCount={approvedPageCount}
@@ -788,7 +908,18 @@ export function ChargeRequestsBoard({
               ) : null}
             </SectionCard>
 
-            <SectionCard title="승인거절내역" count={rejectedRequests.length}>
+            <SectionCard title="승인거절내역" count={filteredRejectedRequests.length}>
+              <HistorySearch
+                filters={rejectedFilters}
+                onChange={(filters) => {
+                  setRejectedFilters(filters);
+                  setRejectedPage(1);
+                }}
+                onReset={() => {
+                  setRejectedFilters({ ...emptyHistoryFilters });
+                  setRejectedPage(1);
+                }}
+              />
               <Table>
                 <table className="min-w-full text-left text-sm">
                   <thead className="bg-black/30 text-white/58">
@@ -813,26 +944,34 @@ export function ChargeRequestsBoard({
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleRejectedRequests.map((row) => (
-                      <tr key={row.id} className="border-t border-cyan-300/18 text-white/82">
-                        <td className="px-4 py-4">{row.userId}</td>
-                        <td className="px-4 py-4">{row.bankName}</td>
-                        <td className="px-4 py-4">{row.accountNumber}</td>
-                        <td className="px-4 py-4">{row.depositor}</td>
-                        <td className="px-4 py-4">{row.amount}</td>
-                        <td className="px-4 py-4">{row.requestedAt}</td>
-                        <td className="px-4 py-4">{row.completedAt}</td>
-                        <td className="px-4 py-4">
-                          <span className="rounded-full bg-rose-500/12 px-3 py-1 text-xs font-medium text-rose-200">
-                            {row.status}
-                          </span>
+                    {visibleRejectedRequests.length ? (
+                      visibleRejectedRequests.map((row) => (
+                        <tr key={row.id} className="border-t border-cyan-300/18 text-white/82">
+                          <td className="px-4 py-4">{row.userId}</td>
+                          <td className="px-4 py-4">{row.bankName}</td>
+                          <td className="px-4 py-4">{row.accountNumber}</td>
+                          <td className="px-4 py-4">{row.depositor}</td>
+                          <td className="px-4 py-4">{row.amount}</td>
+                          <td className="px-4 py-4">{row.requestedAt}</td>
+                          <td className="px-4 py-4">{row.completedAt}</td>
+                          <td className="px-4 py-4">
+                            <span className="rounded-full bg-rose-500/12 px-3 py-1 text-xs font-medium text-rose-200">
+                              {row.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={8} className="px-4 py-10 text-center text-sm text-white/40">
+                          검색 조건에 맞는 승인거절내역이 없습니다.
                         </td>
                       </tr>
-                    ))}
+                    )}
                   </tbody>
                 </table>
               </Table>
-              {rejectedRequests.length > rowsPerPage ? (
+              {filteredRejectedRequests.length > rowsPerPage ? (
                 <PaginationControls
                   page={rejectedPage}
                   pageCount={rejectedPageCount}

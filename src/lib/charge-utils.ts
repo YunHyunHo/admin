@@ -10,10 +10,12 @@ export type PendingRequest = {
   depositor: string;
   amount: string;
   requestedAt: string;
+  requestedDate?: string;
 };
 
 export type ProcessedRequest = PendingRequest & {
   completedAt: string;
+  completedDate?: string;
   status: "승인" | "승인거절";
 };
 

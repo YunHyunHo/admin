@@ -9,7 +9,7 @@ import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
 import { ensureDomainChargeIntegrationSchema } from "@/lib/domain-charge-integration";
 import { getDomainWithdrawAccount } from "@/lib/domain-withdraw-account";
 import { ensureFeeRateSchema } from "@/lib/fee-rate-schema";
-import { formatKoreanDateTime } from "@/lib/korean-time";
+import { formatKoreanDateTime, getKoreanIsoDate } from "@/lib/korean-time";
 import {
   getMasterOwnedBankAccountCondition,
   getMasterOwnedCompanyExistsCondition,
@@ -304,6 +304,7 @@ function toPendingRequest(row: ChargeRequestRow): PendingRequest {
     depositor: row.depositor ?? "-",
     amount: formatKoreanWon(Number(row.amount)),
     requestedAt: formatStamp(row.requested_at),
+    requestedDate: getKoreanIsoDate(row.requested_at),
   };
 }
 
@@ -311,6 +312,7 @@ function toProcessedRequest(row: ChargeRequestRow): ProcessedRequest {
   return {
     ...toPendingRequest(row),
     completedAt: formatStamp(row.processed_at),
+    completedDate: getKoreanIsoDate(row.processed_at),
     status: row.status === "APPROVED" ? "승인" : "승인거절",
   };
 }
