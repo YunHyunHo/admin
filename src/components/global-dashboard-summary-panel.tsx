@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { useDashboardSummaryOpen } from "@/components/use-dashboard-summary-open";
 import { formatKoreanWon } from "@/lib/charge-utils";
 import type { DashboardPartnerSummary } from "@/lib/dashboard-summary-repository";
 
-const summaryToggleEvent = "dashboard-summary-toggle";
 const summaryRefreshEvent = "dashboard-summary-refresh";
 const metricLabels = ["충전", "수수료", "환전", "보유"] as const;
 
@@ -40,7 +40,7 @@ export function GlobalDashboardSummaryPanel({
 }: {
   partnerSummaries?: DashboardPartnerSummary[];
 }) {
-  const [isOpen, setIsOpen] = useState(true);
+  const isOpen = useDashboardSummaryOpen();
   const [partnerSummaries, setPartnerSummaries] = useState<
     DashboardPartnerSummary[] | null
   >(initialPartnerSummaries ?? null);
@@ -62,26 +62,13 @@ export function GlobalDashboardSummaryPanel({
   ];
 
   useEffect(() => {
-    function handleSummaryToggle(event: Event) {
-      const detail = (event as CustomEvent<{ open?: boolean }>).detail;
-
-      if (typeof detail?.open === "boolean") {
-        setIsOpen(detail.open);
-        return;
-      }
-
-      setIsOpen((current) => !current);
-    }
-
     function handleSummaryRefresh() {
       setPartnerSummaries(null);
     }
 
-    window.addEventListener(summaryToggleEvent, handleSummaryToggle);
     window.addEventListener(summaryRefreshEvent, handleSummaryRefresh);
 
     return () => {
-      window.removeEventListener(summaryToggleEvent, handleSummaryToggle);
       window.removeEventListener(summaryRefreshEvent, handleSummaryRefresh);
     };
   }, []);

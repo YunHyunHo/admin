@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin-shell";
 import { SettlementProfitBoard } from "@/components/settlement-profit-board";
 import { getSessionUser } from "@/lib/auth";
-import { getDefaultReportDateRange } from "@/lib/mock-report-service";
+import { getCurrentMonthReportDateRange } from "@/lib/mock-report-service";
 import { getSettlementProfitForUser } from "@/lib/settlement-repository";
 
 
@@ -14,7 +14,7 @@ export default async function SettlementProfitPage() {
     redirect("/");
   }
 
-  const defaultRange = getDefaultReportDateRange();
+  const defaultRange = getCurrentMonthReportDateRange();
   const initialProfit = await getSettlementProfitForUser(
     user,
     defaultRange.startDate,

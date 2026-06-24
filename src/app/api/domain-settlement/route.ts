@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/auth";
 import { getDomainSettlementForUser } from "@/lib/settlement-repository";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   const user = await getSessionUser();
@@ -25,5 +26,6 @@ export async function GET(request: Request) {
 
   return NextResponse.json(
     await getDomainSettlementForUser(user, startDate, endDate),
+    { headers: { "Cache-Control": "no-store" } },
   );
 }

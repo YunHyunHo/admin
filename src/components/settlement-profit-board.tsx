@@ -1,8 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { formatKoreanWon } from "@/lib/charge-utils";
+import {
+  requestNotificationSnapshotEventName,
+  type RequestNotificationSnapshot,
+} from "@/components/global-request-notifier";
 
 type SettlementProfitBoardProps = {
   companyName: string;
@@ -55,6 +59,7 @@ type SettlementProfitResponse = {
 };
 
 const MIN_QUERY_DATE = "2026-01-01";
+const dashboardSummaryRefreshEventName = "dashboard-summary-refresh";
 
 function fromIsoDate(iso: string) {
   const [, month, day] = iso.split("-");
@@ -173,6 +178,12 @@ export function SettlementProfitBoard({
   );
   const [totals, setTotals] = useState(initialTotals);
   const [message, setMessage] = useState("서버 API 기준 데이터입니다.");
+  const isLoadingRef = useRef(false);
+  const queuedRangeRef = useRef<[string, string] | null>(null);
+  const loadRowsRef = useRef<(startDate: string, endDate: string) => Promise<void>>(
+    async () => undefined,
+  );
+  const pendingSignatureRef = useRef<string | null>(null);
   const visibleSections = profitSections.length
     ? profitSections
     : [
@@ -185,10 +196,18 @@ export function SettlementProfitBoard({
         },
       ];
 
-  async function loadRows(nextStartDate: string, nextEndDate: string) {
+  const loadRows = useCallback(async (nextStartDate: string, nextEndDate: string) => {
+    if (isLoadingRef.current) {
+      queuedRangeRef.current = [nextStartDate, nextEndDate];
+      return;
+    }
+
+    isLoadingRef.current = true;
+
     try {
       const response = await fetch(
         `/api/settlement-profit?startDate=${nextStartDate}&endDate=${nextEndDate}`,
+        { cache: "no-store" },
       );
 
       if (!response.ok) {
@@ -202,17 +221,63 @@ export function SettlementProfitBoard({
       setTotals(data.totals);
       setMessage("서버 API 기준 데이터입니다.");
     } catch (error) {
-      setProfitSections([]);
-      setTotals({
-        chargeTotal: 0,
-        feeTotal: 0,
-        companyFeeTotal: 0,
-        distributorFeeTotal: 0,
-        payoutTotal: 0,
-      });
       setMessage(error instanceof Error ? error.message : "조회에 실패했습니다.");
+    } finally {
+      isLoadingRef.current = false;
+      const queuedRange = queuedRangeRef.current;
+      queuedRangeRef.current = null;
+
+      if (queuedRange) {
+        void loadRowsRef.current(...queuedRange);
+      }
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    loadRowsRef.current = loadRows;
+  }, [loadRows]);
+
+  useEffect(() => {
+    function refreshCurrentRange() {
+      void loadRows(startDate, endDate);
+    }
+
+    function handleRequestSnapshot(event: Event) {
+      const snapshot = (event as CustomEvent<RequestNotificationSnapshot>).detail;
+      const signature = [
+        ...snapshot.pendingIds.charges.map((id) => `charge:${id}`),
+        ...snapshot.pendingIds.domainExchanges.map((id) => `exchange:${id}`),
+      ]
+        .sort()
+        .join("|");
+
+      if (pendingSignatureRef.current === null) {
+        pendingSignatureRef.current = signature;
+        return;
+      }
+
+      if (pendingSignatureRef.current !== signature) {
+        pendingSignatureRef.current = signature;
+        refreshCurrentRange();
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        refreshCurrentRange();
+      }
+    }
+
+    window.addEventListener(dashboardSummaryRefreshEventName, refreshCurrentRange);
+    window.addEventListener(requestNotificationSnapshotEventName, handleRequestSnapshot);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener(dashboardSummaryRefreshEventName, refreshCurrentRange);
+      window.removeEventListener(requestNotificationSnapshotEventName, handleRequestSnapshot);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [endDate, loadRows, startDate]);
 
   function applyDateRange() {
     const nextStartDate = clampDate(startDate, MIN_QUERY_DATE, todayIsoDate);

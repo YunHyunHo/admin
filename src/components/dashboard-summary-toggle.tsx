@@ -1,22 +1,15 @@
 "use client";
 
-import { useState } from "react";
-
-const summaryToggleEvent = "dashboard-summary-toggle";
+import {
+  setDashboardSummaryOpen,
+  useDashboardSummaryOpen,
+} from "@/components/use-dashboard-summary-open";
 
 export function DashboardSummaryToggle() {
-  const [isOpen, setIsOpen] = useState(true);
+  const isOpen = useDashboardSummaryOpen();
 
   function handleToggle() {
-    setIsOpen((current) => {
-      const nextOpen = !current;
-      window.dispatchEvent(
-        new CustomEvent(summaryToggleEvent, {
-          detail: { open: nextOpen },
-        }),
-      );
-      return nextOpen;
-    });
+    setDashboardSummaryOpen(!isOpen);
   }
 
   return (

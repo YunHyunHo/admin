@@ -30,6 +30,21 @@ export function getDefaultReportDateRange() {
   };
 }
 
+export function getCurrentMonthReportDateRange() {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const endDate = formatter.format(new Date());
+
+  return {
+    startDate: `${endDate.slice(0, 8)}01`,
+    endDate,
+  };
+}
+
 function toIsoDate(mmddTime: string) {
   const [mmdd] = mmddTime.split(" ");
   const [month, day] = mmdd.split("-");
