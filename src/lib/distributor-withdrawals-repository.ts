@@ -1,9 +1,72 @@
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
 import { formatKoreanDateTime } from "@/lib/korean-time";
-import { getScopedDistributorCondition } from "@/lib/master-scope";
+import {
+  getManagedCompanyIds,
+  getScopedDistributorCondition,
+} from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
 
 const DEFAULT_ROW_LIMIT = 200;
+
+function shiftSqlParams(sql: string, offset: number) {
+  return sql.replace(/\$(\d+)/g, (_, indexText) => `$${Number(indexText) + offset}`);
+}
+
+async function getWithdrawalScope(
+  user: Pick<SessionUser, "id" | "role">,
+  distributorAlias = "d",
+  distributorAdminAlias = "dist_admin",
+) {
+  if (user.role !== "DOMAIN_ADMIN") {
+    return getScopedDistributorCondition(
+      user,
+      distributorAlias,
+      distributorAdminAlias,
+    );
+  }
+
+  const companyIds = await getManagedCompanyIds(user.id);
+
+  if (!companyIds.length) {
+    return { sql: "and 1 = 0", values: [] as unknown[] };
+  }
+
+  return {
+    sql: `and (
+      exists (
+        select 1
+        from domains scoped_dom
+        left join distributors scoped_direct_dist
+          on scoped_direct_dist.id = scoped_dom.distributor_id
+        where scoped_dom.company_id = any($1::uuid[])
+          and scoped_dom.status <> 'DELETED'
+          and (
+            ${distributorAlias}.id = scoped_direct_dist.id
+            or ${distributorAlias}.parent_distributor_id = scoped_direct_dist.id
+            or scoped_direct_dist.parent_distributor_id = ${distributorAlias}.id
+          )
+      )
+      or exists (
+        select 1
+        from fee_rates scoped_fee
+        left join fee_rate_partners scoped_partner
+          on scoped_partner.fee_rate_id = scoped_fee.id
+        left join distributors scoped_legacy_dist
+          on scoped_legacy_dist.id = scoped_fee.distributor_id
+        where scoped_fee.company_id = any($1::uuid[])
+          and scoped_fee.starts_at <= now()
+          and (scoped_fee.ends_at is null or scoped_fee.ends_at > now())
+          and (
+            scoped_partner.distributor_id = ${distributorAlias}.id
+            or scoped_fee.distributor_id = ${distributorAlias}.id
+            or scoped_fee.sub_distributor_id = ${distributorAlias}.id
+            or scoped_legacy_dist.parent_distributor_id = ${distributorAlias}.id
+          )
+      )
+    )`,
+    values: [companyIds],
+  };
+}
 
 export type DistributorWithdrawalRow = {
   id: string;
@@ -103,7 +166,7 @@ export async function getDistributorWithdrawalRows(
     return fallbackRows;
   }
   const scope = user
-    ? getScopedDistributorCondition(user, "d", "dist_admin")
+    ? await getWithdrawalScope(user)
     : { sql: "", values: [] as string[] };
 
   const withdrawals = await query<WithdrawalDbRow>(
@@ -240,8 +303,8 @@ export async function createDistributorWithdrawal(input: CreateDistributorWithdr
 
 export async function approveDistributorWithdrawal(id: string, processedBy: SessionUser) {
   await withTransaction(async (client) => {
-    const processingScopeSql = "and dist_admin.created_by = $2::uuid";
-    const processingValues = [id, processedBy.id];
+    const scope = await getWithdrawalScope(processedBy);
+    const scopeSql = shiftSqlParams(scope.sql, 1);
     const withdrawal = await client.query<ProcessingWithdrawalRow>(
       `
         select
@@ -254,10 +317,10 @@ export async function approveDistributorWithdrawal(id: string, processedBy: Sess
         join distributors d on d.id = dw.distributor_id
         left join admins dist_admin on dist_admin.id = d.admin_id
         where dw.id = $1::uuid
-          ${processingScopeSql}
+          ${scopeSql}
         for update of dw, d
       `,
-      processingValues,
+      [id, ...scope.values],
     );
     const row = withdrawal.rows[0];
 
@@ -332,7 +395,8 @@ export async function approveDistributorWithdrawal(id: string, processedBy: Sess
 }
 
 export async function rejectDistributorWithdrawal(id: string, processedBy: SessionUser) {
-  const processingScopeSql = "and dist_admin.created_by = $2::uuid";
+  const scope = await getWithdrawalScope(processedBy);
+  const scopeSql = shiftSqlParams(scope.sql, 2);
   const result = await query<{ id: string }>(
     `
       update distributor_withdrawals dw
@@ -344,11 +408,11 @@ export async function rejectDistributorWithdrawal(id: string, processedBy: Sessi
       left join admins dist_admin on dist_admin.id = d.admin_id
       where dw.id = $1::uuid
         and dw.distributor_id = d.id
-        ${processingScopeSql}
+        ${scopeSql}
         and dw.status = 'PENDING'
       returning dw.id::text
     `,
-    [id, processedBy.id],
+    [id, processedBy.id, ...scope.values],
   );
 
   if (!result.rows[0]) {
@@ -358,8 +422,8 @@ export async function rejectDistributorWithdrawal(id: string, processedBy: Sessi
 
 export async function cancelDistributorWithdrawal(id: string, processedBy: SessionUser) {
   await withTransaction(async (client) => {
-    const processingScopeSql = "and dist_admin.created_by = $2::uuid";
-    const processingValues = [id, processedBy.id];
+    const scope = await getWithdrawalScope(processedBy);
+    const scopeSql = shiftSqlParams(scope.sql, 1);
     const withdrawal = await client.query<ProcessingWithdrawalRow>(
       `
         select
@@ -372,11 +436,11 @@ export async function cancelDistributorWithdrawal(id: string, processedBy: Sessi
         join distributors d on d.id = dw.distributor_id
         left join admins dist_admin on dist_admin.id = d.admin_id
         where dw.id = $1::uuid
-          ${processingScopeSql}
+          ${scopeSql}
           and dw.status in ('APPROVED', 'COMPLETED')
         for update of dw, d
       `,
-      processingValues,
+      [id, ...scope.values],
     );
     const row = withdrawal.rows[0];
 
