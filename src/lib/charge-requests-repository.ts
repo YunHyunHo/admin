@@ -10,7 +10,6 @@ import { ensureDomainChargeIntegrationSchema } from "@/lib/domain-charge-integra
 import { ensureFeeRateSchema } from "@/lib/fee-rate-schema";
 import { formatKoreanDateTime, getKoreanIsoDate } from "@/lib/korean-time";
 import {
-  getMasterOwnedBankAccountCondition,
   getMasterOwnedCompanyExistsCondition,
   getScopedDistributorCondition,
 } from "@/lib/master-scope";
@@ -419,21 +418,14 @@ async function getChargeRequestScope(
 async function getDbChargeRequests(user: SessionUser, updatedSince?: string) {
   const scope = await getChargeRequestScope(user);
   const scopedSql = updatedSince ? shiftSqlParams(scope.sql, 1) : scope.sql;
-  const bankAccountScopeSql =
-    user.role === "MASTER"
-      ? `and ${getMasterOwnedBankAccountCondition(
-          "ba",
-          updatedSince ? "$2" : "$1",
-        )}`
-      : "";
   const result = await query<ChargeRequestRow>(
     `
       select
         cr.id::text,
         cr.user_uid,
-        coalesce(nullif(cr.bank_name, ''), charge_account.bank_name) as bank_name,
-        coalesce(nullif(cr.account_number, ''), charge_account.account_number) as account_number,
-        coalesce(nullif(cr.account_holder, ''), charge_account.account_holder) as account_holder,
+        cr.bank_name,
+        cr.account_number,
+        cr.account_holder,
         cr.depositor,
         cr.amount::text,
         cr.status::text as status,
@@ -450,34 +442,6 @@ async function getDbChargeRequests(user: SessionUser, updatedSince?: string) {
       left join distributors dist on dist.id = cr.distributor_id
       left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
       left join admins dist_admin on dist_admin.id = dist.admin_id
-      left join lateral (
-        select ba.bank_name, ba.account_number, ba.account_holder
-        from bank_accounts ba
-        where ba.is_active = true
-          ${bankAccountScopeSql}
-          and (
-            (
-              ba.company_id = cr.company_id
-              and (
-                ba.distributor_id = cr.distributor_id
-                or ba.distributor_id is null
-              )
-            )
-            or (
-              ba.distributor_id = cr.distributor_id
-              and ba.company_id is null
-            )
-          )
-        order by
-          case
-            when ba.company_id = cr.company_id and ba.distributor_id = cr.distributor_id then 0
-            when ba.company_id = cr.company_id and ba.distributor_id is null then 1
-            when ba.distributor_id = cr.distributor_id then 2
-            else 3
-          end,
-          ba.created_at desc
-        limit 1
-      ) charge_account on true
       left join lateral (
         select string_agg(child.name, ', ' order by child.name) as names
         from distributors child

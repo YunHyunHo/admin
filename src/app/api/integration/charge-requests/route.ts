@@ -250,7 +250,7 @@ export async function POST(request: Request) {
       domainId,
       domainName,
       rawPayload: payload,
-      useLinkedDepositAccount: Boolean(integration) && !hasProvidedAccount,
+      useLinkedDepositAccount: Boolean(integration),
     });
 
     return NextResponse.json(
