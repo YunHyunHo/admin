@@ -7,7 +7,6 @@ import {
 } from "@/lib/charge-utils";
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
 import { ensureDomainChargeIntegrationSchema } from "@/lib/domain-charge-integration";
-import { getDomainWithdrawAccount } from "@/lib/domain-withdraw-account";
 import { ensureFeeRateSchema } from "@/lib/fee-rate-schema";
 import { formatKoreanDateTime, getKoreanIsoDate } from "@/lib/korean-time";
 import {
@@ -48,6 +47,7 @@ type ChargeRequestRow = {
   user_uid: string;
   bank_name: string | null;
   account_number: string | null;
+  account_holder: string | null;
   depositor: string | null;
   amount: string;
   status: "PENDING" | "APPROVED" | "REJECTED" | "COMPLETED" | "CANCELED";
@@ -63,6 +63,7 @@ type ChargeRequestRow = {
 type ChargeRequestAccountRow = {
   bank_name: string | null;
   account_number: string | null;
+  account_holder: string | null;
 };
 
 type CreateChargeRequestInput = {
@@ -302,6 +303,7 @@ function toPendingRequest(row: ChargeRequestRow): PendingRequest {
     domain: row.domain_name ?? "-",
     bankName: row.bank_name ?? "-",
     accountNumber: row.account_number ?? "-",
+    accountHolder: row.account_holder ?? "-",
     depositor: row.depositor ?? "-",
     amount: formatKoreanWon(Number(row.amount)),
     requestedAt: formatStamp(row.requested_at),
@@ -431,6 +433,7 @@ async function getDbChargeRequests(user: SessionUser, updatedSince?: string) {
         cr.user_uid,
         coalesce(nullif(cr.bank_name, ''), charge_account.bank_name) as bank_name,
         coalesce(nullif(cr.account_number, ''), charge_account.account_number) as account_number,
+        coalesce(nullif(cr.account_holder, ''), charge_account.account_holder) as account_holder,
         cr.depositor,
         cr.amount::text,
         cr.status::text as status,
@@ -448,7 +451,7 @@ async function getDbChargeRequests(user: SessionUser, updatedSince?: string) {
       left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
       left join admins dist_admin on dist_admin.id = dist.admin_id
       left join lateral (
-        select ba.bank_name, ba.account_number
+        select ba.bank_name, ba.account_number, ba.account_holder
         from bank_accounts ba
         where ba.is_active = true
           ${bankAccountScopeSql}
@@ -522,7 +525,7 @@ async function getLinkedChargeRequestAccount(input: {
 }) {
   const result = await query<ChargeRequestAccountRow>(
     `
-      select ba.bank_name, ba.account_number
+      select ba.bank_name, ba.account_number, ba.account_holder
       from bank_accounts ba
       where ba.is_active = true
         and (
@@ -825,6 +828,7 @@ async function insertChargeRequest(input: CreateChargeRequestInput & {
         });
   const bankName = inputBankName ?? linkedAccount?.bank_name ?? null;
   const accountNumber = inputAccountNumber ?? linkedAccount?.account_number ?? null;
+  const accountHolder = inputAccountHolder ?? linkedAccount?.account_holder ?? null;
 
   const result = await query<{ id: string }>(
     `
@@ -868,7 +872,7 @@ async function insertChargeRequest(input: CreateChargeRequestInput & {
       input.userId,
       bankName,
       accountNumber,
-      inputAccountHolder,
+      accountHolder,
       input.depositor ?? null,
       input.amount,
       JSON.stringify(input.rawPayload ?? input),
@@ -924,7 +928,7 @@ async function findIntegrationChargeRequest(
 }
 
 export async function createIntegrationChargeRequest(
-  input: CreateChargeRequestInput & { useDomainWithdrawAccount?: boolean },
+  input: CreateChargeRequestInput & { useLinkedDepositAccount?: boolean },
 ): Promise<IntegrationChargeRequestResult> {
   const { companyId, domainId, distributorId } = await ensureIntegrationDbScope({
     domainId: input.domainId,
@@ -932,7 +936,7 @@ export async function createIntegrationChargeRequest(
     distributorId: input.distributorId,
   });
 
-  if (input.useDomainWithdrawAccount && !domainId) {
+  if (input.useLinkedDepositAccount && !domainId) {
     throw new Error("API 연동 도메인 정보를 찾을 수 없습니다.");
   }
 
@@ -944,12 +948,16 @@ export async function createIntegrationChargeRequest(
     }
   }
 
-  const configuredAccount = input.useDomainWithdrawAccount && domainId
-    ? await getDomainWithdrawAccount(domainId)
+  const configuredAccount = input.useLinkedDepositAccount && domainId
+    ? await getLinkedChargeRequestAccount({
+        domainId,
+        companyId,
+        distributorId,
+      })
     : null;
 
-  if (input.useDomainWithdrawAccount && !configuredAccount) {
-    throw new Error("마스터 어드민에서 업체 출금은행 정보를 먼저 설정해주세요.");
+  if (input.useLinkedDepositAccount && !configuredAccount) {
+    throw new Error("마스터 어드민 계좌관리에서 입금 수신 계좌를 먼저 연동해주세요.");
   }
 
   let requestId: string | undefined;
@@ -957,9 +965,9 @@ export async function createIntegrationChargeRequest(
   try {
     requestId = await insertChargeRequest({
       ...input,
-      bankName: configuredAccount?.bankName ?? input.bankName,
-      accountHolder: configuredAccount?.accountHolder ?? input.accountHolder,
-      accountNumber: configuredAccount?.accountNumber ?? input.accountNumber,
+      bankName: configuredAccount?.bank_name ?? input.bankName,
+      accountHolder: configuredAccount?.account_holder ?? input.accountHolder,
+      accountNumber: configuredAccount?.account_number ?? input.accountNumber,
       companyId,
       domainId,
       distributorId,
@@ -1083,6 +1091,7 @@ export async function processDbChargeRequest(input: {
           user_uid,
           bank_name,
           account_number,
+          account_holder,
           depositor,
           amount::text,
           status::text as status,
@@ -1133,6 +1142,7 @@ export async function processDbChargeRequest(input: {
             cr.user_uid,
             cr.bank_name,
             cr.account_number,
+            cr.account_holder,
             cr.depositor,
             cr.amount::text,
             cr.status::text as status,
@@ -1321,6 +1331,7 @@ export async function processDbChargeRequest(input: {
             user_uid,
             bank_name,
             account_number,
+            account_holder,
             depositor,
             amount::text,
             status::text as status,

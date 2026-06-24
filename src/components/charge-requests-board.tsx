@@ -74,6 +74,7 @@ function matchesHistoryFilters(row: ProcessedRequest, filters: HistoryFilters) {
     (!name ||
       row.companyName.toLowerCase().includes(name) ||
       row.userId.toLowerCase().includes(name) ||
+      row.accountHolder.toLowerCase().includes(name) ||
       row.depositor.toLowerCase().includes(name)) &&
     (!amount || parseKoreanWon(row.amount) === amount)
   );
@@ -115,7 +116,7 @@ function HistorySearch({
         <input
           type="search"
           value={filters.name}
-          placeholder="업체명 / 입금자명 / 입금자"
+          placeholder="업체명 / 장주 이름 / 회원 이름"
           onChange={(event) => onChange({ ...filters, name: event.target.value })}
           className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-4 text-sm text-white outline-none placeholder:text-white/30"
         />
@@ -946,10 +947,9 @@ export function ChargeRequestsBoard({
                     <tr>
                       {[
                         "업체명",
-                        "입금자명",
-                        "은행명",
                         "계좌번호",
-                        "입금자",
+                        "장주 이름",
+                        "회원 이름",
                         "신청금액",
                         "신청시간",
                         "완료시간",
@@ -969,9 +969,8 @@ export function ChargeRequestsBoard({
                       visibleApprovedRequests.map((row) => (
                         <tr key={row.id} className="border-t border-cyan-300/18 text-white/82">
                           <td className="px-4 py-4">{row.companyName}</td>
-                          <td className="px-4 py-4">{row.userId}</td>
-                          <td className="px-4 py-4">{row.bankName}</td>
                           <td className="px-4 py-4">{row.accountNumber}</td>
+                          <td className="px-4 py-4">{row.accountHolder}</td>
                           <td className="px-4 py-4">{row.depositor}</td>
                           <td className="px-4 py-4">{row.amount}</td>
                           <td className="px-4 py-4">{row.requestedAt}</td>

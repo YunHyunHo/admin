@@ -11,6 +11,7 @@ export const pendingRequests: PendingRequest[] = [
     domain: "원페이",
     bankName: "테스트은행",
     accountNumber: "111-222-333001",
+    accountHolder: "테스트장주",
     depositor: "테스트입금자1",
     amount: "100,000 원",
     requestedAt: "05-02 10:00:00",

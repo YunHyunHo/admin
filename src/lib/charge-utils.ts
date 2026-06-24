@@ -8,6 +8,7 @@ export type PendingRequest = {
   domain: string;
   bankName: string;
   accountNumber: string;
+  accountHolder: string;
   depositor: string;
   amount: string;
   requestedAt: string;
