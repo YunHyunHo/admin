@@ -52,22 +52,6 @@ function safeParseJson(text: string) {
   }
 }
 
-function isAccountAvailableForDomain(account: AccountRow, domain: DomainListRow) {
-  if (!account.companyId && !account.distributorId) {
-    return true;
-  }
-
-  if (account.companyId && domain.companyId && account.companyId === domain.companyId) {
-    return true;
-  }
-
-  return Boolean(
-    account.distributorId &&
-      domain.distributorId &&
-      account.distributorId === domain.distributorId,
-  );
-}
-
 export function DomainListBoard({
   initialRows,
   ownerOptions,
@@ -175,9 +159,7 @@ export function DomainListBoard({
       }
 
       setAvailableAccounts(
-        (data.accounts ?? []).filter(
-          (account) => account.isActive && isAccountAvailableForDomain(account, row),
-        ),
+        (data.accounts ?? []).filter((account) => account.isActive),
       );
     } catch {
       setAccountModalMessage("계좌 목록을 불러오지 못했습니다.");

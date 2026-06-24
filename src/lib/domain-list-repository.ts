@@ -624,11 +624,6 @@ export async function linkDomainEntryAccount(input: {
         and ba.is_active = true
         and ${getMasterOwnedCompanyExistsCondition("dom.company_id", "$3")}
         ${bankAccountScopeSql}
-        and (
-          (ba.company_id is null and ba.distributor_id is null and ba.created_by = $3::uuid)
-          or ba.company_id = dom.company_id
-          or ba.distributor_id = dom.distributor_id
-        )
       limit 1
     `,
     [input.id, input.accountId, input.user.id],
