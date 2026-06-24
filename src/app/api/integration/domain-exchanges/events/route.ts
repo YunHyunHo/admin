@@ -22,6 +22,14 @@ type DomainExchangeApprovedEvent = {
   approvedAt: string;
 };
 
+type ApprovedExchangeReplayRow = {
+  id: string;
+  domainId: string;
+  amount: number;
+  status: "APPROVED";
+  approvedAt: string;
+};
+
 function isUuid(value: string | null | undefined) {
   return Boolean(
     value?.match(
@@ -113,6 +121,12 @@ export async function GET(request: Request) {
   }
 
   let domainId: string;
+  const sinceParam = new URL(request.url).searchParams.get("since");
+  const requestedSince = sinceParam ? Number(sinceParam) : Number.NaN;
+  const oldestReplayTime = Date.now() - 24 * 60 * 60 * 1000;
+  const replaySince = Number.isFinite(requestedSince)
+    ? Math.max(requestedSince, oldestReplayTime)
+    : Date.now();
 
   try {
     domainId = await resolveDomainId(request);
@@ -217,6 +231,38 @@ export async function GET(request: Request) {
 
       controller.enqueue(encoder.encode("retry: 3000\n: connected\n\n"));
       heartbeatId = setInterval(keepAlive, heartbeatIntervalMs);
+
+      // Vercel may reconnect an SSE response. Replay approvals that happened
+      // after the browser first connected so events are not lost in that gap.
+      void client
+        .query<ApprovedExchangeReplayRow>(
+          `
+            select
+              id::text as id,
+              domain_id::text as "domainId",
+              amount::float8 as amount,
+              'APPROVED'::text as status,
+              to_char(
+                processed_at at time zone 'Asia/Seoul',
+                'YYYY-MM-DD HH24:MI:SS'
+              ) as "approvedAt"
+            from exchange_requests
+            where domain_id = $1::uuid
+              and status = 'APPROVED'
+              and processed_at is not null
+              and processed_at >= to_timestamp($2::double precision / 1000.0)
+            order by processed_at asc
+          `,
+          [domainId, replaySince],
+        )
+        .then((result) => {
+          result.rows.forEach((approvedEvent) => {
+            send("domain-exchange-approved", approvedEvent);
+          });
+        })
+        .catch(() => {
+          // Live notifications remain available even if replay lookup fails.
+        });
     },
     cancel() {
       close();
