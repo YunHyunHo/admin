@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const domainExchangeEventsChannel = "domain_exchange_events";
-const heartbeatIntervalMs = 25000;
+const heartbeatIntervalMs = 10000;
 
 type DomainLookupRow = {
   id: string;
