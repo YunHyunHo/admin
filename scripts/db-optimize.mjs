@@ -48,6 +48,8 @@ const indexStatements = [
   "alter type admin_role add value if not exists 'TOP_DISTRIBUTOR'",
   "alter table admins add column if not exists password_ciphertext text",
   "alter table domains add column if not exists current_balance numeric(18, 0) not null default 0",
+  "alter table domains add column if not exists dashboard_position integer",
+  "create index if not exists idx_domains_dashboard_position on domains (dashboard_position)",
   "alter table bank_accounts add column if not exists created_by uuid references admins(id)",
   "alter table exchange_requests alter column domain_id drop not null",
   "create index if not exists idx_admins_created_by_status on admins (created_by, status)",

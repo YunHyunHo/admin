@@ -37,15 +37,19 @@ function getMetricValues(item: DashboardPartnerSummary) {
 
 export function GlobalDashboardSummaryPanel({
   partnerSummaries: initialPartnerSummaries,
+  canReorder = false,
 }: {
   partnerSummaries?: DashboardPartnerSummary[];
+  canReorder?: boolean;
 }) {
   const isOpen = useDashboardSummaryOpen();
   const [partnerSummaries, setPartnerSummaries] = useState<
     DashboardPartnerSummary[] | null
   >(initialPartnerSummaries ?? null);
   const [isLoading, setIsLoading] = useState(false);
+  const [savingOrderId, setSavingOrderId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [orderErrorMessage, setOrderErrorMessage] = useState("");
   const visiblePartnerSummaries = useMemo(
     () => partnerSummaries ?? [],
     [partnerSummaries],
@@ -123,6 +127,54 @@ export function GlobalDashboardSummaryPanel({
     };
   }, [isOpen, partnerSummaries]);
 
+  async function movePartnerSummary(index: number, offset: -1 | 1) {
+    if (!partnerSummaries || savingOrderId) {
+      return;
+    }
+
+    const targetIndex = index + offset;
+
+    if (targetIndex < 0 || targetIndex >= partnerSummaries.length) {
+      return;
+    }
+
+    const previousItems = partnerSummaries;
+    const nextItems = [...partnerSummaries];
+    const [movedItem] = nextItems.splice(index, 1);
+
+    nextItems.splice(targetIndex, 0, movedItem);
+    setPartnerSummaries(nextItems);
+    setSavingOrderId(movedItem.id);
+    setOrderErrorMessage("");
+
+    try {
+      const response = await fetch("/api/dashboard-summary", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderedIds: nextItems.map((item) => item.id) }),
+      });
+      const payload = (await response.json().catch(() => null)) as {
+        message?: string;
+        partnerSummaries?: DashboardPartnerSummary[];
+      } | null;
+
+      if (!response.ok) {
+        throw new Error(payload?.message ?? "업체 순번을 저장하지 못했습니다.");
+      }
+
+      setPartnerSummaries(payload?.partnerSummaries ?? nextItems);
+    } catch (error) {
+      setPartnerSummaries(previousItems);
+      setOrderErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "업체 순번을 저장하지 못했습니다.",
+      );
+    } finally {
+      setSavingOrderId(null);
+    }
+  }
+
   if (!isOpen) {
     return null;
   }
@@ -141,6 +193,11 @@ export function GlobalDashboardSummaryPanel({
             <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-white">
               도메인 업체 현황
             </h2>
+            {orderErrorMessage ? (
+              <p className="mt-2 text-xs font-medium text-rose-200/80">
+                {orderErrorMessage}
+              </p>
+            ) : null}
           </div>
 
           <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4 lg:w-[720px]">
@@ -173,15 +230,42 @@ export function GlobalDashboardSummaryPanel({
               {errorMessage}
             </div>
           ) : visiblePartnerSummaries.length ? (
-            visiblePartnerSummaries.map((item) => (
+            visiblePartnerSummaries.map((item, index) => (
                 <div
                   key={`global-summary-grid-${item.id}`}
                   className="grid min-h-[72px] grid-cols-[minmax(7rem,1fr)_repeat(4,minmax(5.25rem,1fr))] bg-[#12151c] text-center text-sm text-white"
                 >
-                  <div className="flex items-center justify-center border-r border-white/8 bg-white/[0.045] px-2 font-semibold text-white/90">
-                    <span className="line-clamp-2 break-keep">
+                  <div className="flex items-center justify-center gap-2 border-r border-white/8 bg-white/[0.045] px-2 font-semibold text-white/90">
+                    <span className="min-w-0 line-clamp-2 break-keep">
                       {item.name}
                     </span>
+                    {canReorder ? (
+                      <span className="flex shrink-0 flex-col gap-1">
+                        <button
+                          type="button"
+                          title={`${item.name} 순서를 위로 이동`}
+                          aria-label={`${item.name} 순서를 위로 이동`}
+                          disabled={index === 0 || savingOrderId !== null}
+                          onClick={() => void movePartnerSummary(index, -1)}
+                          className="grid h-6 w-6 place-items-center rounded-md border border-white/10 bg-white/[0.04] text-white/64 transition hover:border-cyan-300/35 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-25"
+                        >
+                          <span aria-hidden="true">↑</span>
+                        </button>
+                        <button
+                          type="button"
+                          title={`${item.name} 순서를 아래로 이동`}
+                          aria-label={`${item.name} 순서를 아래로 이동`}
+                          disabled={
+                            index === visiblePartnerSummaries.length - 1 ||
+                            savingOrderId !== null
+                          }
+                          onClick={() => void movePartnerSummary(index, 1)}
+                          className="grid h-6 w-6 place-items-center rounded-md border border-white/10 bg-white/[0.04] text-white/64 transition hover:border-cyan-300/35 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-25"
+                        >
+                          <span aria-hidden="true">↓</span>
+                        </button>
+                      </span>
+                    ) : null}
                   </div>
                   {getMetricValues(item).map((value, index) => (
                     <div

@@ -72,6 +72,7 @@ create table distributors (
   name text not null,
   level text not null default 'DISTRIBUTOR',
   current_balance numeric(18, 0) not null default 0,
+  dashboard_position integer,
   status admin_status not null default 'ACTIVE',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

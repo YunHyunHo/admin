@@ -3,6 +3,7 @@ import { getAdminSettingsFromCookie } from "@/lib/settings-cookie";
 import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
 import { hasDatabaseUrl, query } from "@/lib/db";
 import { ensureFeeRateSchema } from "@/lib/fee-rate-schema";
+import { ensureDashboardOrderSchema } from "@/lib/dashboard-order-schema";
 import { getCurrentKoreanDayRange } from "@/lib/korean-time";
 import {
   getManagedCompanyIds,
@@ -38,6 +39,7 @@ type DashboardPartnerSummaryRow = {
   fee_total: string;
   exchange_total: string;
   balance_total: string;
+  dashboard_position: number | null;
 };
 
 export type DashboardPartnerSummary = {
@@ -50,6 +52,7 @@ export type DashboardPartnerSummary = {
   feeTotal: number;
   exchangeTotal: number;
   balanceTotal: number;
+  position: number | null;
 };
 
 export async function getDashboardSummaryForUser(user: SessionUser) {
@@ -175,6 +178,8 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
     return [] satisfies DashboardPartnerSummary[];
   }
 
+  await ensureDashboardOrderSchema();
+
   const dashboardScope = await getScopedDataCondition(user, {
     company: "dom",
     distributor: "dist",
@@ -189,6 +194,7 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
           dom.id,
           c.company_name,
           dom.current_balance,
+          dom.dashboard_position,
           domain_admin.login_id
         from domains dom
         join companies c on c.id = dom.company_id
@@ -216,7 +222,8 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
           'COMPANY'::text as entity_type,
           true as has_active_domain,
           dom.id as domain_id,
-          dom.current_balance
+          dom.current_balance,
+          dom.dashboard_position
         from scoped_domains dom
       ),
       charge_totals as (
@@ -263,7 +270,8 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
         charge_totals.charge_total,
         fee_totals.fee_total,
         exchange_totals.exchange_total,
-        entity.current_balance::text as balance_total
+        entity.current_balance::text as balance_total,
+        entity.dashboard_position
       from scoped_entities entity
       join charge_totals on charge_totals.entity_id = entity.entity_id
       join fee_totals on fee_totals.entity_id = entity.entity_id
@@ -283,34 +291,50 @@ export async function getDashboardPartnerSummariesForUser(user: SessionUser) {
     feeTotal: Number(row.fee_total),
     exchangeTotal: Number(row.exchange_total),
     balanceTotal: Number(row.balance_total),
+    position: row.dashboard_position,
   }));
+}
+
+export async function saveDashboardPartnerSummaryOrder(
+  user: SessionUser,
+  orderedEntityIds: string[],
+) {
+  if (user.role !== "MASTER") {
+    throw new Error("마스터 계정만 업체 순번을 변경할 수 있습니다.");
+  }
+
+  const currentItems = await getDashboardPartnerSummariesForUser(user);
+  const currentIds = currentItems.map((item) => item.id);
+  const requestedIds = [...new Set(orderedEntityIds)];
+
+  if (
+    requestedIds.length !== currentIds.length ||
+    requestedIds.some((id) => !currentIds.includes(id))
+  ) {
+    throw new Error("현재 표시된 업체 전체 순서를 다시 확인해주세요.");
+  }
+
+  const domainIds = requestedIds.map((id) => id.replace(/^domain:/, ""));
+
+  await query(
+    `
+      update domains dom
+      set dashboard_position = requested.position::integer,
+          updated_at = now()
+      from unnest($1::uuid[]) with ordinality as requested(id, position)
+      where dom.id = requested.id
+    `,
+    [domainIds],
+  );
 }
 
 export function sortDashboardPartnerSummaries(
   items: DashboardPartnerSummary[],
 ): DashboardPartnerSummary[] {
-  return [...items].sort((left, right) => {
-    const leftHasActivity = Number(
-      left.balanceTotal > 0 ||
-        left.chargeTotal > 0 ||
-        left.exchangeTotal > 0 ||
-        left.feeTotal > 0,
-    );
-    const rightHasActivity = Number(
-      right.balanceTotal > 0 ||
-        right.chargeTotal > 0 ||
-        right.exchangeTotal > 0 ||
-        right.feeTotal > 0,
-    );
-
-    return (
-      rightHasActivity - leftHasActivity ||
-      right.balanceTotal - left.balanceTotal ||
-      right.chargeTotal - left.chargeTotal ||
-      right.exchangeTotal - left.exchangeTotal ||
-      right.feeTotal - left.feeTotal ||
-      (left.type === right.type ? 0 : left.type === "DISTRIBUTOR" ? -1 : 1) ||
-      left.name.localeCompare(right.name, "ko")
-    );
-  });
+  return [...items].sort(
+    (left, right) =>
+      (left.position ?? Number.MAX_SAFE_INTEGER) -
+        (right.position ?? Number.MAX_SAFE_INTEGER) ||
+      left.name.localeCompare(right.name, "ko"),
+  );
 }

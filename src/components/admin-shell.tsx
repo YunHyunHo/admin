@@ -321,6 +321,7 @@ export async function AdminShell({
             <div className="flex min-w-0 flex-1 flex-col">
               <GlobalDashboardSummaryPanel
                 partnerSummaries={partnerSummaries}
+                canReorder={user.role === "MASTER"}
               />
               <div className="flex flex-col gap-3 border-b border-cyan-300/24 px-4 py-4 text-sm text-white/68 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex flex-wrap items-center gap-3">

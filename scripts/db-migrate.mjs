@@ -60,7 +60,8 @@ async function main() {
       alter table domains
         add column if not exists withdraw_bank_name text,
         add column if not exists withdraw_account_holder text,
-        add column if not exists withdraw_account_number text
+        add column if not exists withdraw_account_number text,
+        add column if not exists dashboard_position integer
     `);
     await pool.query(`
       alter table charge_requests
