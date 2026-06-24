@@ -123,13 +123,9 @@ export async function getDomainManagementRows(
       left join lateral (
         select bank_name, account_number, account_holder
         from bank_accounts ba
-        where ba.company_id = dom.company_id
-          and (ba.distributor_id = dom.distributor_id or ba.distributor_id is null)
+        where ba.id = dom.linked_bank_account_id
           and ba.is_active = true
           ${bankAccountScopeSql}
-        order by
-          case when ba.distributor_id = dom.distributor_id then 0 else 1 end,
-          ba.created_at desc
         limit 1
       ) ba on true
       where dom.status <> 'DELETED'

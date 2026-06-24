@@ -135,6 +135,13 @@ create table bank_accounts (
   updated_at timestamptz not null default now()
 );
 
+alter table domains
+  add column linked_bank_account_id uuid references bank_accounts(id) on delete set null;
+
+create index idx_domains_linked_bank_account
+  on domains (linked_bank_account_id)
+  where linked_bank_account_id is not null;
+
 create table charge_requests (
   id uuid primary key default gen_random_uuid(),
   external_id text unique,

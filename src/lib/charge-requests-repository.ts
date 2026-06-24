@@ -516,6 +516,7 @@ export async function getPendingChargeRequestIds(user: SessionUser) {
 }
 
 async function getLinkedChargeRequestAccount(input: {
+  domainId: string | null;
   companyId: string;
   distributorId: string | null;
 }) {
@@ -526,29 +527,40 @@ async function getLinkedChargeRequestAccount(input: {
       where ba.is_active = true
         and (
           (
-            ba.company_id = $1::uuid
+            $1::uuid is not null
+            and ba.id = (
+              select dom.linked_bank_account_id
+              from domains dom
+              where dom.id = $1::uuid
+            )
+          )
+          or (
+            $1::uuid is null
+            and ba.company_id = $2::uuid
             and (
-              ba.distributor_id = $2::uuid
+              ba.distributor_id = $3::uuid
               or ba.distributor_id is null
             )
           )
           or (
-            $2::uuid is not null
-            and ba.distributor_id = $2::uuid
+            $1::uuid is null
+            and $3::uuid is not null
+            and ba.distributor_id = $3::uuid
             and ba.company_id is null
           )
         )
       order by
         case
-          when ba.company_id = $1::uuid and ba.distributor_id = $2::uuid then 0
-          when ba.company_id = $1::uuid and ba.distributor_id is null then 1
-          when ba.distributor_id = $2::uuid then 2
+          when $1::uuid is not null then 0
+          when ba.company_id = $2::uuid and ba.distributor_id = $3::uuid then 1
+          when ba.company_id = $2::uuid and ba.distributor_id is null then 2
+          when ba.distributor_id = $3::uuid then 3
           else 3
         end,
         ba.created_at desc
       limit 1
     `,
-    [input.companyId, input.distributorId],
+    [input.domainId, input.companyId, input.distributorId],
   );
 
   return result.rows[0] ?? null;
@@ -807,6 +819,7 @@ async function insertChargeRequest(input: CreateChargeRequestInput & {
     inputBankName && inputAccountNumber
       ? null
       : await getLinkedChargeRequestAccount({
+          domainId: input.domainId,
           companyId: input.companyId,
           distributorId: input.distributorId,
         });

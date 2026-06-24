@@ -4,6 +4,7 @@ import {
   createBankAccount,
   deleteBankAccount,
   getBankAccountBoardData,
+  unlinkDomainFromBankAccount,
   updateBankAccount,
 } from "@/lib/bank-accounts-repository";
 import { getSessionUser } from "@/lib/auth";
@@ -19,7 +20,8 @@ type CreateAccountPayload = {
 
 type PatchAccountPayload = {
   id?: string;
-  action?: "update" | "toggle-active" | "delete";
+  action?: "update" | "toggle-active" | "delete" | "unlink-domain";
+  domainId?: string;
   bankName?: string;
   holder?: string;
   accountNumber?: string;
@@ -143,6 +145,19 @@ export async function PATCH(request: Request) {
 
     if (payload.action === "delete") {
       await deleteBankAccount(payload.id, user);
+    } else if (payload.action === "unlink-domain") {
+      if (!isUuid(payload.domainId)) {
+        return NextResponse.json(
+          { message: "해제할 도메인 정보를 확인해주세요." },
+          { status: 400 },
+        );
+      }
+
+      await unlinkDomainFromBankAccount({
+        accountId: payload.id,
+        domainId: payload.domainId!,
+        user,
+      });
     } else {
       const bankName = payload.bankName?.trim();
       const holder = payload.holder?.trim();
@@ -175,6 +190,8 @@ export async function PATCH(request: Request) {
       message:
         payload.action === "delete"
           ? "계좌가 삭제되었습니다."
+          : payload.action === "unlink-domain"
+            ? "도메인 계좌 연동이 해제되었습니다."
           : "계좌가 수정되었습니다.",
     });
   }

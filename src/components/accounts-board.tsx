@@ -160,6 +160,7 @@ export function AccountsBoard({
   const [holder, setHolder] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [message, setMessage] = useState("");
+  const [unlinkingDomainId, setUnlinkingDomainId] = useState<string | null>(null);
   const pageCount = Math.max(1, Math.ceil(accounts.length / rowsPerPage));
   const visibleAccounts = accounts.slice(
     (page - 1) * rowsPerPage,
@@ -253,19 +254,38 @@ export function AccountsBoard({
     void persistAccountPatch({ id, action: "delete" });
   }
 
-  function unlinkDomain(accountId: string, domainId: string) {
-    setAccounts((current) =>
-      current.map((account) =>
-        account.id === accountId
-          ? {
-              ...account,
-              linkedDomains: account.linkedDomains.filter(
-                (domain) => domain.id !== domainId,
-              ),
-            }
-          : account,
-      ),
-    );
+  async function unlinkDomain(accountId: string, domainId: string) {
+    if (unlinkingDomainId) {
+      return;
+    }
+
+    setUnlinkingDomainId(domainId);
+
+    try {
+      const response = await fetch("/api/bank-accounts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: accountId,
+          action: "unlink-domain",
+          domainId,
+        }),
+      });
+      const data = (await response.json()) as {
+        accounts?: AccountRow[];
+        message?: string;
+      };
+
+      if (!response.ok) {
+        setMessage(data.message ?? "계좌 연동 해제 중 오류가 발생했습니다.");
+        return;
+      }
+
+      applyAccountsResponse(data);
+      setLinkedDomainPage(1);
+    } finally {
+      setUnlinkingDomainId(null);
+    }
   }
 
   function saveAccount(id: string) {
@@ -681,11 +701,12 @@ export function AccountsBoard({
                             <button
                               type="button"
                               onClick={() =>
-                                unlinkDomain(selectedAccountId, domain.id)
+                                void unlinkDomain(selectedAccountId, domain.id)
                               }
+                              disabled={unlinkingDomainId === domain.id}
                               className="rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-500"
                             >
-                              연동해제
+                              {unlinkingDomainId === domain.id ? "해제 중" : "연동해제"}
                             </button>
                           </td>
                         ) : null}

@@ -64,6 +64,40 @@ async function main() {
         add column if not exists dashboard_position integer
     `);
     await pool.query(`
+      do $$
+      begin
+        if not exists (
+          select 1
+          from information_schema.columns
+          where table_schema = 'public'
+            and table_name = 'domains'
+            and column_name = 'linked_bank_account_id'
+        ) then
+          alter table domains
+            add column linked_bank_account_id uuid references bank_accounts(id) on delete set null;
+
+          update domains dom
+          set linked_bank_account_id = (
+            select ba.id
+            from bank_accounts ba
+            where ba.company_id = dom.company_id
+              and (ba.distributor_id = dom.distributor_id or ba.distributor_id is null)
+            order by
+              case when ba.distributor_id = dom.distributor_id then 0 else 1 end,
+              ba.created_at desc
+            limit 1
+          )
+          where dom.status <> 'DELETED';
+        end if;
+      end
+      $$
+    `);
+    await pool.query(`
+      create index if not exists idx_domains_linked_bank_account
+        on domains (linked_bank_account_id)
+        where linked_bank_account_id is not null
+    `);
+    await pool.query(`
       alter table charge_requests
         add column if not exists account_holder text
     `);

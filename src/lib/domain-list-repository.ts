@@ -351,7 +351,7 @@ export async function createDomainEntry(input: CreateDomainEntryInput) {
         [adminId, domainId],
       );
 
-      await client.query(
+      const accountResult = await client.query<{ id: string }>(
         `
           insert into bank_accounts (
             company_id,
@@ -363,6 +363,7 @@ export async function createDomainEntry(input: CreateDomainEntryInput) {
             is_active
           )
           values ($1::uuid, $2::uuid, $3, $4, $5, $6::uuid, true)
+          returning id::text
         `,
         [
           companyId,
@@ -372,6 +373,21 @@ export async function createDomainEntry(input: CreateDomainEntryInput) {
           input.accountHolder.trim(),
           input.createdById,
         ],
+      );
+
+      const linkedAccountId = accountResult.rows[0]?.id;
+
+      if (!linkedAccountId) {
+        throw new Error("도메인 계좌 생성에 실패했습니다.");
+      }
+
+      await client.query(
+        `
+          update domains
+          set linked_bank_account_id = $2::uuid
+          where id = $1::uuid
+        `,
+        [domainId, linkedAccountId],
       );
     });
   } catch (error) {
@@ -435,10 +451,6 @@ export async function updateDomainEntryAccount(input: {
   }
 
   await withTransaction(async (client) => {
-    const bankAccountScopeSql =
-      input.user.role === "MASTER"
-        ? `and ${getMasterOwnedBankAccountCondition("ba", "$2")}`
-        : "";
     const updateAccountScopeSql =
       input.user.role === "MASTER"
         ? `and ${getMasterOwnedBankAccountCondition("bank_accounts", "$5")}`
@@ -452,17 +464,7 @@ export async function updateDomainEntryAccount(input: {
         select
           dom.company_id::text,
           dom.distributor_id::text,
-          (
-            select ba.id::text
-            from bank_accounts ba
-            where ba.company_id = dom.company_id
-              and (ba.distributor_id = dom.distributor_id or ba.distributor_id is null)
-              ${bankAccountScopeSql}
-            order by
-              case when ba.distributor_id = dom.distributor_id then 0 else 1 end,
-              ba.created_at desc
-            limit 1
-          ) as account_id
+          dom.linked_bank_account_id::text as account_id
         from domains dom
         where dom.id = $1::uuid
           and dom.status <> 'DELETED'
@@ -479,7 +481,7 @@ export async function updateDomainEntryAccount(input: {
     }
 
     if (domain.account_id) {
-      await client.query(
+      const updateResult = await client.query(
         `
           update bank_accounts
           set
@@ -500,10 +502,14 @@ export async function updateDomainEntryAccount(input: {
           input.user.id,
         ],
       );
+
+      if (!updateResult.rowCount) {
+        throw new Error("연결된 계좌를 수정할 권한이 없습니다.");
+      }
       return;
     }
 
-    await client.query(
+    const insertResult = await client.query<{ id: string }>(
       `
         insert into bank_accounts (
           company_id,
@@ -515,6 +521,7 @@ export async function updateDomainEntryAccount(input: {
           is_active
         )
         values ($1::uuid, $2::uuid, $3, $4, $5, $6::uuid, true)
+        returning id::text
       `,
       [
         domain.company_id,
@@ -524,6 +531,24 @@ export async function updateDomainEntryAccount(input: {
         input.accountHolder.trim(),
         input.user.id,
       ],
+    );
+
+    const linkedAccountId = insertResult.rows[0]?.id;
+
+    if (!linkedAccountId) {
+      throw new Error("도메인 계좌 생성에 실패했습니다.");
+    }
+
+    await client.query(
+      `
+        update domains dom
+        set
+          linked_bank_account_id = $2::uuid,
+          updated_at = now()
+        where dom.id = $1::uuid
+          and ${getMasterOwnedCompanyExistsCondition("dom.company_id", "$3")}
+      `,
+      [input.id, linkedAccountId, input.user.id],
     );
   });
 }
@@ -615,13 +640,22 @@ export async function linkDomainEntryAccount(input: {
     throw new Error("선택한 계좌를 이 도메인에 연결할 수 없습니다.");
   }
 
-  await updateDomainEntryAccount({
-    id: input.id,
-    bankName: selected.bank_name,
-    accountHolder: selected.account_holder,
-    accountNumber: selected.account_number,
-    user: input.user,
-  });
+  const result = await query(
+    `
+      update domains dom
+      set
+        linked_bank_account_id = $2::uuid,
+        updated_at = now()
+      where dom.id = $1::uuid
+        and dom.status <> 'DELETED'
+        and ${getMasterOwnedCompanyExistsCondition("dom.company_id", "$3")}
+    `,
+    [input.id, input.accountId, input.user.id],
+  );
+
+  if (!result.rowCount) {
+    throw new Error("계좌를 연동할 도메인을 찾지 못했습니다.");
+  }
 }
 
 export async function deleteDomainEntry(id: string, user: SessionUser) {

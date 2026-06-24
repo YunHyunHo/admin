@@ -2,6 +2,7 @@ import { hasDatabaseUrl, query } from "@/lib/db";
 import { formatKoreanDateTime } from "@/lib/korean-time";
 import {
   getMasterOwnedBankAccountCondition,
+  getMasterOwnedCompanyExistsCondition,
   getScopedDistributorCondition,
 } from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
@@ -94,14 +95,8 @@ export async function getBankAccountBoardData(user?: SessionUser) {
         left join distributors d on d.id = ba.distributor_id
         left join admins dist_admin on dist_admin.id = d.admin_id
         left join admins owner_master on owner_master.id = dist_admin.created_by
-        left join domains dom on (
-          dom.distributor_id = ba.distributor_id
-          or (
-            ba.distributor_id is null
-            and ba.company_id is not null
-            and dom.company_id = ba.company_id
-          )
-        )
+        left join domains dom
+          on dom.linked_bank_account_id = ba.id
           and dom.status <> 'DELETED'
         left join companies dom_company on dom_company.id = dom.company_id
         where 1 = 1
@@ -203,4 +198,34 @@ export async function deleteBankAccount(id: string, user: SessionUser) {
     `,
     [id, user.id],
   );
+}
+
+export async function unlinkDomainFromBankAccount(input: {
+  accountId: string;
+  domainId: string;
+  user: SessionUser;
+}) {
+  const result = await query(
+    `
+      update domains dom
+      set
+        linked_bank_account_id = null,
+        updated_at = now()
+      where dom.id = $2::uuid
+        and dom.linked_bank_account_id = $1::uuid
+        and dom.status <> 'DELETED'
+        and ${getMasterOwnedCompanyExistsCondition("dom.company_id", "$3")}
+        and exists (
+          select 1
+          from bank_accounts ba
+          where ba.id = $1::uuid
+            and ${getMasterOwnedBankAccountCondition("ba", "$3")}
+        )
+    `,
+    [input.accountId, input.domainId, input.user.id],
+  );
+
+  if (!result.rowCount) {
+    throw new Error("해제할 계좌 연동 정보를 찾지 못했습니다.");
+  }
 }
