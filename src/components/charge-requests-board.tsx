@@ -48,6 +48,7 @@ type ChargeConfirmAction = {
 type HistoryFilters = {
   startDate: string;
   endDate: string;
+  name: string;
   amount: string;
 };
 
@@ -58,16 +59,22 @@ const dashboardSummaryRefreshEvent = "dashboard-summary-refresh";
 const emptyHistoryFilters: HistoryFilters = {
   startDate: "",
   endDate: "",
+  name: "",
   amount: "",
 };
 
 function matchesHistoryFilters(row: ProcessedRequest, filters: HistoryFilters) {
   const completedDate = row.completedDate ?? "";
+  const name = filters.name.trim().toLowerCase();
   const amount = Number(filters.amount.replaceAll(",", ""));
 
   return (
     (!filters.startDate || completedDate >= filters.startDate) &&
     (!filters.endDate || completedDate <= filters.endDate) &&
+    (!name ||
+      row.companyName.toLowerCase().includes(name) ||
+      row.userId.toLowerCase().includes(name) ||
+      row.depositor.toLowerCase().includes(name)) &&
     (!amount || parseKoreanWon(row.amount) === amount)
   );
 }
@@ -103,7 +110,17 @@ function HistorySearch({
           className="h-11 rounded-xl border border-white/10 bg-black/20 px-3 text-sm text-white outline-none [color-scheme:dark]"
         />
       </label>
-      <label className="block flex-1">
+      <label className="block min-w-0 flex-1">
+        <span className="mb-2 block text-xs font-medium text-white/45">이름 검색</span>
+        <input
+          type="search"
+          value={filters.name}
+          placeholder="업체명 / 입금자명 / 입금자"
+          onChange={(event) => onChange({ ...filters, name: event.target.value })}
+          className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-4 text-sm text-white outline-none placeholder:text-white/30"
+        />
+      </label>
+      <label className="block w-full lg:w-44 lg:shrink-0">
         <span className="mb-2 block text-xs font-medium text-white/45">신청금액</span>
         <input
           type="text"
