@@ -576,9 +576,13 @@ export function ChargeRequestsBoard({
 
   const filteredPendingRequests = useMemo(() => {
     const keyword = searchKeyword.trim().toLowerCase();
-    const source = [...pendingRequests].sort((left, right) =>
-      right.requestedAt.localeCompare(left.requestedAt),
-    );
+    const source = [...pendingRequests].sort((left, right) => {
+      const dateOrder = (left.requestedDate ?? "").localeCompare(
+        right.requestedDate ?? "",
+      );
+
+      return dateOrder || left.requestedAt.localeCompare(right.requestedAt);
+    });
 
     if (!keyword) {
       return source;
