@@ -572,9 +572,11 @@ async function ensureDbScope(input: { domainId?: string | null; domainName?: str
         dom.distributor_id::text
       from domains dom
       join companies c on c.id = dom.company_id
-      join distributors dist on dist.id = dom.distributor_id
+      left join distributors dist on dist.id = dom.distributor_id
       left join admins dist_admin on dist_admin.id = dist.admin_id
-      where ${domainPredicate} and dom.status <> 'DELETED'
+      where ${domainPredicate}
+        and dom.status <> 'DELETED'
+        and (dist.id is null or dist.status = 'ACTIVE')
         ${scope.sql}
       order by dom.created_at desc
       limit 1
@@ -729,10 +731,10 @@ async function ensureIntegrationDbScope(input: {
         dom.distributor_id::text
       from domains dom
       join companies c on c.id = dom.company_id
-      join distributors dist on dist.id = dom.distributor_id
+      left join distributors dist on dist.id = dom.distributor_id
       where ${domainPredicate}
         and dom.status = 'ACTIVE'
-        and dist.status = 'ACTIVE'
+        and (dist.id is null or dist.status = 'ACTIVE')
       order by dom.created_at desc
       limit 1
     `,
@@ -946,12 +948,12 @@ export async function getIntegrationChargeDomainOptions() {
       select
         dom.id::text as id,
         coalesce(nullif(dom.domain_name, ''), c.company_name) as name,
-        dist.name as "distributorName"
+        coalesce(dist.name, '-') as "distributorName"
       from domains dom
       join companies c on c.id = dom.company_id
-      join distributors dist on dist.id = dom.distributor_id
+      left join distributors dist on dist.id = dom.distributor_id
       where dom.status = 'ACTIVE'
-        and dist.status = 'ACTIVE'
+        and (dist.id is null or dist.status = 'ACTIVE')
       order by dom.created_at desc
       limit ${OPTION_ROW_LIMIT}
     `,
