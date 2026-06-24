@@ -154,7 +154,7 @@ export function AccountsBoard({
   const [linkedDomainPage, setLinkedDomainPage] = useState(1);
   const [editingField, setEditingField] = useState<{
     accountId: string;
-    field: "holder" | "accountNumber";
+    field: "bankName" | "holder" | "accountNumber";
   } | null>(null);
   const [bankName, setBankName] = useState("");
   const [holder, setHolder] = useState("");
@@ -180,7 +180,7 @@ export function AccountsBoard({
 
   function updateAccount(
     id: string,
-    key: "holder" | "accountNumber",
+    key: "bankName" | "holder" | "accountNumber",
     value: string,
   ) {
     setAccounts((current) =>
@@ -203,6 +203,7 @@ export function AccountsBoard({
   async function persistAccountPatch(payload: {
     id: string;
     action: "update" | "toggle-active" | "delete";
+    bankName?: string;
     holder?: string;
     accountNumber?: string;
     isActive?: boolean;
@@ -274,9 +275,19 @@ export function AccountsBoard({
       return;
     }
 
+    if (
+      !account.bankName.trim() ||
+      !account.holder.trim() ||
+      !account.accountNumber.trim()
+    ) {
+      setMessage("은행, 예금주, 계좌번호를 모두 입력해주세요.");
+      return;
+    }
+
     void persistAccountPatch({
       id,
       action: "update",
+      bankName: account.bankName,
       holder: account.holder,
       accountNumber: account.accountNumber,
     });
@@ -415,7 +426,20 @@ export function AccountsBoard({
                 >
                   <td className="px-4 py-4 text-center">{account.branchName}</td>
                   <td className="px-4 py-4 text-center">{account.creator}</td>
-                  <td className="px-4 py-4 text-center">{account.bankName}</td>
+                  <td className="px-4 py-4">
+                    <EditableField
+                      accountId={account.id}
+                      field="bankName"
+                      value={account.bankName}
+                      onChange={(value) =>
+                        updateAccount(account.id, "bankName", value)
+                      }
+                      onCommit={() => saveAccount(account.id)}
+                      canEdit={canManageAccounts}
+                      editingField={editingField}
+                      setEditingField={setEditingField}
+                    />
+                  </td>
                   <td className="px-4 py-4">
                     <EditableField
                       accountId={account.id}
@@ -717,19 +741,19 @@ function EditableField({
   setEditingField,
 }: {
   accountId: string;
-  field: "holder" | "accountNumber";
+  field: "bankName" | "holder" | "accountNumber";
   value: string;
   onChange: (value: string) => void;
   onCommit: () => void;
   canEdit: boolean;
   editingField: {
     accountId: string;
-    field: "holder" | "accountNumber";
+    field: "bankName" | "holder" | "accountNumber";
   } | null;
   setEditingField: (
     value: {
       accountId: string;
-      field: "holder" | "accountNumber";
+      field: "bankName" | "holder" | "accountNumber";
     } | null,
   ) => void;
 }) {

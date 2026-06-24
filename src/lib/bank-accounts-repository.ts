@@ -165,6 +165,7 @@ export async function createBankAccount(
 
 export async function updateBankAccount(input: {
   id: string;
+  bankName?: string;
   holder?: string;
   accountNumber?: string;
   isActive?: boolean;
@@ -174,15 +175,17 @@ export async function updateBankAccount(input: {
     `
       update bank_accounts ba
       set
-        account_holder = coalesce($2, account_holder),
-        account_number = coalesce($3, account_number),
-        is_active = coalesce($4, is_active),
+        bank_name = coalesce($2, bank_name),
+        account_holder = coalesce($3, account_holder),
+        account_number = coalesce($4, account_number),
+        is_active = coalesce($5, is_active),
         updated_at = now()
       where ba.id = $1::uuid
-        and ${getMasterOwnedBankAccountCondition("ba", "$5")}
+        and ${getMasterOwnedBankAccountCondition("ba", "$6")}
     `,
     [
       input.id,
+      input.bankName ?? null,
       input.holder ?? null,
       input.accountNumber ?? null,
       input.isActive ?? null,
