@@ -2,26 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { DomainExchangeRow } from "@/lib/domain-exchanges-types";
-
 const noticeSoundPath = "/sounds/notice.mp3";
 const pollIntervalMs = 5000;
 const noticeSoundReadyKey = "winpay-notice-sound-ready";
 const noticeRetryDelayMs = 1200;
 const maxNoticePlayAttempts = 3;
 
-type ChargeRequestsResponse = {
-  pending?: Array<{ id: string }>;
-  approved?: Array<{ id: string }>;
-  rejected?: Array<{ id: string }>;
-};
-
-type PendingRowsResponse = {
-  rows?: Array<{ id: string; status?: string }>;
-};
-
-type DomainExchangeRowsResponse = {
-  rows?: DomainExchangeRow[];
+export type RequestNotificationSnapshot = {
+  pendingIds: {
+    charges: string[];
+    domainExchanges: string[];
+    distributorWithdrawals: string[];
+  };
 };
 
 export type PendingRequestCounts = {
@@ -31,13 +23,10 @@ export type PendingRequestCounts = {
 };
 
 export const pendingRequestCountsEventName = "pending-request-counts";
-export const domainExchangeRowsEventName = "domain-exchange-rows";
+export const requestNotificationSnapshotEventName =
+  "request-notification-snapshot";
 export const requestNotifierRefreshEventName = "request-notifier-refresh";
 export const pendingRequestCountsStorageKey = "pending-request-counts-snapshot";
-
-function isPendingStatus(status: string | undefined) {
-  return status === "승인중" || status === "PENDING";
-}
 
 async function fetchJson<T>(url: string) {
   const response = await fetch(url, { cache: "no-store" });
@@ -49,43 +38,24 @@ async function fetchJson<T>(url: string) {
   return (await response.json().catch(() => null)) as T | null;
 }
 
-function collectPendingSnapshot(
-  chargeData: ChargeRequestsResponse | null,
-  domainExchangeData: PendingRowsResponse | null,
-  distributorWithdrawalData: PendingRowsResponse | null,
-) {
+function collectPendingSnapshot(data: RequestNotificationSnapshot) {
   const ids = new Set<string>();
   const counts: PendingRequestCounts = {
-    charges: 0,
-    domainExchanges: 0,
-    distributorWithdrawals: 0,
+    charges: data.pendingIds.charges.length,
+    domainExchanges: data.pendingIds.domainExchanges.length,
+    distributorWithdrawals: data.pendingIds.distributorWithdrawals.length,
   };
 
-  for (const request of chargeData?.pending ?? []) {
-    ids.add(`charge:${request.id}`);
-    counts.charges += 1;
+  for (const id of data.pendingIds.charges) {
+    ids.add(`charge:${id}`);
   }
 
-  for (const request of chargeData?.approved ?? []) {
-    ids.add(`charge:${request.id}`);
+  for (const id of data.pendingIds.domainExchanges) {
+    ids.add(`domain-exchange:${id}`);
   }
 
-  for (const request of chargeData?.rejected ?? []) {
-    ids.add(`charge:${request.id}`);
-  }
-
-  for (const row of domainExchangeData?.rows ?? []) {
-    if (isPendingStatus(row.status)) {
-      ids.add(`domain-exchange:${row.id}`);
-      counts.domainExchanges += 1;
-    }
-  }
-
-  for (const row of distributorWithdrawalData?.rows ?? []) {
-    if (isPendingStatus(row.status)) {
-      ids.add(`distributor-withdrawal:${row.id}`);
-      counts.distributorWithdrawals += 1;
-    }
+  for (const id of data.pendingIds.distributorWithdrawals) {
+    ids.add(`distributor-withdrawal:${id}`);
   }
 
   return { ids, counts };
@@ -95,6 +65,7 @@ export function GlobalRequestNotifier() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const knownPendingIdsRef = useRef<Set<string>>(new Set());
   const hasInitializedRef = useRef(false);
+  const isSyncingRef = useRef(false);
   const retryTimeoutRef = useRef<number | null>(null);
   const [isSoundReady, setIsSoundReady] = useState(true);
   const [noticeMessage, setNoticeMessage] = useState("알림 대기중");
@@ -194,65 +165,71 @@ export function GlobalRequestNotifier() {
   }, [ensureAudio, markNoticeBlocked, markNoticeReady]);
 
   const syncRequests = useCallback(async () => {
-    const [chargeData, domainExchangeData, distributorWithdrawalData] =
-      await Promise.all([
-        fetchJson<ChargeRequestsResponse>("/api/charge-requests"),
-        fetchJson<DomainExchangeRowsResponse>("/api/domain-exchanges"),
-        fetchJson<PendingRowsResponse>("/api/distributor-withdrawals"),
-      ]);
+    if (isSyncingRef.current) {
+      return;
+    }
 
-    const pendingSnapshot = collectPendingSnapshot(
-      chargeData,
-      domainExchangeData,
-      distributorWithdrawalData,
-    );
-    const nextPendingIds = pendingSnapshot.ids;
-    const newPendingCount = [...nextPendingIds].filter(
-      (id) => !knownPendingIdsRef.current.has(id),
-    ).length;
-
-    knownPendingIdsRef.current = nextPendingIds;
+    isSyncingRef.current = true;
 
     try {
-      window.sessionStorage.setItem(
-        pendingRequestCountsStorageKey,
-        JSON.stringify(pendingSnapshot.counts),
+      const data = await fetchJson<RequestNotificationSnapshot>(
+        "/api/request-notifications",
       );
-    } catch {
-      // Session storage can be unavailable in restricted browser modes.
-    }
 
-    window.dispatchEvent(
-      new CustomEvent<PendingRequestCounts>(pendingRequestCountsEventName, {
-        detail: pendingSnapshot.counts,
-      }),
-    );
+      // A temporary API failure must not erase the baseline and replay old alerts.
+      if (!data?.pendingIds) {
+        return;
+      }
 
-    if (domainExchangeData?.rows) {
+      const pendingSnapshot = collectPendingSnapshot(data);
+      const nextPendingIds = pendingSnapshot.ids;
+      const newPendingCount = [...nextPendingIds].filter(
+        (id) => !knownPendingIdsRef.current.has(id),
+      ).length;
+
+      knownPendingIdsRef.current = nextPendingIds;
+
+      try {
+        window.sessionStorage.setItem(
+          pendingRequestCountsStorageKey,
+          JSON.stringify(pendingSnapshot.counts),
+        );
+      } catch {
+        // Session storage can be unavailable in restricted browser modes.
+      }
+
       window.dispatchEvent(
-        new CustomEvent<DomainExchangeRow[]>(domainExchangeRowsEventName, {
-          detail: domainExchangeData.rows,
+        new CustomEvent<PendingRequestCounts>(pendingRequestCountsEventName, {
+          detail: pendingSnapshot.counts,
         }),
       );
-    }
 
-    if (!hasInitializedRef.current) {
-      hasInitializedRef.current = true;
-      return;
-    }
+      window.dispatchEvent(
+        new CustomEvent<RequestNotificationSnapshot>(
+          requestNotificationSnapshotEventName,
+          { detail: data },
+        ),
+      );
 
-    if (newPendingCount === 0) {
-      return;
-    }
+      if (!hasInitializedRef.current) {
+        hasInitializedRef.current = true;
+        return;
+      }
 
-    setNoticeMessage(`${newPendingCount}건 신규 신청`);
-    void playNoticeSoundWithRetry();
+      if (newPendingCount > 0) {
+        setNoticeMessage(`${newPendingCount}건 신규 신청`);
+        void playNoticeSoundWithRetry();
+      }
+    } finally {
+      isSyncingRef.current = false;
+    }
   }, [playNoticeSoundWithRetry]);
 
   useEffect(() => {
     ensureAudio();
 
     let isCancelled = false;
+    let timeoutId: number | null = null;
 
     async function runSync() {
       if (isCancelled) {
@@ -260,16 +237,21 @@ export function GlobalRequestNotifier() {
       }
 
       await syncRequests();
+
+      if (!isCancelled) {
+        timeoutId = window.setTimeout(() => {
+          void runSync();
+        }, pollIntervalMs);
+      }
     }
 
     void runSync();
-    const intervalId = window.setInterval(() => {
-      void runSync();
-    }, pollIntervalMs);
 
     return () => {
       isCancelled = true;
-      window.clearInterval(intervalId);
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
       clearNoticeRetry();
     };
   }, [clearNoticeRetry, ensureAudio, syncRequests]);

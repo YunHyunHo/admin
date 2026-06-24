@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  domainExchangeRowsEventName,
+  requestNotificationSnapshotEventName,
   requestNotifierRefreshEventName,
+  type RequestNotificationSnapshot,
 } from "@/components/global-request-notifier";
 import { ModalFeedback } from "@/components/modal-feedback";
 import type {
@@ -242,6 +243,14 @@ export function DomainExchangesBoard({
   const [bankName, setBankName] = useState("");
   const [accountHolder, setAccountHolder] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
+  const pendingSignatureRef = useRef(
+    initialRows
+      .filter((row) => row.status === "승인중")
+      .map((row) => row.id)
+      .sort()
+      .join(","),
+  );
+  const isRefreshingRowsRef = useRef(false);
   const pageCount = Math.max(1, Math.ceil(rows.length / rowsPerPage));
   const currentPage = Math.min(page, pageCount);
   const pageRows = useMemo(
@@ -254,20 +263,59 @@ export function DomainExchangesBoard({
   );
 
   useEffect(() => {
-    function handleRowsUpdate(event: Event) {
-      const nextRows = (event as CustomEvent<DomainExchangeRow[]>).detail;
-
-      if (!Array.isArray(nextRows)) {
+    async function refreshRows() {
+      if (isRefreshingRowsRef.current) {
         return;
       }
 
-      setRows(nextRows.map(normalizeExchangeRow));
+      isRefreshingRowsRef.current = true;
+
+      try {
+        const response = await fetch("/api/domain-exchanges", {
+          cache: "no-store",
+        });
+        const data = (await response.json().catch(() => null)) as {
+          rows?: DomainExchangeRow[];
+        } | null;
+
+        if (response.ok && data?.rows) {
+          setRows(data.rows.map(normalizeExchangeRow));
+        }
+      } finally {
+        isRefreshingRowsRef.current = false;
+      }
     }
 
-    window.addEventListener(domainExchangeRowsEventName, handleRowsUpdate);
+    function handleSnapshotUpdate(event: Event) {
+      const snapshot = (
+        event as CustomEvent<RequestNotificationSnapshot>
+      ).detail;
+      const pendingIds = snapshot?.pendingIds?.domainExchanges;
+
+      if (!Array.isArray(pendingIds)) {
+        return;
+      }
+
+      const nextSignature = [...pendingIds].sort().join(",");
+
+      if (nextSignature === pendingSignatureRef.current) {
+        return;
+      }
+
+      pendingSignatureRef.current = nextSignature;
+      void refreshRows();
+    }
+
+    window.addEventListener(
+      requestNotificationSnapshotEventName,
+      handleSnapshotUpdate,
+    );
 
     return () => {
-      window.removeEventListener(domainExchangeRowsEventName, handleRowsUpdate);
+      window.removeEventListener(
+        requestNotificationSnapshotEventName,
+        handleSnapshotUpdate,
+      );
     };
   }, []);
 

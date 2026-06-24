@@ -3,6 +3,7 @@ import type { PendingRequest, ProcessedRequest } from "@/lib/charge-utils";
 export const pendingRequests: PendingRequest[] = [
   {
     id: "TEST-CHARGE-001",
+    companyName: "원페이",
     branch: "테스트총판A",
     userId: "test_user_one",
     topAgent: "마스터 관리자",

@@ -152,6 +152,33 @@ export async function getDomainExchangeRows(
   return result.rows.map(toExchangeRow);
 }
 
+export async function getPendingDomainExchangeIds(user: SessionUser) {
+  if (!hasDatabaseUrl()) {
+    const rows = await getDomainExchangeRows([], user);
+    return rows.filter((row) => row.status === "승인중").map((row) => row.id);
+  }
+
+  const scope = await getScopedDataCondition(user, {
+    company: "er",
+    distributor: "dist",
+    distributorAdmin: "dist_admin",
+  });
+  const result = await query<{ id: string }>(
+    `
+      select er.id::text
+      from exchange_requests er
+      left join distributors dist on dist.id = er.distributor_id
+      left join admins dist_admin on dist_admin.id = dist.admin_id
+      where er.status = 'PENDING'
+        ${scope.sql}
+      order by er.requested_at desc
+    `,
+    scope.values,
+  );
+
+  return result.rows.map((row) => row.id);
+}
+
 export async function getDomainExchangeOptions(user: SessionUser) {
   if (!hasDatabaseUrl()) {
     return [] satisfies DomainExchangeOption[];

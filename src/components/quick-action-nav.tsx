@@ -26,6 +26,30 @@ const initialCounts: PendingRequestCounts = {
   distributorWithdrawals: 0,
 };
 
+function getInitialCounts() {
+  if (typeof window === "undefined") {
+    return initialCounts;
+  }
+
+  try {
+    const savedCounts = JSON.parse(
+      window.sessionStorage.getItem(pendingRequestCountsStorageKey) ?? "null",
+    ) as Partial<PendingRequestCounts> | null;
+
+    return savedCounts
+      ? {
+          charges: Number(savedCounts.charges ?? 0),
+          domainExchanges: Number(savedCounts.domainExchanges ?? 0),
+          distributorWithdrawals: Number(
+            savedCounts.distributorWithdrawals ?? 0,
+          ),
+        }
+      : initialCounts;
+  } catch {
+    return initialCounts;
+  }
+}
+
 function getCountForAction(actionKey: string, counts: PendingRequestCounts) {
   if (actionKey === "charges") {
     return counts.charges;
@@ -52,24 +76,12 @@ export function QuickActionNav({ actions, activeItem }: QuickActionNavProps) {
     }
 
     window.addEventListener(pendingRequestCountsEventName, handleCountsUpdate);
-
-    try {
-      const savedCounts = JSON.parse(
-        window.sessionStorage.getItem(pendingRequestCountsStorageKey) ?? "null",
-      ) as Partial<PendingRequestCounts> | null;
-
-      if (savedCounts) {
-        setCounts({
-          charges: Number(savedCounts.charges ?? 0),
-          domainExchanges: Number(savedCounts.domainExchanges ?? 0),
-          distributorWithdrawals: Number(savedCounts.distributorWithdrawals ?? 0),
-        });
-      }
-    } catch {
-      // Keep zero counts until the live request finishes.
-    }
+    const restoreTimeoutId = window.setTimeout(() => {
+      setCounts(getInitialCounts());
+    }, 0);
 
     return () => {
+      window.clearTimeout(restoreTimeoutId);
       window.removeEventListener(
         pendingRequestCountsEventName,
         handleCountsUpdate,

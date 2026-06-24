@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { requestNotifierRefreshEventName } from "@/components/global-request-notifier";
 import { ModalFeedback } from "@/components/modal-feedback";
 import {
   parseKoreanWon,
@@ -281,6 +282,7 @@ export function ChargeRequestsBoard({
   const knownPendingIdsRef = useRef(
     new Set(initialPendingRequests.map((request) => request.id)),
   );
+  const lastSyncCursorRef = useRef("");
 
   function resetCreateForm() {
     setCreateDomainId("");
@@ -343,6 +345,55 @@ export function ChargeRequestsBoard({
     [playNoticeSound],
   );
 
+  const applyProcessedRequest = useCallback((request: ProcessedRequest) => {
+    knownPendingIdsRef.current.delete(request.id);
+    setPendingRequests((current) =>
+      current.filter((item) => item.id !== request.id),
+    );
+    setApprovedRequests((current) =>
+      request.status === "승인"
+        ? [request, ...current.filter((item) => item.id !== request.id)]
+        : current.filter((item) => item.id !== request.id),
+    );
+    setRejectedRequests((current) =>
+      request.status === "승인거절"
+        ? [request, ...current.filter((item) => item.id !== request.id)]
+        : current.filter((item) => item.id !== request.id),
+    );
+  }, []);
+
+  const applyServerChanges = useCallback((changes: ChargeRequestsResponse) => {
+    const changedIds = new Set([
+      ...changes.pending.map((request) => request.id),
+      ...changes.approved.map((request) => request.id),
+      ...changes.rejected.map((request) => request.id),
+    ]);
+
+    for (const id of changedIds) {
+      knownPendingIdsRef.current.delete(id);
+    }
+
+    for (const request of changes.pending) {
+      knownPendingIdsRef.current.add(request.id);
+    }
+
+    setPendingRequests((current) => [
+      ...changes.pending,
+      ...current.filter((request) => !changedIds.has(request.id)),
+    ]);
+    setApprovedRequests((current) => [
+      ...changes.approved,
+      ...current.filter((request) => !changedIds.has(request.id)),
+    ]);
+    setRejectedRequests((current) => [
+      ...changes.rejected,
+      ...current.filter((request) => !changedIds.has(request.id)),
+    ]);
+    setArmedApprovalId((current) =>
+      current && changedIds.has(current) ? null : current,
+    );
+  }, []);
+
   const requestChargeData = useCallback(async (body?: ChargeRequestPayload) => {
     const response = await fetch("/api/charge-requests", {
       method: body ? "POST" : "GET",
@@ -369,35 +420,56 @@ export function ChargeRequestsBoard({
     }
 
     let isCancelled = false;
+    let timeoutId: number | null = null;
+
+    if (!lastSyncCursorRef.current) {
+      lastSyncCursorRef.current = new Date(Date.now() - 5000).toISOString();
+    }
 
     async function syncRequests() {
       try {
-        const data = await requestChargeData();
+        const nextCursor = new Date(Date.now() - 2000).toISOString();
+        const response = await fetch(
+          `/api/charge-requests?since=${encodeURIComponent(lastSyncCursorRef.current)}`,
+          { cache: "no-store" },
+        );
+        const data = (await response.json().catch(() => null)) as {
+          changes?: ChargeRequestsResponse;
+        } | null;
+
+        if (!response.ok || !data?.changes) {
+          throw new Error("자동 갱신에 실패했습니다.");
+        }
 
         if (isCancelled) {
           return;
         }
 
-        applyServerData(data, { notifyNewPending: false, resetPages: false });
+        applyServerChanges(data.changes);
+        lastSyncCursorRef.current = nextCursor;
         setLastSyncedAt(getCurrentTimeLabel());
       } catch {
         if (!isCancelled) {
           setLastSyncedAt("자동 갱신 실패");
+        }
+      } finally {
+        if (!isCancelled) {
+          timeoutId = window.setTimeout(() => {
+            void syncRequests();
+          }, 5000);
         }
       }
     }
 
     void syncRequests();
 
-    const intervalId = window.setInterval(() => {
-      void syncRequests();
-    }, 5000);
-
     return () => {
       isCancelled = true;
-      window.clearInterval(intervalId);
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
     };
-  }, [applyServerData, isDatabaseBacked, requestChargeData]);
+  }, [applyServerChanges, isDatabaseBacked]);
 
   async function activateNoticeSound() {
     try {
@@ -566,7 +638,22 @@ export function ChargeRequestsBoard({
     setMessage(`${subjectLabel} 요청을 ${actionLabel} 처리 중입니다.`);
 
     try {
-      applyServerData(await requestChargeData({ id: targetId, status: nextStatus }));
+      const response = await fetch("/api/charge-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: targetId, status: nextStatus }),
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        processedRequest?: ProcessedRequest;
+        message?: string;
+      };
+
+      if (!response.ok || !data.processedRequest) {
+        throw new Error(data.message ?? "충전신청 처리에 실패했습니다.");
+      }
+
+      applyProcessedRequest(data.processedRequest);
+      window.dispatchEvent(new Event(requestNotifierRefreshEventName));
       window.dispatchEvent(new Event(dashboardSummaryRefreshEvent));
       setMessage(`${subjectLabel} 요청이 ${actionLabel} 처리되었습니다.`);
     } catch (error) {
@@ -841,6 +928,7 @@ export function ChargeRequestsBoard({
                   <thead className="bg-black/30 text-white/58">
                     <tr>
                       {[
+                        "업체명",
                         "입금자명",
                         "은행명",
                         "계좌번호",
@@ -863,6 +951,7 @@ export function ChargeRequestsBoard({
                     {visibleApprovedRequests.length ? (
                       visibleApprovedRequests.map((row) => (
                         <tr key={row.id} className="border-t border-cyan-300/18 text-white/82">
+                          <td className="px-4 py-4">{row.companyName}</td>
                           <td className="px-4 py-4">{row.userId}</td>
                           <td className="px-4 py-4">{row.bankName}</td>
                           <td className="px-4 py-4">{row.accountNumber}</td>
@@ -891,7 +980,7 @@ export function ChargeRequestsBoard({
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={8} className="px-4 py-10 text-center text-sm text-white/40">
+                        <td colSpan={9} className="px-4 py-10 text-center text-sm text-white/40">
                           검색 조건에 맞는 승인내역이 없습니다.
                         </td>
                       </tr>

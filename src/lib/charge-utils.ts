@@ -1,5 +1,6 @@
 export type PendingRequest = {
   id: string;
+  companyName: string;
   branch: string;
   userId: string;
   topAgent: string;

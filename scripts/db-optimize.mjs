@@ -59,6 +59,7 @@ const indexStatements = [
   "create index if not exists idx_charge_requests_distributor_requested on charge_requests (distributor_id, requested_at desc, created_at desc)",
   "create index if not exists idx_charge_requests_status_requested on charge_requests (status, requested_at desc)",
   "create index if not exists idx_charge_requests_domain_requested on charge_requests (domain_id, requested_at desc)",
+  "create index if not exists idx_charge_requests_updated_at on charge_requests (updated_at desc)",
   "create index if not exists idx_exchange_requests_distributor_requested on exchange_requests (distributor_id, requested_at desc)",
   "create index if not exists idx_exchange_requests_status_processed on exchange_requests (status, processed_at desc)",
   "create index if not exists idx_exchange_requests_domain_requested on exchange_requests (domain_id, requested_at desc)",

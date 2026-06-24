@@ -294,6 +294,7 @@ function toPendingRequest(row: ChargeRequestRow): PendingRequest {
 
   return {
     id: row.id,
+    companyName: row.company_name,
     branch: branchName,
     userId: row.user_uid,
     topAgent: topDistributorName,
@@ -413,11 +414,15 @@ async function getChargeRequestScope(
   return { sql: scope.sql, values: scope.values };
 }
 
-async function getDbChargeRequests(user: SessionUser) {
+async function getDbChargeRequests(user: SessionUser, updatedSince?: string) {
   const scope = await getChargeRequestScope(user);
+  const scopedSql = updatedSince ? shiftSqlParams(scope.sql, 1) : scope.sql;
   const bankAccountScopeSql =
     user.role === "MASTER"
-      ? `and ${getMasterOwnedBankAccountCondition("ba")}`
+      ? `and ${getMasterOwnedBankAccountCondition(
+          "ba",
+          updatedSince ? "$2" : "$1",
+        )}`
       : "";
   const result = await query<ChargeRequestRow>(
     `
@@ -477,13 +482,37 @@ async function getDbChargeRequests(user: SessionUser) {
           and child.status = 'ACTIVE'
       ) child_dist on parent_dist.id is null
       where 1 = 1
+        ${updatedSince ? "and cr.updated_at >= $1::timestamptz" : ""}
+        ${scopedSql}
+      order by cr.requested_at desc, cr.created_at desc
+    `,
+    updatedSince ? [updatedSince, ...scope.values] : scope.values,
+  );
+
+  return splitRows(result.rows);
+}
+
+export async function getPendingChargeRequestIds(user: SessionUser) {
+  if (!hasDatabaseUrl()) {
+    const requests = await getChargeRequestsForUser(user);
+    return requests.pending.map((request) => request.id);
+  }
+
+  const scope = await getChargeRequestScope(user);
+  const result = await query<{ id: string }>(
+    `
+      select cr.id::text
+      from charge_requests cr
+      left join distributors dist on dist.id = cr.distributor_id
+      left join admins dist_admin on dist_admin.id = dist.admin_id
+      where cr.status = 'PENDING'
         ${scope.sql}
       order by cr.requested_at desc, cr.created_at desc
     `,
     scope.values,
   );
 
-  return splitRows(result.rows);
+  return result.rows.map((row) => row.id);
 }
 
 async function getLinkedChargeRequestAccount(input: {
@@ -543,6 +572,17 @@ export async function getChargeRequestsForUser(user: SessionUser) {
   }
 
   return companyRequests;
+}
+
+export async function getChargeRequestChangesForUser(
+  user: SessionUser,
+  updatedSince: string,
+) {
+  if (hasDatabaseUrl()) {
+    return getDbChargeRequests(user, updatedSince);
+  }
+
+  return getChargeRequestsForUser(user);
 }
 
 async function ensureDbScope(input: { domainId?: string | null; domainName?: string; user: SessionUser }) {

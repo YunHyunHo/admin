@@ -233,6 +233,29 @@ export async function getDistributorWithdrawalRows(
   }));
 }
 
+export async function getPendingDistributorWithdrawalIds(user: SessionUser) {
+  if (!hasDatabaseUrl()) {
+    const rows = await getDistributorWithdrawalRows([], user);
+    return rows.filter((row) => row.status === "승인중").map((row) => row.id);
+  }
+
+  const scope = await getWithdrawalScope(user);
+  const result = await query<{ id: string }>(
+    `
+      select dw.id::text
+      from distributor_withdrawals dw
+      join distributors d on d.id = dw.distributor_id
+      left join admins dist_admin on dist_admin.id = d.admin_id
+      where dw.status = 'PENDING'
+        ${scope.sql}
+      order by dw.requested_at desc
+    `,
+    scope.values,
+  );
+
+  return result.rows.map((row) => row.id);
+}
+
 export async function createDistributorWithdrawal(input: CreateDistributorWithdrawalInput) {
   const distributor = await query<DistributorScopeRow>(
     `

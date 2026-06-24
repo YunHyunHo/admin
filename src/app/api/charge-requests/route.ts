@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import {
   createDbChargeRequest,
+  getChargeRequestChangesForUser,
   getChargeRequestsForUser,
   processDbChargeRequest,
   processMockChargeRequest,
@@ -21,11 +22,19 @@ const allowedStatuses: ProcessedRequest["status"][] = ["승인", "승인거절"]
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: Request) {
   const user = await getSessionUser();
 
   if (!user) {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
+  }
+
+  const since = new URL(request.url).searchParams.get("since");
+
+  if (since && Number.isFinite(Date.parse(since))) {
+    return NextResponse.json({
+      changes: await getChargeRequestChangesForUser(user, since),
+    });
   }
 
   return NextResponse.json(await getChargeRequestsForUser(user));
@@ -157,7 +166,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       processedRequest,
-      ...(await getChargeRequestsForUser(user)),
     });
   }
 
