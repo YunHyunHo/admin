@@ -947,6 +947,7 @@ export function ChargeRequestsBoard({
                     <tr>
                       {[
                         "업체명",
+                        "은행명",
                         "계좌번호",
                         "장주 이름",
                         "회원 이름",
@@ -969,6 +970,7 @@ export function ChargeRequestsBoard({
                       visibleApprovedRequests.map((row) => (
                         <tr key={row.id} className="border-t border-cyan-300/18 text-white/82">
                           <td className="px-4 py-4">{row.companyName}</td>
+                          <td className="px-4 py-4">{row.bankName}</td>
                           <td className="px-4 py-4">{row.accountNumber}</td>
                           <td className="px-4 py-4">{row.accountHolder}</td>
                           <td className="px-4 py-4">{row.depositor}</td>
