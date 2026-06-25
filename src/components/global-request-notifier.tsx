@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const noticeSoundPath = "/sounds/notice.mp3";
-const pollIntervalMs = 5000;
+const pollIntervalMs = 1000;
 const noticeSoundReadyKey = "winpay-notice-sound-ready";
 const noticeRetryDelayMs = 1200;
 const maxNoticePlayAttempts = 3;
