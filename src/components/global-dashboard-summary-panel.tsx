@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  requestNotificationSnapshotEventName,
+  type RequestNotificationSnapshot,
+} from "@/components/global-request-notifier";
 import { useDashboardSummaryOpen } from "@/components/use-dashboard-summary-open";
 import { formatKoreanWon } from "@/lib/charge-utils";
 import type { DashboardPartnerSummary } from "@/lib/dashboard-summary-repository";
@@ -50,6 +54,7 @@ export function GlobalDashboardSummaryPanel({
   const [savingOrderId, setSavingOrderId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [orderErrorMessage, setOrderErrorMessage] = useState("");
+  const pendingSignatureRef = useRef<string | null>(null);
   const visiblePartnerSummaries = useMemo(
     () => partnerSummaries ?? [],
     [partnerSummaries],
@@ -66,14 +71,50 @@ export function GlobalDashboardSummaryPanel({
   ];
 
   useEffect(() => {
-    function handleSummaryRefresh() {
+    function requestSummaryRefresh() {
       setPartnerSummaries(null);
     }
 
-    window.addEventListener(summaryRefreshEvent, handleSummaryRefresh);
+    function handleRequestSnapshot(event: Event) {
+      const snapshot = (event as CustomEvent<RequestNotificationSnapshot>).detail;
+      const signature = [
+        ...snapshot.pendingIds.charges.map((id) => `charge:${id}`),
+        ...snapshot.pendingIds.domainExchanges.map((id) => `exchange:${id}`),
+        ...snapshot.pendingIds.distributorWithdrawals.map(
+          (id) => `distributor-withdrawal:${id}`,
+        ),
+      ]
+        .sort()
+        .join("|");
+
+      if (pendingSignatureRef.current === null) {
+        pendingSignatureRef.current = signature;
+        return;
+      }
+
+      if (pendingSignatureRef.current !== signature) {
+        pendingSignatureRef.current = signature;
+        requestSummaryRefresh();
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        requestSummaryRefresh();
+      }
+    }
+
+    window.addEventListener(summaryRefreshEvent, requestSummaryRefresh);
+    window.addEventListener(requestNotificationSnapshotEventName, handleRequestSnapshot);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      window.removeEventListener(summaryRefreshEvent, handleSummaryRefresh);
+      window.removeEventListener(summaryRefreshEvent, requestSummaryRefresh);
+      window.removeEventListener(
+        requestNotificationSnapshotEventName,
+        handleRequestSnapshot,
+      );
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 
