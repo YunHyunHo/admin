@@ -1,7 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  requestNotificationSnapshotEventName,
+  type RequestNotificationSnapshot,
+} from "@/components/global-request-notifier";
 import { ModalFeedback } from "@/components/modal-feedback";
 import type { AccountRow } from "@/lib/bank-accounts-types";
 import type {
@@ -93,6 +97,10 @@ export function DomainListBoard({
   const [savingWithdrawAccountId, setSavingWithdrawAccountId] = useState<string | null>(
     null,
   );
+  const isRefreshingRef = useRef(false);
+  const hasQueuedRefreshRef = useRef(false);
+  const pendingSignatureRef = useRef<string | null>(null);
+  const refreshRowsRef = useRef<() => Promise<void>>(async () => undefined);
 
   const pageCount = Math.max(1, Math.ceil(rows.length / rowsPerPage));
   const visibleRows = useMemo(
@@ -199,6 +207,76 @@ export function DomainListBoard({
       setPage(1);
     }
   }
+
+  useEffect(() => {
+    refreshRowsRef.current = async () => {
+      if (isRefreshingRef.current) {
+        hasQueuedRefreshRef.current = true;
+        return;
+      }
+
+      isRefreshingRef.current = true;
+
+      try {
+        const response = await fetch("/api/domain-list", { cache: "no-store" });
+        const text = await response.text();
+        const data = safeParseJson(text);
+
+        if (response.ok && "rows" in data) {
+          applyPayload(data);
+        }
+      } finally {
+        isRefreshingRef.current = false;
+
+        if (hasQueuedRefreshRef.current) {
+          hasQueuedRefreshRef.current = false;
+          void refreshRowsRef.current();
+        }
+      }
+    };
+  });
+
+  useEffect(() => {
+    function handleRequestSnapshot(event: Event) {
+      const snapshot = (event as CustomEvent<RequestNotificationSnapshot>).detail;
+      const signature = [
+        ...snapshot.pendingIds.charges.map((id) => `charge:${id}`),
+        ...snapshot.pendingIds.domainExchanges.map((id) => `exchange:${id}`),
+        ...snapshot.pendingIds.distributorWithdrawals.map(
+          (id) => `distributor-withdrawal:${id}`,
+        ),
+      ]
+        .sort()
+        .join("|");
+
+      if (pendingSignatureRef.current === null) {
+        pendingSignatureRef.current = signature;
+        return;
+      }
+
+      if (pendingSignatureRef.current !== signature) {
+        pendingSignatureRef.current = signature;
+        void refreshRowsRef.current();
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        void refreshRowsRef.current();
+      }
+    }
+
+    window.addEventListener(requestNotificationSnapshotEventName, handleRequestSnapshot);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener(
+        requestNotificationSnapshotEventName,
+        handleRequestSnapshot,
+      );
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
 
   async function handleCreate() {
     if (isCreating) {
