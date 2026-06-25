@@ -57,9 +57,11 @@ function PaginationControls({
 export function DashboardHistoryPanels({
   partnerSummaries,
   recentTransactions,
+  showRecentTransactions = true,
 }: {
   partnerSummaries: DashboardPartnerSummary[];
   recentTransactions: LedgerRow[];
+  showRecentTransactions?: boolean;
 }) {
   const [partnerPage, setPartnerPage] = useState(1);
   const [transactionPage, setTransactionPage] = useState(1);
@@ -241,68 +243,72 @@ export function DashboardHistoryPanels({
         />
       </div>
 
-      <div className="mt-8">
-        <div>
-          <p className="text-xs uppercase tracking-[0.24em] text-cyan-300/55">
-            Recent Transactions
-          </p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">
-            최근 거래내역
-          </h2>
-          <p className="mt-2 text-sm text-white/45">
-            내 직속 업체와 하위 총판 기준의 충전/환전 거래를 확인합니다.
-          </p>
-        </div>
-      </div>
+      {showRecentTransactions ? (
+        <>
+          <div className="mt-8">
+            <div>
+              <p className="text-xs uppercase tracking-[0.24em] text-cyan-300/55">
+                Recent Transactions
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">
+                최근 거래내역
+              </h2>
+              <p className="mt-2 text-sm text-white/45">
+                내 직속 업체와 하위 총판 기준의 충전/환전 거래를 확인합니다.
+              </p>
+            </div>
+          </div>
 
-      <div className="mt-5 overflow-hidden rounded-2xl border border-white/8">
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-black/30 text-white/58">
-              <tr>
-                {["구분", "상위총판", "총판", "업체", "입금자", "금액", "신청시간", "상태"].map(
-                  (head) => (
-                    <th key={head} className="border-b border-white/8 px-4 py-3 font-medium">
-                      {head}
-                    </th>
-                  ),
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {transactionPageRows.length ? (
-                transactionPageRows.map((row) => (
-                  <tr key={row.id} className="border-t border-white/8 text-white/82">
-                    <td className="px-4 py-4">{row.transactionType ?? "-"}</td>
-                    <td className="px-4 py-4">{row.topDistributor}</td>
-                    <td className="px-4 py-4">{row.distributor}</td>
-                    <td className="px-4 py-4">{row.companyName ?? row.domain}</td>
-                    <td className="px-4 py-4">{row.depositor}</td>
-                    <td className="px-4 py-4 text-right">{formatKoreanWon(row.amount)}</td>
-                    <td className="px-4 py-4">{row.requestedAt}</td>
-                    <td className="px-4 py-4">
-                      <span className="rounded-full bg-white/8 px-3 py-1 text-xs font-medium text-white/88">
-                        {row.status}
-                      </span>
-                    </td>
+          <div className="mt-5 overflow-hidden rounded-2xl border border-white/8">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-black/30 text-white/58">
+                  <tr>
+                    {["구분", "상위총판", "총판", "업체", "입금자", "금액", "신청시간", "상태"].map(
+                      (head) => (
+                        <th key={head} className="border-b border-white/8 px-4 py-3 font-medium">
+                          {head}
+                        </th>
+                      ),
+                    )}
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-white/40">
-                    표시할 거래내역이 없습니다.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <PaginationControls
-          page={transactionPage}
-          pageCount={transactionPageCount}
-          onPageChange={setTransactionPage}
-        />
-      </div>
+                </thead>
+                <tbody>
+                  {transactionPageRows.length ? (
+                    transactionPageRows.map((row) => (
+                      <tr key={row.id} className="border-t border-white/8 text-white/82">
+                        <td className="px-4 py-4">{row.transactionType ?? "-"}</td>
+                        <td className="px-4 py-4">{row.topDistributor}</td>
+                        <td className="px-4 py-4">{row.distributor}</td>
+                        <td className="px-4 py-4">{row.companyName ?? row.domain}</td>
+                        <td className="px-4 py-4">{row.depositor}</td>
+                        <td className="px-4 py-4 text-right">{formatKoreanWon(row.amount)}</td>
+                        <td className="px-4 py-4">{row.requestedAt}</td>
+                        <td className="px-4 py-4">
+                          <span className="rounded-full bg-white/8 px-3 py-1 text-xs font-medium text-white/88">
+                            {row.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-10 text-center text-sm text-white/40">
+                        표시할 거래내역이 없습니다.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <PaginationControls
+              page={transactionPage}
+              pageCount={transactionPageCount}
+              onPageChange={setTransactionPage}
+            />
+          </div>
+        </>
+      ) : null}
     </>
   );
 }

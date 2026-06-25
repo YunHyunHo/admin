@@ -1,18 +1,12 @@
 import { redirect } from "next/navigation";
 
 import { AdminShell } from "@/components/admin-shell";
-import { ChargeRequestsBoard } from "@/components/charge-requests-board";
 import { DashboardHistoryPanels } from "@/components/dashboard-history-panels";
 import { getSessionUser } from "@/lib/auth";
-import { getChargeRequestsForUser } from "@/lib/charge-requests-repository";
 import {
   getDashboardPartnerSummariesForUser,
   sortDashboardPartnerSummaries,
 } from "@/lib/dashboard-summary-repository";
-import { hasDatabaseUrl } from "@/lib/db";
-import { getDomainExchangeOptions } from "@/lib/domain-exchanges-repository";
-import { canProcessRequests } from "@/lib/permissions";
-import { getTransactionLedgerRows } from "@/lib/transaction-ledger-repository";
 
 export default async function DashboardPage() {
   const user = await getSessionUser();
@@ -21,12 +15,8 @@ export default async function DashboardPage() {
     redirect("/");
   }
 
-  const showChargeRequests = user.role === "TOP_DISTRIBUTOR" || user.role === "ADMIN";
-  const [recentTransactions, partnerSummaries, chargeRequests, domainOptions] = await Promise.all([
-    getTransactionLedgerRows([], user),
+  const [partnerSummaries] = await Promise.all([
     getDashboardPartnerSummariesForUser(user),
-    showChargeRequests ? getChargeRequestsForUser(user) : Promise.resolve(null),
-    showChargeRequests ? getDomainExchangeOptions(user) : Promise.resolve([]),
   ]);
   const prioritizedPartnerSummaries = sortDashboardPartnerSummaries(partnerSummaries);
 
@@ -65,23 +55,11 @@ export default async function DashboardPage() {
               운영중 {activePartnerCount}
             </span>
           </div>
-          {showChargeRequests && chargeRequests ? (
-            <div className="mt-6">
-              <ChargeRequestsBoard
-                initialPendingRequests={chargeRequests.pending}
-                initialApprovedRequests={chargeRequests.approved}
-                initialRejectedRequests={chargeRequests.rejected}
-                canProcessCharges={canProcessRequests(user)}
-                isDatabaseBacked={hasDatabaseUrl()}
-                domainOptions={domainOptions}
-              />
-            </div>
-          ) : (
-            <DashboardHistoryPanels
-              partnerSummaries={prioritizedPartnerSummaries}
-              recentTransactions={recentTransactions}
-            />
-          )}
+          <DashboardHistoryPanels
+            partnerSummaries={prioritizedPartnerSummaries}
+            recentTransactions={[]}
+            showRecentTransactions={false}
+          />
         </section>
       </div>
     </AdminShell>
