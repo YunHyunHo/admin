@@ -3,6 +3,8 @@ import { createHmac } from "node:crypto";
 import { hasDatabaseUrl, query } from "@/lib/db";
 import { KOREA_TIME_ZONE } from "@/lib/korean-time";
 
+const exchangeBalanceReservedKey = "__balanceReserved";
+
 type RequestStatus = "PENDING" | "APPROVED" | "REJECTED";
 
 type PaginationInput = {
@@ -401,9 +403,19 @@ export async function getIntegrationDomainSettlementHistory(input: {
           0::numeric as adjustment_amount
         from exchange_requests er
         where er.domain_id = $1::uuid
-          and er.status in ('APPROVED', 'COMPLETED')
-          and er.processed_at is not null
-          and (er.processed_at at time zone '${KOREA_TIME_ZONE}')::date < $2::date
+          and (
+            (
+              coalesce(er.raw_payload ->> '${exchangeBalanceReservedKey}', 'false') = 'true'
+              and er.status in ('PENDING', 'APPROVED', 'COMPLETED')
+              and (er.requested_at at time zone '${KOREA_TIME_ZONE}')::date < $2::date
+            )
+            or (
+              coalesce(er.raw_payload ->> '${exchangeBalanceReservedKey}', 'false') <> 'true'
+              and er.status in ('APPROVED', 'COMPLETED')
+              and er.processed_at is not null
+              and (er.processed_at at time zone '${KOREA_TIME_ZONE}')::date < $2::date
+            )
+          )
 
         union all
 
@@ -447,17 +459,32 @@ export async function getIntegrationDomainSettlementHistory(input: {
         union all
 
         select
-          (er.processed_at at time zone '${KOREA_TIME_ZONE}')::date as date,
+          case
+            when coalesce(er.raw_payload ->> '${exchangeBalanceReservedKey}', 'false') = 'true'
+              then (er.requested_at at time zone '${KOREA_TIME_ZONE}')::date
+            else (er.processed_at at time zone '${KOREA_TIME_ZONE}')::date
+          end as date,
           0::numeric as charge_amount,
           0::numeric as fee_amount,
           er.amount as exchange_amount,
           0::numeric as adjustment_amount
         from exchange_requests er
         where er.domain_id = $1::uuid
-          and er.status in ('APPROVED', 'COMPLETED')
-          and er.processed_at is not null
-          and (er.processed_at at time zone '${KOREA_TIME_ZONE}')::date >= $2::date
-          and (er.processed_at at time zone '${KOREA_TIME_ZONE}')::date <= $3::date
+          and (
+            (
+              coalesce(er.raw_payload ->> '${exchangeBalanceReservedKey}', 'false') = 'true'
+              and er.status in ('PENDING', 'APPROVED', 'COMPLETED')
+              and (er.requested_at at time zone '${KOREA_TIME_ZONE}')::date >= $2::date
+              and (er.requested_at at time zone '${KOREA_TIME_ZONE}')::date <= $3::date
+            )
+            or (
+              coalesce(er.raw_payload ->> '${exchangeBalanceReservedKey}', 'false') <> 'true'
+              and er.status in ('APPROVED', 'COMPLETED')
+              and er.processed_at is not null
+              and (er.processed_at at time zone '${KOREA_TIME_ZONE}')::date >= $2::date
+              and (er.processed_at at time zone '${KOREA_TIME_ZONE}')::date <= $3::date
+            )
+          )
 
         union all
 
