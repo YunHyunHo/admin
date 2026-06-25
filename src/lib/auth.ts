@@ -11,6 +11,7 @@ import { verifyPassword } from "@/lib/password";
 const SESSION_COOKIE = "vendor_admin_session";
 const LOCAL_SESSION_SECRET = "local-dev-secret-change-me";
 const PLACEHOLDER_SESSION_SECRET = "replace-with-a-long-random-secret";
+const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 400;
 
 export type SessionUser = Omit<AdminAccountRecord, "password" | "visiblePassword"> & {
   username: string;
@@ -96,6 +97,7 @@ export async function createSession(user: SessionUser) {
 
   cookieStore.set(SESSION_COOKIE, encodeSession(user), {
     httpOnly: true,
+    maxAge: SESSION_MAX_AGE_SECONDS,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
