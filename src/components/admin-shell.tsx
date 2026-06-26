@@ -193,7 +193,7 @@ export async function AdminShell({
           : group.items.filter((item) => !masterOnlyMenuKeys.has(item.key)),
     }))
     .filter((group) => group.items.length > 0);
-  const visibleQuickActions = quickActions;
+  const visibleQuickActions = isSettlementOnlyUser ? [] : quickActions;
 
   return (
     <main className="admin-app-shell min-h-screen bg-[#09090b] text-white">
@@ -306,10 +306,12 @@ export async function AdminShell({
                   </p>
                   <p className="mt-1 text-xs text-white/42">{user.username}</p>
                 </div>
-                <QuickActionNav
-                  actions={visibleQuickActions}
-                  activeItem={activeItem}
-                />
+                {visibleQuickActions.length > 0 ? (
+                  <QuickActionNav
+                    actions={visibleQuickActions}
+                    activeItem={activeItem}
+                  />
+                ) : null}
                 <div className="absolute right-4 top-4 flex items-center gap-2 sm:right-6 lg:static">
                   <GlobalRequestNotifier />
                   <DashboardSummaryToggle />

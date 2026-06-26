@@ -256,6 +256,26 @@ export async function getPendingDistributorWithdrawalIds(user: SessionUser) {
   return result.rows.map((row) => row.id);
 }
 
+export async function getDistributorWithdrawalCreateBalance(user: SessionUser) {
+  if (!hasDatabaseUrl()) {
+    return 0;
+  }
+
+  const result = await query<{ current_balance: string }>(
+    `
+      select dist.current_balance::text
+      from distributors dist
+      where dist.status = 'ACTIVE'
+        and dist.admin_id = $1::uuid
+      order by dist.created_at desc
+      limit 1
+    `,
+    [user.id],
+  );
+
+  return Number(result.rows[0]?.current_balance ?? 0);
+}
+
 export async function createDistributorWithdrawal(input: CreateDistributorWithdrawalInput) {
   const distributor = await query<DistributorScopeRow>(
     `

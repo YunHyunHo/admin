@@ -6,7 +6,10 @@ import {
   fallbackDistributorWithdrawals,
 } from "@/components/distributor-withdrawal-history-board";
 import { getSessionUser } from "@/lib/auth";
-import { getDistributorWithdrawalRows } from "@/lib/distributor-withdrawals-repository";
+import {
+  getDistributorWithdrawalCreateBalance,
+  getDistributorWithdrawalRows,
+} from "@/lib/distributor-withdrawals-repository";
 import { canManageMasterResources } from "@/lib/permissions";
 
 
@@ -17,11 +20,11 @@ export default async function DistributorWithdrawalsPage() {
     redirect("/");
   }
 
-  const withdrawalRows = await getDistributorWithdrawalRows(
-    fallbackDistributorWithdrawals,
-    user,
-  );
   const isMaster = canManageMasterResources(user);
+  const [withdrawalRows, availableBalance] = await Promise.all([
+    getDistributorWithdrawalRows(fallbackDistributorWithdrawals, user),
+    isMaster ? Promise.resolve(0) : getDistributorWithdrawalCreateBalance(user),
+  ]);
 
   return (
     <AdminShell
@@ -34,6 +37,7 @@ export default async function DistributorWithdrawalsPage() {
         initialRows={withdrawalRows}
         canCreateWithdrawals={!isMaster}
         canProcessWithdrawals={isMaster}
+        availableBalance={availableBalance}
       />
     </AdminShell>
   );

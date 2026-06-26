@@ -243,10 +243,12 @@ export function DistributorWithdrawalHistoryBoard({
   initialRows = fallbackDistributorWithdrawals,
   canCreateWithdrawals = false,
   canProcessWithdrawals = false,
+  availableBalance = 0,
 }: {
   initialRows?: WithdrawalRow[];
   canCreateWithdrawals?: boolean;
   canProcessWithdrawals?: boolean;
+  availableBalance?: number;
 }) {
   const [rows, setRows] = useState(initialRows);
   const [page, setPage] = useState(1);
@@ -268,6 +270,38 @@ export function DistributorWithdrawalHistoryBoard({
     () => rows.slice((page - 1) * rowsPerPage, page * rowsPerPage),
     [rows, page],
   );
+  const numericAmount = Number(amount.replaceAll(",", ""));
+  const isAmountOverBalance =
+    Number.isFinite(numericAmount) && numericAmount > availableBalance;
+  const canSubmitWithdrawal =
+    !isSubmitting &&
+    availableBalance > 0 &&
+    Number.isFinite(numericAmount) &&
+    numericAmount > 0 &&
+    numericAmount <= availableBalance;
+
+  function handleAmountChange(value: string) {
+    const digits = value.replace(/[^0-9]/g, "");
+
+    if (!digits) {
+      setAmount("");
+      return;
+    }
+
+    const nextAmount = Number(digits);
+
+    if (nextAmount > availableBalance) {
+      setAmount(availableBalance > 0 ? String(availableBalance) : "");
+      setCreateModalMessage("보유금보다 큰 금액은 신청할 수 없습니다.");
+      return;
+    }
+
+    setAmount(digits);
+
+    if (createModalMessage === "보유금보다 큰 금액은 신청할 수 없습니다.") {
+      setCreateModalMessage("");
+    }
+  }
 
   const refreshRows = useCallback(async () => {
     if (refreshRowsPromiseRef.current) {
@@ -336,10 +370,13 @@ export function DistributorWithdrawalHistoryBoard({
       return;
     }
 
-    const numericAmount = Number(amount.replaceAll(",", ""));
-
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
       setCreateModalMessage("환전금액을 확인해주세요.");
+      return;
+    }
+
+    if (numericAmount > availableBalance) {
+      setCreateModalMessage("보유금보다 큰 금액은 신청할 수 없습니다.");
       return;
     }
 
@@ -626,6 +663,12 @@ export function DistributorWithdrawalHistoryBoard({
             <h3 className="text-xl font-semibold tracking-[-0.03em]">
               총판 환전신청
             </h3>
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-xs font-medium text-slate-500">현재 보유금</p>
+              <p className="mt-1 text-lg font-semibold text-slate-950">
+                {formatKoreanWon(availableBalance)}
+              </p>
+            </div>
 
             <div className="mt-7 space-y-4">
               <ModalFeedback message={createModalMessage} />
@@ -633,12 +676,18 @@ export function DistributorWithdrawalHistoryBoard({
                 <span className="sr-only">환전금액</span>
                 <input
                   value={amount}
-                  onChange={(event) => setAmount(event.target.value)}
+                  onChange={(event) => handleAmountChange(event.target.value)}
                   placeholder="환전금액"
                   inputMode="numeric"
+                  max={availableBalance}
                   className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
                 />
               </label>
+              {isAmountOverBalance ? (
+                <p className="-mt-2 text-xs font-medium text-red-600">
+                  보유금보다 큰 금액은 신청할 수 없습니다.
+                </p>
+              ) : null}
 
               <label className="block">
                 <span className="sr-only">출금은행</span>
@@ -675,7 +724,7 @@ export function DistributorWithdrawalHistoryBoard({
               <button
                 type="button"
                 onClick={() => void createWithdrawal()}
-                disabled={isSubmitting}
+                disabled={!canSubmitWithdrawal}
                 className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 {isSubmitting ? "신청 중" : "신청"}
