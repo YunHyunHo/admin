@@ -1,7 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  requestNotificationSyncEventName,
+  requestNotifierRefreshEventName,
+  type RequestNotificationSyncDetail,
+} from "@/components/global-request-notifier";
 import { ModalFeedback } from "@/components/modal-feedback";
 import type { DistributorWithdrawalRow } from "@/lib/distributor-withdrawals-repository";
 
@@ -226,6 +231,14 @@ function formatKoreanWon(value: number) {
   return `${value.toLocaleString("ko-KR")} 원`;
 }
 
+function getPendingWithdrawalSignature(rows: WithdrawalRow[]) {
+  return rows
+    .filter((row) => row.status === "승인중")
+    .map((row) => row.id)
+    .sort()
+    .join(",");
+}
+
 export function DistributorWithdrawalHistoryBoard({
   initialRows = fallbackDistributorWithdrawals,
   canCreateWithdrawals = false,
@@ -245,11 +258,78 @@ export function DistributorWithdrawalHistoryBoard({
   const [bankName, setBankName] = useState("");
   const [accountHolder, setAccountHolder] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
+  const pendingSignatureRef = useRef(
+    getPendingWithdrawalSignature(initialRows),
+  );
+  const refreshRowsPromiseRef = useRef<Promise<void> | null>(null);
+  const needsRefreshRowsRef = useRef(false);
   const pageCount = Math.max(1, Math.ceil(rows.length / rowsPerPage));
   const pageRows = useMemo(
     () => rows.slice((page - 1) * rowsPerPage, page * rowsPerPage),
     [rows, page],
   );
+
+  const refreshRows = useCallback(async () => {
+    if (refreshRowsPromiseRef.current) {
+      needsRefreshRowsRef.current = true;
+      return refreshRowsPromiseRef.current;
+    }
+
+    const refreshPromise = (async () => {
+      do {
+        needsRefreshRowsRef.current = false;
+        const response = await fetch("/api/distributor-withdrawals", {
+          cache: "no-store",
+        });
+        const data = (await response.json().catch(() => null)) as {
+          rows?: WithdrawalRow[];
+        } | null;
+
+        if (response.ok && data?.rows) {
+          pendingSignatureRef.current = getPendingWithdrawalSignature(data.rows);
+          setRows(data.rows);
+        }
+      } while (needsRefreshRowsRef.current);
+    })().finally(() => {
+      refreshRowsPromiseRef.current = null;
+    });
+
+    refreshRowsPromiseRef.current = refreshPromise;
+    return refreshPromise;
+  }, []);
+
+  useEffect(() => {
+    function handleNotificationSync(event: Event) {
+      const snapshot = (event as CustomEvent<RequestNotificationSyncDetail>)
+        .detail;
+      const pendingIds = snapshot?.pendingIds?.distributorWithdrawals;
+
+      if (!Array.isArray(pendingIds)) {
+        return;
+      }
+
+      const nextSignature = [...pendingIds].sort().join(",");
+
+      if (nextSignature === pendingSignatureRef.current) {
+        return;
+      }
+
+      pendingSignatureRef.current = nextSignature;
+      snapshot.waitUntil(refreshRows());
+    }
+
+    window.addEventListener(
+      requestNotificationSyncEventName,
+      handleNotificationSync,
+    );
+
+    return () => {
+      window.removeEventListener(
+        requestNotificationSyncEventName,
+        handleNotificationSync,
+      );
+    };
+  }, [refreshRows]);
 
   async function createWithdrawal() {
     if (isSubmitting) {
@@ -293,8 +373,10 @@ export function DistributorWithdrawalHistoryBoard({
       }
 
       if (data.rows) {
+        pendingSignatureRef.current = getPendingWithdrawalSignature(data.rows);
         setRows(data.rows);
       }
+      window.dispatchEvent(new Event(requestNotifierRefreshEventName));
 
       setPage(1);
       setAmount("");
@@ -339,8 +421,10 @@ export function DistributorWithdrawalHistoryBoard({
     }
 
     if (data.rows) {
+      pendingSignatureRef.current = getPendingWithdrawalSignature(data.rows);
       setRows(data.rows);
     }
+    window.dispatchEvent(new Event(requestNotifierRefreshEventName));
 
     setMessage(
       data.message ??

@@ -7,6 +7,7 @@ const pollIntervalMs = 1000;
 const noticeSoundReadyKey = "winpay-notice-sound-ready";
 const noticeRetryDelayMs = 1200;
 const maxNoticePlayAttempts = 3;
+const maxListSyncWaitMs = 2500;
 
 export type RequestNotificationSnapshot = {
   pendingIds: {
@@ -22,7 +23,14 @@ export type PendingRequestCounts = {
   distributorWithdrawals: number;
 };
 
+export type RequestNotificationSyncDetail = RequestNotificationSnapshot & {
+  counts: PendingRequestCounts;
+  newPendingCount: number;
+  waitUntil: (promise: Promise<unknown>) => void;
+};
+
 export const pendingRequestCountsEventName = "pending-request-counts";
+export const requestNotificationSyncEventName = "request-notification-sync";
 export const requestNotificationSnapshotEventName =
   "request-notification-snapshot";
 export const requestNotifierRefreshEventName = "request-notifier-refresh";
@@ -59,6 +67,19 @@ function collectPendingSnapshot(data: RequestNotificationSnapshot) {
   }
 
   return { ids, counts };
+}
+
+async function waitForListSync(promises: Promise<unknown>[]) {
+  if (!promises.length) {
+    return;
+  }
+
+  await Promise.race([
+    Promise.allSettled(promises),
+    new Promise<void>((resolve) => {
+      window.setTimeout(resolve, maxListSyncWaitMs);
+    }),
+  ]);
 }
 
 export function GlobalRequestNotifier() {
@@ -186,8 +207,27 @@ export function GlobalRequestNotifier() {
       const newPendingCount = [...nextPendingIds].filter(
         (id) => !knownPendingIdsRef.current.has(id),
       ).length;
+      const listSyncPromises: Promise<unknown>[] = [];
 
       knownPendingIdsRef.current = nextPendingIds;
+
+      window.dispatchEvent(
+        new CustomEvent<RequestNotificationSyncDetail>(
+          requestNotificationSyncEventName,
+          {
+            detail: {
+              ...data,
+              counts: pendingSnapshot.counts,
+              newPendingCount,
+              waitUntil: (promise) => {
+                listSyncPromises.push(Promise.resolve(promise).catch(() => undefined));
+              },
+            },
+          },
+        ),
+      );
+
+      await waitForListSync(listSyncPromises);
 
       try {
         window.sessionStorage.setItem(

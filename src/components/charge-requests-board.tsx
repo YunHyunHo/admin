@@ -1,7 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { requestNotifierRefreshEventName } from "@/components/global-request-notifier";
+import {
+  requestNotificationSyncEventName,
+  requestNotifierRefreshEventName,
+  type RequestNotificationSyncDetail,
+} from "@/components/global-request-notifier";
 import { ModalFeedback } from "@/components/modal-feedback";
 import {
   parseKoreanWon,
@@ -300,7 +304,15 @@ export function ChargeRequestsBoard({
   const knownPendingIdsRef = useRef(
     new Set(initialPendingRequests.map((request) => request.id)),
   );
+  const pendingSignatureRef = useRef(
+    initialPendingRequests
+      .map((request) => request.id)
+      .sort()
+      .join(","),
+  );
   const lastSyncCursorRef = useRef("");
+  const notificationRefreshPromiseRef = useRef<Promise<void> | null>(null);
+  const needsNotificationRefreshRef = useRef(false);
 
   function resetCreateForm() {
     setCreateDomainId("");
@@ -336,6 +348,10 @@ export function ChargeRequestsBoard({
       knownPendingIdsRef.current = new Set(
         data.pending.map((request) => request.id),
       );
+      pendingSignatureRef.current = data.pending
+        .map((request) => request.id)
+        .sort()
+        .join(",");
 
       setPendingRequests(data.pending);
       setApprovedRequests(data.approved);
@@ -365,6 +381,9 @@ export function ChargeRequestsBoard({
 
   const applyProcessedRequest = useCallback((request: ProcessedRequest) => {
     knownPendingIdsRef.current.delete(request.id);
+    pendingSignatureRef.current = [...knownPendingIdsRef.current]
+      .sort()
+      .join(",");
     setPendingRequests((current) =>
       current.filter((item) => item.id !== request.id),
     );
@@ -394,6 +413,9 @@ export function ChargeRequestsBoard({
     for (const request of changes.pending) {
       knownPendingIdsRef.current.add(request.id);
     }
+    pendingSignatureRef.current = [...knownPendingIdsRef.current]
+      .sort()
+      .join(",");
 
     setPendingRequests((current) => [
       ...changes.pending,
@@ -426,6 +448,58 @@ export function ChargeRequestsBoard({
 
     return (await response.json()) as ChargeRequestsResponse;
   }, []);
+
+  const refreshRequestsForNotification = useCallback(async () => {
+    if (notificationRefreshPromiseRef.current) {
+      needsNotificationRefreshRef.current = true;
+      return notificationRefreshPromiseRef.current;
+    }
+
+    const refreshPromise = (async () => {
+      do {
+        needsNotificationRefreshRef.current = false;
+        applyServerData(await requestChargeData(), { resetPages: false });
+      } while (needsNotificationRefreshRef.current);
+    })().finally(() => {
+      notificationRefreshPromiseRef.current = null;
+    });
+
+    notificationRefreshPromiseRef.current = refreshPromise;
+    return refreshPromise;
+  }, [applyServerData, requestChargeData]);
+
+  useEffect(() => {
+    function handleNotificationSync(event: Event) {
+      const snapshot = (event as CustomEvent<RequestNotificationSyncDetail>)
+        .detail;
+      const pendingIds = snapshot?.pendingIds?.charges;
+
+      if (!Array.isArray(pendingIds)) {
+        return;
+      }
+
+      const nextSignature = [...pendingIds].sort().join(",");
+
+      if (nextSignature === pendingSignatureRef.current) {
+        return;
+      }
+
+      pendingSignatureRef.current = nextSignature;
+      snapshot.waitUntil(refreshRequestsForNotification());
+    }
+
+    window.addEventListener(
+      requestNotificationSyncEventName,
+      handleNotificationSync,
+    );
+
+    return () => {
+      window.removeEventListener(
+        requestNotificationSyncEventName,
+        handleNotificationSync,
+      );
+    };
+  }, [refreshRequestsForNotification]);
 
   useEffect(() => {
     if (!isDatabaseBacked) {

@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  requestNotificationSnapshotEventName,
+  requestNotificationSyncEventName,
   requestNotifierRefreshEventName,
-  type RequestNotificationSnapshot,
+  type RequestNotificationSyncDetail,
 } from "@/components/global-request-notifier";
 import { ModalFeedback } from "@/components/modal-feedback";
 import type {
@@ -220,6 +220,14 @@ function normalizeExchangeRow(row: DomainExchangeRow): DomainExchangeRow {
   };
 }
 
+function getPendingExchangeSignature(rows: DomainExchangeRow[]) {
+  return rows
+    .filter((row) => row.status === "승인중")
+    .map((row) => row.id)
+    .sort()
+    .join(",");
+}
+
 export function DomainExchangesBoard({
   initialRows = fallbackDomainExchanges,
   eyebrow = "Domain Exchange",
@@ -244,13 +252,10 @@ export function DomainExchangesBoard({
   const [accountHolder, setAccountHolder] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const pendingSignatureRef = useRef(
-    initialRows
-      .filter((row) => row.status === "승인중")
-      .map((row) => row.id)
-      .sort()
-      .join(","),
+    getPendingExchangeSignature(initialRows),
   );
-  const isRefreshingRowsRef = useRef(false);
+  const refreshRowsPromiseRef = useRef<Promise<void> | null>(null);
+  const needsRefreshRowsRef = useRef(false);
   const pageCount = Math.max(1, Math.ceil(rows.length / rowsPerPage));
   const currentPage = Math.min(page, pageCount);
   const pageRows = useMemo(
@@ -262,15 +267,15 @@ export function DomainExchangesBoard({
     [currentPage, rows],
   );
 
-  useEffect(() => {
-    async function refreshRows() {
-      if (isRefreshingRowsRef.current) {
-        return;
-      }
+  const refreshRows = useCallback(async () => {
+    if (refreshRowsPromiseRef.current) {
+      needsRefreshRowsRef.current = true;
+      return refreshRowsPromiseRef.current;
+    }
 
-      isRefreshingRowsRef.current = true;
-
-      try {
+    const refreshPromise = (async () => {
+      do {
+        needsRefreshRowsRef.current = false;
         const response = await fetch("/api/domain-exchanges", {
           cache: "no-store",
         });
@@ -279,17 +284,23 @@ export function DomainExchangesBoard({
         } | null;
 
         if (response.ok && data?.rows) {
-          setRows(data.rows.map(normalizeExchangeRow));
+          const nextRows = data.rows.map(normalizeExchangeRow);
+          pendingSignatureRef.current = getPendingExchangeSignature(nextRows);
+          setRows(nextRows);
         }
-      } finally {
-        isRefreshingRowsRef.current = false;
-      }
-    }
+      } while (needsRefreshRowsRef.current);
+    })().finally(() => {
+      refreshRowsPromiseRef.current = null;
+    });
 
-    function handleSnapshotUpdate(event: Event) {
-      const snapshot = (
-        event as CustomEvent<RequestNotificationSnapshot>
-      ).detail;
+    refreshRowsPromiseRef.current = refreshPromise;
+    return refreshPromise;
+  }, []);
+
+  useEffect(() => {
+    function handleNotificationSync(event: Event) {
+      const snapshot = (event as CustomEvent<RequestNotificationSyncDetail>)
+        .detail;
       const pendingIds = snapshot?.pendingIds?.domainExchanges;
 
       if (!Array.isArray(pendingIds)) {
@@ -303,21 +314,21 @@ export function DomainExchangesBoard({
       }
 
       pendingSignatureRef.current = nextSignature;
-      void refreshRows();
+      snapshot.waitUntil(refreshRows());
     }
 
     window.addEventListener(
-      requestNotificationSnapshotEventName,
-      handleSnapshotUpdate,
+      requestNotificationSyncEventName,
+      handleNotificationSync,
     );
 
     return () => {
       window.removeEventListener(
-        requestNotificationSnapshotEventName,
-        handleSnapshotUpdate,
+        requestNotificationSyncEventName,
+        handleNotificationSync,
       );
     };
-  }, []);
+  }, [refreshRows]);
 
   async function createExchange() {
     if (isSubmitting) {
@@ -367,7 +378,9 @@ export function DomainExchangesBoard({
       }
 
       if (data.rows) {
-        setRows(data.rows.map(normalizeExchangeRow));
+        const nextRows = data.rows.map(normalizeExchangeRow);
+        pendingSignatureRef.current = getPendingExchangeSignature(nextRows);
+        setRows(nextRows);
       }
 
       window.dispatchEvent(new Event(requestNotifierRefreshEventName));
@@ -402,7 +415,9 @@ export function DomainExchangesBoard({
     }
 
     if (data.rows) {
-      setRows(data.rows.map(normalizeExchangeRow));
+      const nextRows = data.rows.map(normalizeExchangeRow);
+      pendingSignatureRef.current = getPendingExchangeSignature(nextRows);
+      setRows(nextRows);
     }
 
     window.dispatchEvent(new Event(requestNotifierRefreshEventName));
