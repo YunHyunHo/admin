@@ -125,6 +125,28 @@ async function main() {
       create index if not exists domain_charge_integrations_master_status_idx
         on domain_charge_integrations (master_admin_id, status, created_at desc)
     `);
+    await pool.query(`
+      create table if not exists partner_refresh_tokens (
+        id uuid primary key default gen_random_uuid(),
+        admin_id uuid not null references admins(id) on delete cascade,
+        domain_id uuid not null references domains(id) on delete cascade,
+        token_hash text not null unique,
+        status text not null default 'ACTIVE',
+        expires_at timestamptz not null,
+        last_used_at timestamptz,
+        created_at timestamptz not null default now(),
+        revoked_at timestamptz,
+        check (status in ('ACTIVE', 'REVOKED'))
+      )
+    `);
+    await pool.query(`
+      create index if not exists partner_refresh_tokens_admin_status_idx
+        on partner_refresh_tokens (admin_id, status, expires_at desc)
+    `);
+    await pool.query(`
+      create index if not exists partner_refresh_tokens_domain_status_idx
+        on partner_refresh_tokens (domain_id, status, expires_at desc)
+    `);
 
     console.log("Database migrations applied.");
   } finally {

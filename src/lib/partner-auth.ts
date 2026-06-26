@@ -1,6 +1,6 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
-import { query } from "@/lib/db";
+import { query, withTransaction } from "@/lib/db";
 import {
   getDomainChargeMode,
   type DomainChargeMode,
@@ -12,6 +12,8 @@ import {
 import { verifyPassword } from "@/lib/password";
 
 const PARTNER_TOKEN_TTL_SECONDS = 60 * 60 * 24;
+const PARTNER_REFRESH_TOKEN_BYTES = 32;
+const PARTNER_REFRESH_TOKEN_TTL_DAYS = 30;
 
 type PartnerDbRow = {
   admin_id: string;
@@ -26,6 +28,7 @@ type PartnerDbRow = {
 
 export type PartnerLoginSuccess = {
   token: string;
+  refreshToken?: string;
   user: {
     loginId: string;
     name: string;
@@ -48,6 +51,10 @@ type PartnerLoginResult = PartnerLoginSuccess & {
     adminId: string;
     domainId: string;
   };
+};
+
+type PartnerRefreshTokenRow = PartnerDbRow & {
+  refresh_token_id: string;
 };
 
 export type PartnerAccessTokenPayload = {
@@ -79,6 +86,46 @@ function getPartnerTokenSecret() {
 
 function signPayload(payload: string) {
   return createHmac("sha256", getPartnerTokenSecret()).update(payload).digest("hex");
+}
+
+function hashPartnerRefreshToken(refreshToken: string) {
+  return createHash("sha256").update(refreshToken).digest("hex");
+}
+
+let refreshTokenSchemaPromise: Promise<void> | null = null;
+
+async function ensurePartnerRefreshTokenSchema() {
+  refreshTokenSchemaPromise ??= (async () => {
+    await query(`
+      create table if not exists partner_refresh_tokens (
+        id uuid primary key default gen_random_uuid(),
+        admin_id uuid not null references admins(id) on delete cascade,
+        domain_id uuid not null references domains(id) on delete cascade,
+        token_hash text not null unique,
+        status text not null default 'ACTIVE',
+        expires_at timestamptz not null,
+        last_used_at timestamptz,
+        created_at timestamptz not null default now(),
+        revoked_at timestamptz,
+        check (status in ('ACTIVE', 'REVOKED'))
+      )
+    `);
+    await query(`
+      create index if not exists partner_refresh_tokens_admin_status_idx
+        on partner_refresh_tokens (admin_id, status, expires_at desc)
+    `);
+    await query(`
+      create index if not exists partner_refresh_tokens_domain_status_idx
+        on partner_refresh_tokens (domain_id, status, expires_at desc)
+    `);
+  })();
+
+  try {
+    return await refreshTokenSchemaPromise;
+  } catch (error) {
+    refreshTokenSchemaPromise = null;
+    throw error;
+  }
 }
 
 export function normalizePartnerDomain(value: string) {
@@ -114,6 +161,20 @@ export function createPartnerAccessToken(payload: Omit<PartnerAccessTokenPayload
   return `${encoded}.${signature}`;
 }
 
+function createPartnerAccessTokenFromRow(row: PartnerDbRow) {
+  return createPartnerAccessToken({
+    sub: row.admin_id,
+    loginId: row.login_id,
+    role: "partner_admin",
+    partnerId: row.company_id,
+    partnerName: row.company_name,
+    domainId: row.domain_id,
+    domain: normalizePartnerDomain(row.domain_name ?? ""),
+    permissions: defaultPermissions,
+    menus: defaultMenus,
+  });
+}
+
 export function verifyPartnerAccessToken(token: string) {
   const [payload, signature] = token.split(".");
 
@@ -145,6 +206,52 @@ export function verifyPartnerAccessToken(token: string) {
   } catch {
     return null;
   }
+}
+
+export function getPartnerAccess(request: Request) {
+  const authorization = request.headers.get("authorization")?.trim() ?? "";
+
+  if (!authorization) {
+    return { provided: false, access: null };
+  }
+
+  const [scheme, token] = authorization.split(/\s+/, 2);
+  const access =
+    scheme?.toLowerCase() === "bearer" && token
+      ? verifyPartnerAccessToken(token)
+      : null;
+
+  return { provided: true, access };
+}
+
+async function issuePartnerRefreshToken(input: {
+  adminId: string;
+  domainId: string;
+}) {
+  await ensurePartnerRefreshTokenSchema();
+
+  const refreshToken = `pr_${randomBytes(PARTNER_REFRESH_TOKEN_BYTES).toString("base64url")}`;
+  const tokenHash = hashPartnerRefreshToken(refreshToken);
+
+  await query(
+    `
+      insert into partner_refresh_tokens (
+        admin_id,
+        domain_id,
+        token_hash,
+        expires_at
+      )
+      values (
+        $1::uuid,
+        $2::uuid,
+        $3,
+        now() + ($4::int * interval '1 day')
+      )
+    `,
+    [input.adminId, input.domainId, tokenHash, PARTNER_REFRESH_TOKEN_TTL_DAYS],
+  );
+
+  return refreshToken;
 }
 
 export async function logPartnerLoginAttempt(input: {
@@ -260,6 +367,16 @@ export async function loginPartnerAccount(input: {
     permissions: defaultPermissions,
     menus: defaultMenus,
   });
+  let refreshToken: string | undefined;
+
+  try {
+    refreshToken = await issuePartnerRefreshToken({
+      adminId: matchedRow.admin_id,
+      domainId: matchedRow.domain_id,
+    });
+  } catch (error) {
+    console.error("Failed to issue partner refresh token", error);
+  }
   const [withdrawAccount, chargeMode] = await Promise.all([
     getDomainWithdrawAccount(matchedRow.domain_id),
     getDomainChargeMode(matchedRow.domain_id),
@@ -267,6 +384,7 @@ export async function loginPartnerAccount(input: {
 
   return {
     token,
+    refreshToken,
     user: {
       loginId: matchedRow.login_id,
       name: matchedRow.admin_name,
@@ -287,4 +405,88 @@ export async function loginPartnerAccount(input: {
       domainId: matchedRow.domain_id,
     },
   };
+}
+
+export async function refreshPartnerAccessToken(refreshToken: string) {
+  const normalizedToken = refreshToken.trim();
+
+  if (!normalizedToken) {
+    return null;
+  }
+
+  await ensurePartnerRefreshTokenSchema();
+
+  return withTransaction(async (client) => {
+    const result = await client.query<PartnerRefreshTokenRow>(
+      `
+        select
+          prt.id::text as refresh_token_id,
+          a.id::text as admin_id,
+          a.login_id,
+          a.password_hash,
+          a.name as admin_name,
+          c.id::text as company_id,
+          c.company_name,
+          dom.id::text as domain_id,
+          dom.domain_name
+        from partner_refresh_tokens prt
+        join admins a on a.id = prt.admin_id
+        join admin_company_mappings acm on acm.admin_id = a.id
+        join companies c on c.id = acm.company_id
+        join admin_domain_mappings adm on adm.admin_id = a.id and adm.domain_id = prt.domain_id
+        join domains dom on dom.id = adm.domain_id
+        where prt.token_hash = $1
+          and prt.status = 'ACTIVE'
+          and prt.expires_at > now()
+          and a.role = 'DOMAIN_ADMIN'
+          and a.status = 'ACTIVE'
+          and dom.status = 'ACTIVE'
+        for update of prt
+      `,
+      [hashPartnerRefreshToken(normalizedToken)],
+    );
+    const row = result.rows[0];
+
+    if (!row) {
+      return null;
+    }
+
+    await client.query(
+      `
+        update partner_refresh_tokens
+        set last_used_at = now(),
+            expires_at = now() + ($2::int * interval '1 day')
+        where id = $1::uuid
+      `,
+      [row.refresh_token_id, PARTNER_REFRESH_TOKEN_TTL_DAYS],
+    );
+
+    return {
+      token: createPartnerAccessTokenFromRow(row),
+    };
+  });
+}
+
+export async function revokePartnerRefreshToken(refreshToken: string) {
+  const normalizedToken = refreshToken.trim();
+
+  if (!normalizedToken) {
+    return false;
+  }
+
+  await ensurePartnerRefreshTokenSchema();
+
+  const result = await query<{ id: string }>(
+    `
+      update partner_refresh_tokens
+      set status = 'REVOKED',
+          revoked_at = coalesce(revoked_at, now())
+      where token_hash = $1
+        and status = 'ACTIVE'
+      returning id::text
+    `,
+    [hashPartnerRefreshToken(normalizedToken)],
+  );
+
+  return Boolean(result.rows[0]);
 }

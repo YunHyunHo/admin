@@ -108,6 +108,7 @@ export async function POST(request: Request) {
     NextResponse.json({
       ok: true,
       token: result.token,
+      refreshToken: result.refreshToken,
       user: result.user,
       partner: result.partner,
     }),

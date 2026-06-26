@@ -15,6 +15,7 @@ Content-Type: application/json
 {
   "ok": true,
   "token": "로그인_토큰",
+  "refreshToken": "갱신_토큰",
   "partner": {
     "id": "업체ID",
     "name": "업체명",
@@ -31,6 +32,7 @@ Content-Type: application/json
 | `MANUAL` | 기존 수동 충전신청 화면과 구매내역 모두 표시 |
 
 API 키 원문은 로그인 응답에 포함하지 않습니다.
+`refreshToken`은 로그아웃하지 않는 동안 로그인 상태를 자동 연장할 때 사용합니다.
 
 ## 2. 구매내역 조회
 
@@ -40,6 +42,18 @@ Authorization: Bearer 로그인_토큰
 ```
 
 로그인 토큰에 연결된 도메인을 서버가 자동 적용하므로 `domainId`를 보낼 필요가 없습니다.
+
+도메인 환전내역과 정산내역 조회도 같은 방식으로 로그인 토큰을 사용할 수 있습니다.
+
+```http
+GET https://laylow.me/api/integration/domain-exchanges?page=1&pageSize=10
+Authorization: Bearer 로그인_토큰
+```
+
+```http
+GET https://laylow.me/api/integration/domain-settlements
+Authorization: Bearer 로그인_토큰
+```
 
 선택 Query:
 
@@ -105,4 +119,3 @@ Authorization: Bearer 로그인_토큰
 - 신규 대기 신청부터 즉시 목록에 표시합니다.
 - 마스터 승인·거절 후 `status`, `changedAt`을 갱신합니다.
 - `401` 응답이면 로그인 토큰 만료로 처리하고 다시 로그인합니다.
-

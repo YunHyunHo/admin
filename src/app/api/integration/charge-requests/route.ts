@@ -9,7 +9,7 @@ import {
   resolveDomainChargeIntegration,
 } from "@/lib/domain-charge-integration";
 import { getIntegrationChargeHistory } from "@/lib/integration-domain-history";
-import { verifyPartnerAccessToken } from "@/lib/partner-auth";
+import { getPartnerAccess } from "@/lib/partner-auth";
 
 export const runtime = "nodejs";
 
@@ -32,22 +32,6 @@ function isUuid(value: string | undefined) {
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
     ),
   );
-}
-
-function getPartnerAccess(request: Request) {
-  const authorization = request.headers.get("authorization")?.trim() ?? "";
-
-  if (!authorization) {
-    return { provided: false, access: null };
-  }
-
-  const [scheme, token] = authorization.split(/\s+/, 2);
-  const access =
-    scheme?.toLowerCase() === "bearer" && token
-      ? verifyPartnerAccessToken(token)
-      : null;
-
-  return { provided: true, access };
 }
 
 export async function GET(request: Request) {

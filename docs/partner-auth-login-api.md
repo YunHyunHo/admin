@@ -35,6 +35,7 @@
 {
   "ok": true,
   "token": "access_token",
+  "refreshToken": "refresh_token",
   "user": {
     "loginId": "abc_admin",
     "name": "담당자명",
@@ -82,6 +83,58 @@
 
 ```http
 Authorization: Bearer {token}
+```
+
+`token`은 access token이며, 기존 방식과 동일하게 사용합니다.
+`refreshToken`은 로그아웃하지 않는 동안 access token을 자동 갱신하기 위한 값입니다.
+
+## 토큰 갱신
+
+```http
+POST https://laylow.me/partner/auth/refresh
+Content-Type: application/json
+```
+
+```json
+{
+  "refreshToken": "refresh_token"
+}
+```
+
+성공 응답:
+
+```json
+{
+  "ok": true,
+  "token": "새_access_token"
+}
+```
+
+프론트 적용 기준:
+
+- `GET` 조회 요청과 SSE 재연결은 갱신 후 자동 재시도할 수 있습니다.
+- 충전/환전 신청 같은 `POST` 생성 요청은 중복 접수 방지를 위해 자동 재시도하지 않습니다.
+- 로그아웃 시 `token`, `refreshToken`을 모두 삭제하고 `/partner/auth/logout`을 호출합니다.
+
+## 로그아웃
+
+```http
+POST https://laylow.me/partner/auth/logout
+Content-Type: application/json
+```
+
+```json
+{
+  "refreshToken": "refresh_token"
+}
+```
+
+성공 응답:
+
+```json
+{
+  "ok": true
+}
 ```
 
 ## 계정 생성 위치
