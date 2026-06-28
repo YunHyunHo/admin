@@ -201,7 +201,8 @@ create table exchange_requests (
 
 create table telegram_company_settings (
   id uuid primary key default gen_random_uuid(),
-  company_id uuid not null unique references companies(id) on delete cascade,
+  company_id uuid not null references companies(id) on delete cascade,
+  domain_id uuid unique references domains(id) on delete cascade,
   configured_by uuid not null references admins(id),
   bot_token_ciphertext text not null,
   bot_username text not null,

@@ -814,6 +814,7 @@ export async function approveDomainExchange(id: string, processedBy: SessionUser
       distributor_id: string | null;
       bank_name: string | null;
       account_holder: string | null;
+      account_number: string | null;
       amount: string;
       balance_reserved: boolean;
     }>(
@@ -827,6 +828,7 @@ export async function approveDomainExchange(id: string, processedBy: SessionUser
           er.distributor_id::text,
           er.bank_name,
           er.account_holder,
+          er.account_number,
           er.amount::text,
           coalesce(er.raw_payload ->> '${exchangeBalanceReservedKey}', 'false') = 'true' as balance_reserved
         from exchange_requests er
@@ -1000,11 +1002,13 @@ export async function approveDomainExchange(id: string, processedBy: SessionUser
 
     return {
       id: approvedExchange.id,
+      domainId: exchange.domain_id,
       companyId: exchange.company_id,
       companyName: exchange.company_name,
       domainName: exchange.domain_name ?? "-",
       bankName: exchange.bank_name ?? "-",
       accountHolder: exchange.account_holder ?? "-",
+      accountNumber: exchange.account_number ?? "-",
       amount: Number(approvedExchange.amount),
       approvedAt: approvedExchange.approved_at,
     };

@@ -61,17 +61,6 @@ const sideMenuGroups = [
     ],
   },
   {
-    title: "연동",
-    items: [
-      {
-        title: "텔레그램",
-        href: "/dashboard/settings/telegram",
-        key: "telegram-settings",
-        domainAdminOnly: true,
-      },
-    ],
-  },
-  {
     title: "도메인",
     items: [
       {
@@ -83,6 +72,12 @@ const sideMenuGroups = [
         title: "도메인환전",
         href: "/dashboard/domains/exchanges",
         key: "domain-exchanges",
+      },
+      {
+        title: "텔레그램 연동",
+        href: "/dashboard/settings/telegram",
+        key: "telegram-settings",
+        telegramManagerOnly: true,
       },
     ],
   },
@@ -184,6 +179,9 @@ export async function AdminShell({
         ? "상위총판"
         : "총판";
   const hasMasterMenu = user.role === "MASTER" || user.role === "DOMAIN_ADMIN";
+  const canManageTelegram =
+    user.role === "MASTER" ||
+    (user.role === "DOMAIN_ADMIN" && !user.hasDomainMapping);
   const isSettlementOnlyUser = settlementOnlyRoles.has(user.role);
   const partnerSummaries = sortDashboardPartnerSummaries(
     await getDashboardPartnerSummariesForUser(user),
@@ -201,7 +199,8 @@ export async function AdminShell({
       items:
         hasMasterMenu
           ? group.items.filter(
-              (item) => !("domainAdminOnly" in item) || user.role === "DOMAIN_ADMIN",
+              (item) =>
+                !("telegramManagerOnly" in item) || canManageTelegram,
             )
           : group.items.filter((item) => !masterOnlyMenuKeys.has(item.key)),
     }))
