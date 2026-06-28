@@ -798,7 +798,7 @@ export async function createIntegrationDomainExchange(input: CreateDomainExchang
 }
 
 export async function approveDomainExchange(id: string, processedBy: SessionUser) {
-  await withTransaction(async (client) => {
+  return withTransaction(async (client) => {
     const scope = await getScopedDataCondition(processedBy, {
       company: "er",
       distributor: "dist",
@@ -807,19 +807,31 @@ export async function approveDomainExchange(id: string, processedBy: SessionUser
     const scopeSql = shiftSqlParams(scope.sql, 1);
     const exchangeResult = await client.query<{
       id: string;
+      company_id: string;
+      company_name: string;
+      domain_name: string | null;
       domain_id: string | null;
       distributor_id: string | null;
+      bank_name: string | null;
+      account_holder: string | null;
       amount: string;
       balance_reserved: boolean;
     }>(
       `
         select
           er.id::text,
+          er.company_id::text,
+          c.company_name,
+          d.domain_name,
           er.domain_id::text,
           er.distributor_id::text,
+          er.bank_name,
+          er.account_holder,
           er.amount::text,
           coalesce(er.raw_payload ->> '${exchangeBalanceReservedKey}', 'false') = 'true' as balance_reserved
         from exchange_requests er
+        join companies c on c.id = er.company_id
+        left join domains d on d.id = er.domain_id
         left join distributors dist on dist.id = er.distributor_id
         left join admins dist_admin on dist_admin.id = dist.admin_id
         where er.id = $1::uuid
@@ -969,7 +981,11 @@ export async function approveDomainExchange(id: string, processedBy: SessionUser
 
     const approvedExchange = approvedResult.rows[0];
 
-    if (approvedExchange?.domain_id) {
+    if (!approvedExchange) {
+      throw new Error("환전 요청 승인 처리에 실패했습니다.");
+    }
+
+    if (approvedExchange.domain_id) {
       await client.query("select pg_notify($1, $2)", [
         domainExchangeEventsChannel,
         JSON.stringify({
@@ -981,6 +997,17 @@ export async function approveDomainExchange(id: string, processedBy: SessionUser
         }),
       ]);
     }
+
+    return {
+      id: approvedExchange.id,
+      companyId: exchange.company_id,
+      companyName: exchange.company_name,
+      domainName: exchange.domain_name ?? "-",
+      bankName: exchange.bank_name ?? "-",
+      accountHolder: exchange.account_holder ?? "-",
+      amount: Number(approvedExchange.amount),
+      approvedAt: approvedExchange.approved_at,
+    };
   });
 }
 

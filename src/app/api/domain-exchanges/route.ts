@@ -11,6 +11,7 @@ import {
 } from "@/lib/domain-exchanges-repository";
 import { hasDatabaseUrl } from "@/lib/db";
 import { canManageMasterResources, canUseDistributorMenus } from "@/lib/permissions";
+import { notifyApprovedExchange } from "@/lib/telegram-notifications";
 
 export const runtime = "nodejs";
 
@@ -171,7 +172,8 @@ export async function PATCH(request: Request) {
 
     try {
       if (payload.action === "approve") {
-        await approveDomainExchange(payload.id, user);
+        const approvedExchange = await approveDomainExchange(payload.id, user);
+        await notifyApprovedExchange(approvedExchange);
       } else if (payload.action === "reject") {
         await rejectDomainExchange(payload.id, user);
       } else {

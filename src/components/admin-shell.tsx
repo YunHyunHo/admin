@@ -61,6 +61,17 @@ const sideMenuGroups = [
     ],
   },
   {
+    title: "연동",
+    items: [
+      {
+        title: "텔레그램",
+        href: "/dashboard/settings/telegram",
+        key: "telegram-settings",
+        domainAdminOnly: true,
+      },
+    ],
+  },
+  {
     title: "도메인",
     items: [
       {
@@ -189,7 +200,9 @@ export async function AdminShell({
       ...group,
       items:
         hasMasterMenu
-          ? group.items
+          ? group.items.filter(
+              (item) => !("domainAdminOnly" in item) || user.role === "DOMAIN_ADMIN",
+            )
           : group.items.filter((item) => !masterOnlyMenuKeys.has(item.key)),
     }))
     .filter((group) => group.items.length > 0);
