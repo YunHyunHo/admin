@@ -148,12 +148,15 @@ export async function sendTelegramTest(user: SessionUser, domainId: string) {
   });
 }
 
-export type ApprovedExchangeTelegramPayload = {
-  id: string; domainId: string | null; bankName: string; accountHolder: string;
-  accountNumber: string; amount: number;
+export type ExchangeDecisionTelegramPayload = {
+  id: string;
+  domainId: string | null;
+  accountHolder: string;
+  amount: number;
+  status: "APPROVED" | "REJECTED";
 };
 
-export async function notifyApprovedExchange(payload: ApprovedExchangeTelegramPayload) {
+export async function notifyExchangeDecision(payload: ExchangeDecisionTelegramPayload) {
   if (!payload.domainId) return;
   try {
     await ensureTelegramSchema();
@@ -162,15 +165,17 @@ export async function notifyApprovedExchange(payload: ApprovedExchangeTelegramPa
       where domain_id = $1::uuid and enabled = true and chat_id is not null
     `, [payload.domainId])).rows[0];
     if (!setting) return;
+    const eventType = payload.status === "APPROVED"
+      ? "DOMAIN_EXCHANGE_APPROVED"
+      : "DOMAIN_EXCHANGE_REJECTED";
     const delivery = (await query<{ id: string }>(`
       insert into telegram_notification_deliveries (setting_id, event_type, event_id)
-      values ($1::uuid, 'DOMAIN_EXCHANGE_APPROVED', $2::uuid)
+      values ($1::uuid, $2, $3::uuid)
       on conflict (setting_id, event_type, event_id) do nothing returning id::text
-    `, [setting.id, payload.id])).rows[0];
+    `, [setting.id, eventType, payload.id])).rows[0];
     if (!delivery) return;
-    const text = ["✅ 환전 승인 완료", `출금은행: ${payload.bankName}`,
-      `예금주: ${payload.accountHolder}`, `계좌번호: ${payload.accountNumber}`,
-      `요청금액: ${payload.amount.toLocaleString("ko-KR")}원`].join("\n");
+    const decision = payload.status === "APPROVED" ? "승인" : "거절";
+    const text = `${payload.accountHolder} ${payload.amount.toLocaleString("ko-KR")}원 ${decision}`;
     try {
       await telegramCall(decryptToken(setting.bot_token_ciphertext), "sendMessage", { chat_id: setting.chat_id, text });
       await query(`update telegram_notification_deliveries set status='SENT', attempts=attempts+1, sent_at=now(), updated_at=now() where id=$1::uuid`, [delivery.id]);

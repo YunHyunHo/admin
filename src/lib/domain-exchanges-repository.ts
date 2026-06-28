@@ -1003,20 +1003,15 @@ export async function approveDomainExchange(id: string, processedBy: SessionUser
     return {
       id: approvedExchange.id,
       domainId: exchange.domain_id,
-      companyId: exchange.company_id,
-      companyName: exchange.company_name,
-      domainName: exchange.domain_name ?? "-",
-      bankName: exchange.bank_name ?? "-",
       accountHolder: exchange.account_holder ?? "-",
-      accountNumber: exchange.account_number ?? "-",
       amount: Number(approvedExchange.amount),
-      approvedAt: approvedExchange.approved_at,
+      status: "APPROVED" as const,
     };
   });
 }
 
 export async function rejectDomainExchange(id: string, processedBy: SessionUser) {
-  await withTransaction(async (client) => {
+  return withTransaction(async (client) => {
     const scope = await getScopedDataCondition(processedBy, {
       company: "er",
       distributor: "dist",
@@ -1027,6 +1022,7 @@ export async function rejectDomainExchange(id: string, processedBy: SessionUser)
       id: string;
       domain_id: string | null;
       distributor_id: string | null;
+      account_holder: string | null;
       amount: string;
       balance_reserved: boolean;
     }>(
@@ -1035,6 +1031,7 @@ export async function rejectDomainExchange(id: string, processedBy: SessionUser)
           er.id::text,
           er.domain_id::text,
           er.distributor_id::text,
+          er.account_holder,
           er.amount::text,
           coalesce(er.raw_payload ->> '${exchangeBalanceReservedKey}', 'false') = 'true' as balance_reserved
         from exchange_requests er
@@ -1138,6 +1135,14 @@ export async function rejectDomainExchange(id: string, processedBy: SessionUser)
       `,
       [id, processedBy.id, exchangeBalanceReleasedAtKey],
     );
+
+    return {
+      id: exchange.id,
+      domainId: exchange.domain_id,
+      accountHolder: exchange.account_holder ?? "-",
+      amount: requestAmount,
+      status: "REJECTED" as const,
+    };
   });
 }
 
