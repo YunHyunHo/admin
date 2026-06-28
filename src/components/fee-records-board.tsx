@@ -26,6 +26,7 @@ type FeeRecordRow = {
 
 const MIN_QUERY_DATE = "2026-01-01";
 const PAGE_SIZE = 10;
+const PAGES_PER_GROUP = 10;
 
 type FeeRecordsResponse = {
   rows: FeeRecordRow[];
@@ -90,6 +91,16 @@ export function FeeRecordsBoard({
   const [message, setMessage] = useState("서버 API에서 수수료 기록을 불러옵니다.");
 
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const pageGroupStart =
+    Math.floor((currentPage - 1) / PAGES_PER_GROUP) * PAGES_PER_GROUP + 1;
+  const pageGroupEnd = Math.min(
+    pageGroupStart + PAGES_PER_GROUP - 1,
+    totalPages,
+  );
+  const pageNumbers = Array.from(
+    { length: pageGroupEnd - pageGroupStart + 1 },
+    (_, index) => pageGroupStart + index,
+  );
   const visibleRows = rows.slice(
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE,
@@ -321,13 +332,26 @@ export function FeeRecordsBoard({
         </div>
 
         {totalPages > 1 ? (
-          <div className="flex items-center justify-center gap-2 border-t border-white/8 px-4 py-4">
-            {Array.from({ length: totalPages }, (_, index) => index + 1).map(
-              (page) => (
+          <div className="overflow-x-auto border-t border-white/8 px-4 py-4">
+            <div className="mx-auto flex w-max items-center justify-center gap-2">
+              <button
+                type="button"
+                aria-label="이전 페이지 묶음"
+                title="이전 10페이지"
+                onClick={() =>
+                  setCurrentPage(Math.max(1, pageGroupStart - PAGES_PER_GROUP))
+                }
+                disabled={pageGroupStart === 1}
+                className="h-9 min-w-9 rounded-xl bg-white/[0.05] px-3 text-sm font-semibold text-white/70 transition hover:bg-white/[0.09] disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                &lsaquo;
+              </button>
+              {pageNumbers.map((page) => (
                 <button
                   key={page}
                   type="button"
                   onClick={() => setCurrentPage(page)}
+                  aria-current={page === currentPage ? "page" : undefined}
                   className={`h-9 min-w-9 rounded-xl px-3 text-sm font-semibold transition ${
                     page === currentPage
                       ? "bg-white text-slate-950"
@@ -336,8 +360,18 @@ export function FeeRecordsBoard({
                 >
                   {page}
                 </button>
-              ),
-            )}
+              ))}
+              <button
+                type="button"
+                aria-label="다음 페이지 묶음"
+                title="다음 10페이지"
+                onClick={() => setCurrentPage(pageGroupEnd + 1)}
+                disabled={pageGroupEnd === totalPages}
+                className="h-9 min-w-9 rounded-xl bg-white/[0.05] px-3 text-sm font-semibold text-white/70 transition hover:bg-white/[0.09] disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                &rsaquo;
+              </button>
+            </div>
           </div>
         ) : null}
       </section>
