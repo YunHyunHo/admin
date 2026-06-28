@@ -178,7 +178,7 @@ async function notifyTransactionDecision(payload: TransactionDecisionTelegramPay
     if (!delivery) return;
     const kind = payload.kind === "CHARGE" ? "충전" : "환전";
     const decision = payload.status === "APPROVED" ? "승인" : "거절";
-    const text = `${kind}\n${payload.accountHolder} ${payload.amount.toLocaleString("ko-KR")}원 ${decision}`;
+    const text = `${payload.accountHolder} ${payload.amount.toLocaleString("ko-KR")}원 ${kind} ${decision}`;
     try {
       await telegramCall(decryptToken(setting.bot_token_ciphertext), "sendMessage", { chat_id: setting.chat_id, text });
       await query(`update telegram_notification_deliveries set status='SENT', attempts=attempts+1, sent_at=now(), updated_at=now() where id=$1::uuid`, [delivery.id]);
