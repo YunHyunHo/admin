@@ -1,12 +1,10 @@
 import { getFeeRecords } from "@/lib/mock-report-service";
 import { hasDatabaseUrl, query } from "@/lib/db";
-import { formatKoreanDateTime } from "@/lib/korean-time";
+import { KOREA_TIME_ZONE, formatKoreanDateTime } from "@/lib/korean-time";
 import { getScopedDataCondition, type ScopedClause } from "@/lib/master-scope";
 import { getAdminSettingsFromCookie } from "@/lib/settings-cookie";
 import { getMockChargeStateFromCookie } from "@/lib/mock-state-cookie";
 import type { SessionUser } from "@/lib/auth";
-
-const DEFAULT_ROW_LIMIT = 200;
 
 export type FeeRecordRow = {
   id: string;
@@ -136,8 +134,8 @@ export async function getFeeRecordsForUser(
           cr.status in ('APPROVED', 'COMPLETED')
           and t.source_type in (${commissionSourceTypes})
           and t.amount > 0
-          and coalesce(cr.processed_at, t.created_at) >= $1::date
-          and coalesce(cr.processed_at, t.created_at) < ($2::date + interval '1 day')
+          and (coalesce(cr.processed_at, t.created_at) at time zone '${KOREA_TIME_ZONE}')::date >= $1::date
+          and (coalesce(cr.processed_at, t.created_at) at time zone '${KOREA_TIME_ZONE}')::date <= $2::date
           ${scopeSql}
 
         union all
@@ -173,8 +171,8 @@ export async function getFeeRecordsForUser(
           co.status in ('APPROVED', 'COMPLETED')
           and cr.status in ('APPROVED', 'COMPLETED')
           and co.distributor_fee > 0
-          and coalesce(cr.processed_at, co.created_at) >= $1::date
-          and coalesce(cr.processed_at, co.created_at) < ($2::date + interval '1 day')
+          and (coalesce(cr.processed_at, co.created_at) at time zone '${KOREA_TIME_ZONE}')::date >= $1::date
+          and (coalesce(cr.processed_at, co.created_at) at time zone '${KOREA_TIME_ZONE}')::date <= $2::date
           and not exists (
             select 1
             from distributor_balance_transactions split
@@ -214,8 +212,8 @@ export async function getFeeRecordsForUser(
           co.status in ('APPROVED', 'COMPLETED')
           and cr.status in ('APPROVED', 'COMPLETED')
           and greatest(co.saved_commission - co.company_fee - co.distributor_fee, 0) > 0
-          and coalesce(cr.processed_at, co.created_at) >= $1::date
-          and coalesce(cr.processed_at, co.created_at) < ($2::date + interval '1 day')
+          and (coalesce(cr.processed_at, co.created_at) at time zone '${KOREA_TIME_ZONE}')::date >= $1::date
+          and (coalesce(cr.processed_at, co.created_at) at time zone '${KOREA_TIME_ZONE}')::date <= $2::date
           and not exists (
             select 1
             from distributor_balance_transactions split
@@ -228,7 +226,6 @@ export async function getFeeRecordsForUser(
       select *
       from fee_rows
       order by acquired_at desc
-      limit ${DEFAULT_ROW_LIMIT}
     `,
     values,
   );
