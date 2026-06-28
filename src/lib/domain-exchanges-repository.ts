@@ -25,6 +25,7 @@ type ExchangeRequestDbRow = {
   distributor_name: string | null;
   child_distributor_names: string | null;
   top_distributor_name: string | null;
+  company_name: string | null;
   domain_name: string | null;
   bank_name: string | null;
   account_holder: string | null;
@@ -107,6 +108,7 @@ function toExchangeRow(row: ExchangeRequestDbRow): DomainExchangeRow {
     topDistributor: topDistributorName,
     distributor: distributorName,
     loginId: row.user_uid ?? "-",
+    companyName: row.company_name ?? "-",
     domain: row.domain_name ?? "-",
     bankName: row.bank_name ?? "-",
     accountHolder: row.account_holder ?? "-",
@@ -141,6 +143,7 @@ export async function getDomainExchangeRows(
         case when parent_dist.id is null then null else dist.name end as distributor_name,
         child_dist.names as child_distributor_names,
         coalesce(parent_dist.name, dist.name) as top_distributor_name,
+        c.company_name,
         dom.domain_name,
         er.bank_name,
         er.account_holder,
@@ -150,6 +153,7 @@ export async function getDomainExchangeRows(
         er.processed_at,
         er.status::text as status
       from exchange_requests er
+      join companies c on c.id = er.company_id
       left join domains dom on dom.id = er.domain_id
       left join distributors dist on dist.id = er.distributor_id
       left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id

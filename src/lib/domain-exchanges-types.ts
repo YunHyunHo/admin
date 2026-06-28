@@ -4,6 +4,7 @@ export type DomainExchangeRow = {
   topDistributor: string;
   distributor: string;
   loginId: string;
+  companyName: string;
   domain: string;
   bankName: string;
   accountHolder: string;

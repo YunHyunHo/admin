@@ -20,6 +20,7 @@ export const fallbackDomainExchanges: DomainExchangeRow[] = [
     topDistributor: "댕댕이",
     distributor: "수水",
     loginId: "ess1234",
+    companyName: "아이락스",
     domain: "아이락스",
     bankName: "신한은행",
     accountHolder: "네이쳐블",
@@ -35,6 +36,7 @@ export const fallbackDomainExchanges: DomainExchangeRow[] = [
     topDistributor: "댕댕이",
     distributor: "수水",
     loginId: "ess1234",
+    companyName: "아이락스",
     domain: "아이락스",
     bankName: "신한은행",
     accountHolder: "네이쳐블",
@@ -50,6 +52,7 @@ export const fallbackDomainExchanges: DomainExchangeRow[] = [
     topDistributor: "댕댕이",
     distributor: "수水",
     loginId: "ess1234",
+    companyName: "아이락스",
     domain: "아이락스",
     bankName: "신한은행",
     accountHolder: "네이쳐블",
@@ -65,6 +68,7 @@ export const fallbackDomainExchanges: DomainExchangeRow[] = [
     topDistributor: "댕댕이",
     distributor: "수水",
     loginId: "ess1234",
+    companyName: "아이락스",
     domain: "아이락스",
     bankName: "신한은행",
     accountHolder: "네이쳐블",
@@ -80,6 +84,7 @@ export const fallbackDomainExchanges: DomainExchangeRow[] = [
     topDistributor: "댕댕이",
     distributor: "수水",
     loginId: "ess1234",
+    companyName: "아이락스",
     domain: "아이락스",
     bankName: "신한은행",
     accountHolder: "네이쳐블",
@@ -95,6 +100,7 @@ export const fallbackDomainExchanges: DomainExchangeRow[] = [
     topDistributor: "댕댕이",
     distributor: "수水",
     loginId: "ess1234",
+    companyName: "아이락스",
     domain: "아이락스",
     bankName: "신한은행",
     accountHolder: "네이쳐블",
@@ -110,6 +116,7 @@ export const fallbackDomainExchanges: DomainExchangeRow[] = [
     topDistributor: "댕댕이",
     distributor: "수水",
     loginId: "ess1234",
+    companyName: "아이락스",
     domain: "아이락스",
     bankName: "신한은행",
     accountHolder: "네이쳐블",
@@ -125,6 +132,7 @@ export const fallbackDomainExchanges: DomainExchangeRow[] = [
     topDistributor: "댕댕이",
     distributor: "수水",
     loginId: "ess1234",
+    companyName: "아이락스",
     domain: "아이락스",
     bankName: "신한은행",
     accountHolder: "네이쳐블",
@@ -140,6 +148,7 @@ export const fallbackDomainExchanges: DomainExchangeRow[] = [
     topDistributor: "댕댕이",
     distributor: "수水",
     loginId: "ess1234",
+    companyName: "아이락스",
     domain: "아이락스",
     bankName: "신한은행",
     accountHolder: "네이쳐블",
@@ -155,6 +164,7 @@ export const fallbackDomainExchanges: DomainExchangeRow[] = [
     topDistributor: "댕댕이",
     distributor: "수水",
     loginId: "ess1234",
+    companyName: "아이락스",
     domain: "아이락스",
     bankName: "신한은행",
     accountHolder: "네이쳐블",
@@ -170,6 +180,7 @@ export const fallbackDomainExchanges: DomainExchangeRow[] = [
     topDistributor: "코인뱅크",
     distributor: "시라소니",
     loginId: "kks1515",
+    companyName: "브이오",
     domain: "브이오",
     bankName: "국민은행",
     accountHolder: "1",
@@ -185,6 +196,7 @@ export const fallbackDomainExchanges: DomainExchangeRow[] = [
     topDistributor: "코인뱅크",
     distributor: "비비",
     loginId: "join1234",
+    companyName: "조인벳",
     domain: "조인벳",
     bankName: "기업은행",
     accountHolder: "(주)한국중증장애인연합회",
@@ -490,13 +502,14 @@ export function DomainExchangesBoard({
         ) : null}
 
         <div className="overflow-x-auto rounded-[26px] border border-white/8 bg-black/18">
-          <table className="w-full min-w-[1440px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[1560px] border-collapse text-left text-sm">
             <thead className="bg-black/52 text-white/72">
               <tr>
                 {[
                   "상위총판",
                   "총판",
                   "로그인 ID",
+                  "업체명",
                   "도메인",
                   "출금은행",
                   "예금주",
@@ -525,6 +538,7 @@ export function DomainExchangesBoard({
                     <td className="px-4 py-4 text-center">{row.topDistributor}</td>
                     <td className="px-4 py-4 text-center">{row.distributor}</td>
                     <td className="px-4 py-4 text-center">{row.loginId}</td>
+                    <td className="px-4 py-4 text-center">{row.companyName}</td>
                     <td className="px-4 py-4 text-center">{row.domain}</td>
                     <td className="px-4 py-4 text-center">{row.bankName}</td>
                     <td className="px-4 py-4 text-center">{row.accountHolder}</td>
@@ -571,7 +585,7 @@ export function DomainExchangesBoard({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={11} className="px-4 py-10 text-center text-sm text-white/40">
+                  <td colSpan={12} className="px-4 py-10 text-center text-sm text-white/40">
                     조건에 맞는 환전 요청이 없습니다.
                   </td>
                 </tr>
