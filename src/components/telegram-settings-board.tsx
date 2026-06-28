@@ -28,6 +28,15 @@ export function TelegramSettingsBoard({ initialSettings }: { initialSettings: Se
     }
   }
 
+  async function copyConnectionLink(startUrl: string) {
+    try {
+      await navigator.clipboard.writeText(startUrl);
+      setMessage("업체에 전달할 텔레그램 연결 링크를 복사했습니다.");
+    } catch {
+      setMessage("연결 링크를 복사하지 못했습니다. 브라우저의 클립보드 권한을 확인해주세요.");
+    }
+  }
+
   return (
     <section className="rounded-[28px] border border-white/8 bg-[#10131a] p-5 sm:p-6">
       <p className="text-xs uppercase tracking-[0.24em] text-cyan-300/55">Telegram</p>
@@ -44,7 +53,7 @@ export function TelegramSettingsBoard({ initialSettings }: { initialSettings: Se
               <input type="password" value={tokens[setting.domainId] ?? ""} onChange={(event) => setTokens((current) => ({ ...current, [setting.domainId]: event.target.value }))} placeholder="BotFather에서 발급받은 봇 토큰" className="h-11 min-w-0 flex-1 rounded-2xl border border-white/10 bg-black/20 px-4 text-sm text-white outline-none" />
               <button type="button" onClick={() => void run("save-token", setting.domainId)} disabled={busy !== null} className="h-11 rounded-2xl bg-cyan-500 px-4 text-sm font-semibold text-slate-950 disabled:opacity-40">봇 확인</button>
             </div>
-            {setting.botUsername ? <div className="mt-4 rounded-2xl border border-white/8 bg-black/15 p-4 text-sm text-white/65"><p>1. 아래 도메인 전용 링크로 텔레그램 봇을 엽니다.</p><p className="mt-1">2. 텔레그램의 <strong className="text-white">시작</strong> 버튼을 누른 뒤 연결을 확인합니다.</p><div className="mt-3 flex flex-wrap gap-2">{setting.startUrl ? <a href={setting.startUrl} target="_blank" rel="noreferrer" className="rounded-xl border border-cyan-300/20 px-4 py-2 font-semibold text-cyan-100">@{setting.botUsername} 열기</a> : null}<button type="button" onClick={() => void run("connect-chat", setting.domainId)} disabled={busy !== null} className="rounded-xl bg-fuchsia-500 px-4 py-2 font-semibold text-white disabled:opacity-40">채팅방 연결 확인</button>{setting.connected ? <button type="button" onClick={() => void run("test", setting.domainId)} disabled={busy !== null} className="rounded-xl border border-white/10 px-4 py-2 font-semibold text-white disabled:opacity-40">테스트 알림</button> : null}</div></div> : null}
+            {setting.botUsername ? <div className="mt-4 rounded-2xl border border-white/8 bg-black/15 p-4 text-sm text-white/65"><p>1. 아래 연결 링크를 복사해 해당 업체에 전달합니다.</p><p className="mt-1">2. 업체가 텔레그램의 <strong className="text-white">시작</strong> 버튼을 누르면 연결을 확인합니다.</p><div className="mt-3 flex flex-wrap gap-2">{setting.startUrl ? <button type="button" onClick={() => void copyConnectionLink(setting.startUrl!)} className="rounded-xl border border-cyan-300/20 px-4 py-2 font-semibold text-cyan-100">연결 링크 복사</button> : null}<button type="button" onClick={() => void run("connect-chat", setting.domainId)} disabled={busy !== null} className="rounded-xl bg-fuchsia-500 px-4 py-2 font-semibold text-white disabled:opacity-40">채팅방 연결 확인</button>{setting.connected ? <button type="button" onClick={() => void run("test", setting.domainId)} disabled={busy !== null} className="rounded-xl border border-white/10 px-4 py-2 font-semibold text-white disabled:opacity-40">테스트 알림</button> : null}</div></div> : null}
           </article>
         ))}
       </div>
