@@ -249,7 +249,51 @@ export function FeeRecordsBoard({
       </section>
 
       <section className="overflow-hidden rounded-[28px] border border-white/8 bg-black/18">
-        <div className="overflow-x-auto">
+        <div className="space-y-3 p-3 md:hidden">
+          {visibleRows.length > 0 ? (
+            visibleRows.map((row) => (
+              <article
+                key={`mobile-${row.id}`}
+                className="rounded-2xl border border-white/10 bg-white/[0.035] p-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-white">{row.domain}</p>
+                    <p className="mt-1 truncate text-xs text-white/45">/{row.uid}</p>
+                  </div>
+                  <p className="shrink-0 text-sm font-semibold text-cyan-100">
+                    {formatKoreanWon(row.fee)}
+                  </p>
+                </div>
+                <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3 text-sm">
+                  {[
+                    ["상위총판", row.topAgent],
+                    ["총판", row.subAgent],
+                    ["획득지점", row.acquisitionBranch],
+                    ["거래액", formatKoreanWon(row.amount)],
+                    ["요율", formatRate(row.feeRate)],
+                    ["입금은행", row.bankName],
+                    ["획득일", row.acquiredAt],
+                    ["거래요청일", row.requestedAt],
+                  ].map(([label, value]) => (
+                    <div key={`${row.id}-${label}`} className="min-w-0">
+                      <dt className="text-xs text-white/38">{label}</dt>
+                      <dd className="mt-1 break-words font-medium text-white/86">
+                        {value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </article>
+            ))
+          ) : (
+            <div className="px-4 py-12 text-center text-sm text-white/48">
+              선택한 기간에 수수료 기록이 없습니다.
+            </div>
+          )}
+        </div>
+
+        <div className="hidden overflow-x-auto md:block">
           <table className="min-w-[1500px] w-full border-collapse text-sm">
             <thead>
               <tr className="bg-black/60 text-white">
@@ -333,7 +377,7 @@ export function FeeRecordsBoard({
 
         {totalPages > 1 ? (
           <div className="overflow-x-auto border-t border-white/8 px-4 py-4">
-            <div className="mx-auto flex w-max items-center justify-center gap-2">
+            <div className="mx-auto flex w-max items-center justify-center gap-1 sm:gap-2">
               <button
                 type="button"
                 aria-label="이전 페이지 묶음"
@@ -342,7 +386,7 @@ export function FeeRecordsBoard({
                   setCurrentPage(Math.max(1, pageGroupStart - PAGES_PER_GROUP))
                 }
                 disabled={pageGroupStart === 1}
-                className="h-9 min-w-9 rounded-xl bg-white/[0.05] px-3 text-sm font-semibold text-white/70 transition hover:bg-white/[0.09] disabled:cursor-not-allowed disabled:opacity-30"
+                className="h-8 min-w-8 rounded-xl bg-white/[0.05] px-2 text-xs font-semibold text-white/70 transition hover:bg-white/[0.09] disabled:cursor-not-allowed disabled:opacity-30 sm:h-9 sm:min-w-9 sm:px-3 sm:text-sm"
               >
                 &lsaquo;
               </button>
@@ -352,7 +396,7 @@ export function FeeRecordsBoard({
                   type="button"
                   onClick={() => setCurrentPage(page)}
                   aria-current={page === currentPage ? "page" : undefined}
-                  className={`h-9 min-w-9 rounded-xl px-3 text-sm font-semibold transition ${
+                  className={`h-8 min-w-7 rounded-xl px-1.5 text-xs font-semibold transition sm:h-9 sm:min-w-9 sm:px-3 sm:text-sm ${
                     page === currentPage
                       ? "bg-white text-slate-950"
                       : "bg-white/[0.05] text-white/70 hover:bg-white/[0.09]"
@@ -367,7 +411,7 @@ export function FeeRecordsBoard({
                 title="다음 10페이지"
                 onClick={() => setCurrentPage(pageGroupEnd + 1)}
                 disabled={pageGroupEnd === totalPages}
-                className="h-9 min-w-9 rounded-xl bg-white/[0.05] px-3 text-sm font-semibold text-white/70 transition hover:bg-white/[0.09] disabled:cursor-not-allowed disabled:opacity-30"
+                className="h-8 min-w-8 rounded-xl bg-white/[0.05] px-2 text-xs font-semibold text-white/70 transition hover:bg-white/[0.09] disabled:cursor-not-allowed disabled:opacity-30 sm:h-9 sm:min-w-9 sm:px-3 sm:text-sm"
               >
                 &rsaquo;
               </button>

@@ -274,9 +274,9 @@ export function GlobalDashboardSummaryPanel({
             visiblePartnerSummaries.map((item, index) => (
                 <div
                   key={`global-summary-grid-${item.id}`}
-                  className="grid min-h-[72px] grid-cols-[minmax(7rem,1fr)_repeat(4,minmax(5.25rem,1fr))] bg-[#12151c] text-center text-sm text-white"
+                  className="grid min-h-[72px] grid-cols-2 gap-px bg-white/8 text-center text-sm text-white sm:grid-cols-[minmax(7rem,1fr)_repeat(4,minmax(5.25rem,1fr))] sm:gap-0"
                 >
-                  <div className="flex items-center justify-center gap-2 border-r border-white/8 bg-white/[0.045] px-2 font-semibold text-white/90">
+                  <div className="col-span-2 flex min-h-14 items-center justify-center gap-2 bg-[#181c24] px-3 font-semibold text-white/90 sm:col-span-1 sm:min-h-0 sm:border-r sm:border-white/8 sm:bg-white/[0.045] sm:px-2">
                     <span className="min-w-0 line-clamp-2 break-keep">
                       {item.name}
                     </span>
@@ -311,7 +311,7 @@ export function GlobalDashboardSummaryPanel({
                   {getMetricValues(item).map((value, index) => (
                     <div
                       key={`${item.id}-${metricLabels[index]}`}
-                      className="grid grid-rows-2 border-r border-white/8 last:border-r-0"
+                      className="grid min-h-16 grid-rows-2 bg-[#12151c] sm:min-h-0 sm:border-r sm:border-white/8 sm:last:border-r-0"
                     >
                       <div className="flex items-center justify-center border-b border-white/8 bg-white/[0.025] px-2 text-xs font-semibold tracking-[0.12em] text-white/54">
                         {metricLabels[index]}

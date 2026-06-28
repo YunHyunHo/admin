@@ -316,7 +316,70 @@ export function DomainSettlementBoard({
                 <p className="text-xs text-white/44">{group.rows.length}건</p>
               </div>
 
-              <div className="overflow-hidden border border-white/40">
+              <div className="space-y-2 md:hidden">
+                {group.rows.map((row, rowIndex) => (
+                  <div
+                    key={`mobile-${group.domainName}-${row.date}-${rowIndex}`}
+                    className="rounded-2xl border border-white/10 bg-white/[0.035] p-4"
+                  >
+                    <p className="text-sm font-semibold text-cyan-100">
+                      {toDisplayDate(row.date)}
+                    </p>
+                    <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                      {[
+                        ["충전", formatSettlementValue(row.charge)],
+                        [
+                          "수수료",
+                          formatSettlementValue(
+                            row.company + row.topDistributor + row.distributor,
+                          ),
+                        ],
+                        ["환전(도메인)", formatSettlementValue(row.exchange)],
+                        ["상위총판", formatSettlementValue(row.topDistributor)],
+                        ["총판", formatSettlementValue(row.distributor, true)],
+                      ].map(([label, value]) => (
+                        <div
+                          key={`${group.domainName}-${row.date}-${label}`}
+                          className="rounded-xl bg-black/20 px-3 py-2.5"
+                        >
+                          <dt className="text-xs text-white/42">{label}</dt>
+                          <dd className="mt-1 break-all font-semibold text-white/90">
+                            {value}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                ))}
+                <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/[0.07] p-4">
+                  <p className="text-sm font-semibold text-cyan-100">합계</p>
+                  <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                    {[
+                      ["충전", formatSettlementValue(group.total.charge)],
+                      [
+                        "수수료",
+                        formatSettlementValue(
+                          group.total.company +
+                            group.total.topDistributor +
+                            group.total.distributor,
+                        ),
+                      ],
+                      ["환전(도메인)", formatSettlementValue(group.total.exchange)],
+                      ["상위총판", formatSettlementValue(group.total.topDistributor)],
+                      ["총판", formatSettlementValue(group.total.distributor)],
+                    ].map(([label, value]) => (
+                      <div key={`${group.domainName}-total-${label}`}>
+                        <dt className="text-xs text-white/42">{label}</dt>
+                        <dd className="mt-1 break-all font-semibold text-white">
+                          {value}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              </div>
+
+              <div className="hidden overflow-hidden border border-white/40 md:block">
                 <div className="overflow-x-auto">
                   <table className="min-w-full table-fixed text-sm">
                     <thead>

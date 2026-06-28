@@ -284,13 +284,47 @@ export async function AdminShell({
             <header className="sticky top-0 z-30 border-b border-cyan-300/24 bg-[#0b0d12]/92 shadow-[0_16px_42px_rgba(0,0,0,0.28)] backdrop-blur-xl">
               <div className="flex min-h-[72px] flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex shrink-0 items-center gap-2">
-                  <button
-                    type="button"
-                    aria-label="메뉴 열기"
-                    className="grid h-11 w-11 place-items-center rounded-2xl border border-white/8 bg-white/[0.03] text-lg text-white/72 xl:hidden"
-                  >
-                    ☰
-                  </button>
+                  <details className="group relative xl:hidden">
+                    <summary
+                      aria-label="메뉴 열기"
+                      className="grid h-11 w-11 cursor-pointer list-none place-items-center rounded-2xl border border-white/8 bg-white/[0.03] text-lg text-white/72 transition hover:bg-white/[0.07] [&::-webkit-details-marker]:hidden"
+                    >
+                      <span className="group-open:hidden" aria-hidden="true">☰</span>
+                      <span className="hidden group-open:inline" aria-hidden="true">×</span>
+                    </summary>
+                    <nav className="absolute left-0 top-[calc(100%+0.75rem)] z-50 max-h-[calc(100vh-6rem)] w-[min(20rem,calc(100vw-2rem))] overflow-y-auto rounded-3xl border border-cyan-300/24 bg-[#11151d] p-3 shadow-[0_24px_80px_rgba(0,0,0,0.65)]">
+                      <div className="mb-3 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
+                        <p className="text-sm font-semibold text-white/90">
+                          {userRoleLabel}[{user.companyName}]
+                        </p>
+                        <p className="mt-1 text-xs text-white/45">{user.username}</p>
+                      </div>
+                      <div className="space-y-3">
+                        {visibleMenuGroups.map((group) => (
+                          <div key={`mobile-${group.title}`}>
+                            <p className="px-3 pb-1 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-white/38">
+                              {group.title}
+                            </p>
+                            <div className="space-y-1">
+                              {group.items.map((menu) => (
+                                <Link
+                                  key={`mobile-${menu.key}`}
+                                  href={menu.href}
+                                  className={`block rounded-2xl px-4 py-3 text-sm font-medium transition ${
+                                    menu.key === activeItem
+                                      ? "bg-cyan-500/16 text-cyan-100"
+                                      : "text-white/68 hover:bg-white/[0.06] hover:text-white"
+                                  }`}
+                                >
+                                  {menu.title}
+                                </Link>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </nav>
+                  </details>
                   <div className="min-w-0 lg:hidden">
                     <p className="truncate text-sm font-medium text-white/88">
                       {user.companyName}

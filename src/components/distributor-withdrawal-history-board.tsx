@@ -473,6 +473,46 @@ export function DistributorWithdrawalHistoryBoard({
     );
   }
 
+  function renderWithdrawalStatus(row: WithdrawalRow) {
+    if (canProcessWithdrawals && row.status === "승인중") {
+      return (
+        <div className="flex items-center gap-2 md:flex-col md:gap-1">
+          <button
+            type="button"
+            onClick={() => void processWithdrawal(row.id, "approve")}
+            className="rounded-lg bg-cyan-400 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-cyan-300"
+          >
+            승인
+          </button>
+          <button
+            type="button"
+            onClick={() => void processWithdrawal(row.id, "reject")}
+            className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-500"
+          >
+            거절
+          </button>
+        </div>
+      );
+    }
+
+    if (canProcessWithdrawals && row.status === "승인") {
+      return (
+        <div className="flex items-center gap-2 md:flex-col md:gap-1">
+          <span className="text-white/70">{row.status}</span>
+          <button
+            type="button"
+            onClick={() => void processWithdrawal(row.id, "cancel")}
+            className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-500"
+          >
+            승인취소
+          </button>
+        </div>
+      );
+    }
+
+    return <span className="text-white/70">{row.status}</span>;
+  }
+
   return (
     <section className="rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,_rgba(18,18,18,0.95)_0%,_rgba(14,14,16,0.98)_100%)] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.34)] sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -500,7 +540,58 @@ export function DistributorWithdrawalHistoryBoard({
       ) : null}
 
       <div className="mt-5 overflow-hidden border border-white/24 bg-black/10">
-        <div className="overflow-x-auto">
+        <div className="space-y-3 p-3 md:hidden">
+          {pageRows.length ? (
+            pageRows.map((row) => (
+              <article
+                key={`mobile-${row.id}`}
+                className="rounded-2xl border border-white/10 bg-white/[0.035] p-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-white">
+                      {row.withdrawalBranch}
+                    </p>
+                    <p className="mt-1 truncate text-xs text-white/45">
+                      상위총판 {row.topDistributor}
+                    </p>
+                  </div>
+                  <p className="shrink-0 text-sm font-semibold text-cyan-100">
+                    {formatKoreanWon(row.requestAmount)}
+                  </p>
+                </div>
+                <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3 text-sm">
+                  {[
+                    ["보유액", formatKoreanWon(row.currentBalance)],
+                    ["신청자", row.requester],
+                    ["출금은행", row.bankName],
+                    ["예금주", row.accountHolder],
+                    ["계좌번호", row.accountNumber],
+                    ["요청일", row.requestedAt],
+                    ["완료일", row.completedAt || "-"],
+                  ].map(([label, value]) => (
+                    <div key={`${row.id}-${label}`} className="min-w-0">
+                      <dt className="text-xs text-white/38">{label}</dt>
+                      <dd className="mt-1 break-words font-medium text-white/86">
+                        {value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+                <div className="mt-4 flex items-center justify-between border-t border-white/8 pt-3">
+                  <span className="text-xs text-white/38">처리 상태</span>
+                  {renderWithdrawalStatus(row)}
+                </div>
+              </article>
+            ))
+          ) : (
+            <div className="px-4 py-12 text-center text-sm text-white/48">
+              총판 환전 내역이 없습니다.
+            </div>
+          )}
+        </div>
+
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[1580px] border-collapse text-sm">
             <thead className="bg-black/68 text-white">
               <tr>
@@ -560,37 +651,7 @@ export function DistributorWithdrawalHistoryBoard({
                     {row.requestedAt}
                   </td>
                   <td className="border border-white/18 px-4 py-4 text-center">
-                    {canProcessWithdrawals && row.status === "승인중" ? (
-                      <div className="flex flex-col items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => void processWithdrawal(row.id, "approve")}
-                          className="rounded-lg bg-cyan-400 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-cyan-300"
-                        >
-                          승인
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void processWithdrawal(row.id, "reject")}
-                          className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-500"
-                        >
-                          거절
-                        </button>
-                      </div>
-                    ) : canProcessWithdrawals && row.status === "승인" ? (
-                      <div className="flex flex-col items-center gap-1">
-                        <span className="text-white/70">{row.status}</span>
-                        <button
-                          type="button"
-                          onClick={() => void processWithdrawal(row.id, "cancel")}
-                          className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-500"
-                        >
-                          승인취소
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-white/70">{row.status}</span>
-                    )}
+                    {renderWithdrawalStatus(row)}
                   </td>
                   <td className="border border-white/18 px-4 py-4 text-center">
                     {row.completedAt}
@@ -619,6 +680,10 @@ export function DistributorWithdrawalHistoryBoard({
             ‹
           </button>
 
+          <span className="min-w-16 text-center text-sm font-semibold text-white/72 sm:hidden">
+            {page} / {pageCount}
+          </span>
+
           {Array.from({ length: Math.min(pageCount, 5) }, (_, index) => {
             const pageNumber = index + 1;
 
@@ -627,7 +692,7 @@ export function DistributorWithdrawalHistoryBoard({
                 key={pageNumber}
                 type="button"
                 onClick={() => setPage(pageNumber)}
-                className={`h-10 min-w-10 rounded-xl px-3 text-lg font-semibold ${
+                className={`hidden h-10 min-w-10 rounded-xl px-3 text-lg font-semibold sm:inline-flex sm:items-center sm:justify-center ${
                   page === pageNumber
                     ? "bg-white text-slate-950"
                     : "bg-black text-white"
