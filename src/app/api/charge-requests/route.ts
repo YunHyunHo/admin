@@ -17,6 +17,7 @@ import {
 } from "@/lib/mock-state-cookie";
 import type { ProcessedRequest } from "@/lib/charge-utils";
 import { canProcessRequests } from "@/lib/permissions";
+import { notifyChargeDecision } from "@/lib/telegram-notifications";
 
 const allowedStatuses: ProcessedRequest["status"][] = ["승인", "승인거절"];
 
@@ -163,6 +164,11 @@ export async function POST(request: Request) {
         { status: 404 },
       );
     }
+
+    await notifyChargeDecision(
+      body.id,
+      body.status === "승인" ? "APPROVED" : "REJECTED",
+    );
 
     return NextResponse.json({
       processedRequest,

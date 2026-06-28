@@ -156,7 +156,11 @@ export type ExchangeDecisionTelegramPayload = {
   status: "APPROVED" | "REJECTED";
 };
 
-export async function notifyExchangeDecision(payload: ExchangeDecisionTelegramPayload) {
+type TransactionDecisionTelegramPayload = ExchangeDecisionTelegramPayload & {
+  kind: "CHARGE" | "EXCHANGE";
+};
+
+async function notifyTransactionDecision(payload: TransactionDecisionTelegramPayload) {
   if (!payload.domainId) return;
   try {
     await ensureTelegramSchema();
@@ -165,17 +169,16 @@ export async function notifyExchangeDecision(payload: ExchangeDecisionTelegramPa
       where domain_id = $1::uuid and enabled = true and chat_id is not null
     `, [payload.domainId])).rows[0];
     if (!setting) return;
-    const eventType = payload.status === "APPROVED"
-      ? "DOMAIN_EXCHANGE_APPROVED"
-      : "DOMAIN_EXCHANGE_REJECTED";
+    const eventType = `DOMAIN_${payload.kind}_${payload.status}`;
     const delivery = (await query<{ id: string }>(`
       insert into telegram_notification_deliveries (setting_id, event_type, event_id)
       values ($1::uuid, $2, $3::uuid)
       on conflict (setting_id, event_type, event_id) do nothing returning id::text
     `, [setting.id, eventType, payload.id])).rows[0];
     if (!delivery) return;
+    const kind = payload.kind === "CHARGE" ? "충전" : "환전";
     const decision = payload.status === "APPROVED" ? "승인" : "거절";
-    const text = `${payload.accountHolder} ${payload.amount.toLocaleString("ko-KR")}원 ${decision}`;
+    const text = `${kind}\n${payload.accountHolder} ${payload.amount.toLocaleString("ko-KR")}원 ${decision}`;
     try {
       await telegramCall(decryptToken(setting.bot_token_ciphertext), "sendMessage", { chat_id: setting.chat_id, text });
       await query(`update telegram_notification_deliveries set status='SENT', attempts=attempts+1, sent_at=now(), updated_at=now() where id=$1::uuid`, [delivery.id]);
@@ -184,5 +187,38 @@ export async function notifyExchangeDecision(payload: ExchangeDecisionTelegramPa
     }
   } catch (error) {
     console.error("Telegram notification failed", error);
+  }
+}
+
+export async function notifyExchangeDecision(payload: ExchangeDecisionTelegramPayload) {
+  await notifyTransactionDecision({ ...payload, kind: "EXCHANGE" });
+}
+
+export async function notifyChargeDecision(
+  id: string,
+  status: "APPROVED" | "REJECTED",
+) {
+  try {
+    const charge = (await query<{
+      id: string;
+      domain_id: string | null;
+      depositor: string | null;
+      amount: string;
+    }>(`
+      select id::text, domain_id::text, depositor, amount::text
+      from charge_requests
+      where id = $1::uuid and status = $2::request_status
+    `, [id, status])).rows[0];
+    if (!charge) return;
+    await notifyTransactionDecision({
+      id: charge.id,
+      domainId: charge.domain_id,
+      accountHolder: charge.depositor ?? "-",
+      amount: Number(charge.amount),
+      status,
+      kind: "CHARGE",
+    });
+  } catch (error) {
+    console.error("Telegram charge notification failed", error);
   }
 }
