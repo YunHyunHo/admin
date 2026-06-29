@@ -58,6 +58,7 @@ type HistoryFilters = {
 
 const rowsPerPage = 10;
 const pagesPerGroup = 10;
+const minimumChargeAmount = 1000;
 const chargeNoticeSoundPath = "/sounds/notice.mp3";
 const dashboardSummaryRefreshEvent = "dashboard-summary-refresh";
 const emptyHistoryFilters: HistoryFilters = {
@@ -612,8 +613,8 @@ export function ChargeRequestsBoard({
     const domainName =
       domainOptions.find((domain) => domain.id === domainId)?.name ?? "";
 
-    if (!depositorName || !Number.isFinite(amount) || amount <= 0) {
-      setCreateModalMessage("입금자명과 신청금액을 확인해주세요.");
+    if (!depositorName || !Number.isFinite(amount) || amount < minimumChargeAmount) {
+      setCreateModalMessage("입금자명과 1천원 이상의 신청금액을 확인해주세요.");
       return;
     }
 

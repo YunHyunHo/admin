@@ -20,6 +20,7 @@ import { canProcessRequests } from "@/lib/permissions";
 import { notifyChargeDecision } from "@/lib/telegram-notifications";
 
 const allowedStatuses: ProcessedRequest["status"][] = ["승인", "승인거절"];
+const minimumChargeAmount = 1000;
 
 export const runtime = "nodejs";
 
@@ -87,9 +88,9 @@ export async function POST(request: Request) {
     const domainId = body.domainId?.trim() ?? "";
     const amount = Number(body.amount);
 
-    if (!userId || !Number.isFinite(amount) || amount <= 0) {
+    if (!userId || !Number.isFinite(amount) || amount < minimumChargeAmount) {
       return NextResponse.json(
-        { message: "입금자명과 신청금액을 확인해주세요." },
+        { message: "입금자명과 1천원 이상의 신청금액을 확인해주세요." },
         { status: 400 },
       );
     }

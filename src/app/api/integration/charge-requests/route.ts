@@ -24,7 +24,7 @@ type IntegrationChargePayload = {
   accountNumber?: string;
 };
 
-const minimumChargeAmount = 10000;
+const minimumChargeAmount = 1000;
 
 function isUuid(value: string | undefined) {
   return Boolean(
@@ -199,7 +199,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ok: false,
-        message: "입금자명과 1만원 이상의 충전금액을 확인해주세요.",
+        message: "입금자명과 1천원 이상의 충전금액을 확인해주세요.",
       },
       { status: 400 },
     );
