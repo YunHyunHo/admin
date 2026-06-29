@@ -17,6 +17,13 @@ async function getWithdrawalScope(
   distributorAlias = "d",
   distributorAdminAlias = "dist_admin",
 ) {
+  if (user.role === "TOP_DISTRIBUTOR" || user.role === "ADMIN") {
+    return {
+      sql: `and ${distributorAlias}.admin_id = $1::uuid`,
+      values: [user.id],
+    };
+  }
+
   if (user.role !== "DOMAIN_ADMIN") {
     return getScopedDistributorCondition(
       user,
