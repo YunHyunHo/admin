@@ -46,6 +46,13 @@ const commissionSourceTypes = `
 `;
 
 async function getFeeRecordScope(user: SessionUser): Promise<ScopedClause> {
+  if (user.role === "TOP_DISTRIBUTOR" || user.role === "ADMIN") {
+    return {
+      sql: "and recipient_dist.admin_id = $1::uuid",
+      values: [user.id],
+    };
+  }
+
   return getScopedDataCondition(user, {
     company: "cr",
     distributor: "recipient_dist",
@@ -74,6 +81,35 @@ function toFeeRecord(row: FeeRecordDbRow): FeeRecordRow {
     acquiredAt: formatStamp(row.acquired_at),
     requestedAt: formatStamp(row.requested_at),
   };
+}
+
+function consolidateOwnFeeRecords(rows: FeeRecordRow[]) {
+  const consolidated = new Map<string, FeeRecordRow>();
+
+  for (const row of rows) {
+    const separatorIndex = row.id.indexOf(":");
+    const chargeRequestId = separatorIndex === -1
+      ? row.id
+      : row.id.slice(0, separatorIndex);
+    const existing = consolidated.get(chargeRequestId);
+
+    if (!existing) {
+      consolidated.set(chargeRequestId, { ...row, id: chargeRequestId });
+      continue;
+    }
+
+    const fee = existing.fee + row.fee;
+    consolidated.set(chargeRequestId, {
+      ...existing,
+      fee,
+      feeRate:
+        existing.amount > 0
+          ? Math.round((fee / existing.amount) * 100 * 10000) / 10000
+          : 0,
+    });
+  }
+
+  return [...consolidated.values()];
 }
 
 export async function getFeeRecordsForUser(
@@ -229,7 +265,11 @@ export async function getFeeRecordsForUser(
     `,
     values,
   );
-  const rows = result.rows.map(toFeeRecord);
+  const feeRows = result.rows.map(toFeeRecord);
+  const rows =
+    user.role === "TOP_DISTRIBUTOR" || user.role === "ADMIN"
+      ? consolidateOwnFeeRecords(feeRows)
+      : feeRows;
 
   return {
     rows,

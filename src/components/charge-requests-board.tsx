@@ -1141,9 +1141,21 @@ export function ChargeRequestsBoard({
                           <td className="px-4 py-4">{row.requestedAt}</td>
                           <td className="px-4 py-4">{row.completedAt}</td>
                           <td className="px-4 py-4">
-                            <span className="rounded-full bg-rose-500/12 px-3 py-1 text-xs font-medium text-rose-200">
-                              {row.status}
-                            </span>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="rounded-full bg-rose-500/12 px-3 py-1 text-xs font-medium text-rose-200">
+                                {row.status}
+                              </span>
+                              {canProcessCharges ? (
+                                <button
+                                  type="button"
+                                  onClick={() => moveRequest(row, "승인")}
+                                  disabled={processingId === row.id}
+                                  className="rounded-lg bg-cyan-400 px-3 py-1.5 text-xs font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  승인
+                                </button>
+                              ) : null}
+                            </div>
                           </td>
                         </tr>
                       ))

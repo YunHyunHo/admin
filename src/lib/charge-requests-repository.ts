@@ -287,6 +287,24 @@ async function applyDistributorCommissionCredits(
   }
 }
 
+async function getNextCommissionAdjustmentSourceType(
+  executor: QueryExecutor,
+  sourceId: string,
+  prefix: "COMMISSION_REVERSAL" | "COMMISSION_RESTORE",
+) {
+  const result = await executor.query<{ adjustment_count: string }>(
+    `
+      select count(*)::text as adjustment_count
+      from distributor_balance_transactions
+      where source_id = $1::uuid
+        and source_type like $2
+    `,
+    [sourceId, `${prefix}%`],
+  );
+
+  return `${prefix}_${Number(result.rows[0]?.adjustment_count ?? 0) + 1}`;
+}
+
 function toPendingRequest(row: ChargeRequestRow): PendingRequest {
   const topDistributorName = row.top_distributor_name ?? "-";
   const distributorName = row.distributor_name ?? row.child_distributor_names ?? "-";
@@ -1032,6 +1050,275 @@ export async function processDbChargeRequest(input: {
       return null;
     }
 
+    if (nextStatus === "APPROVED") {
+      const rejectedResult = await client.query<
+        ChargeRequestRow & {
+          company_id: string;
+          domain_id: string | null;
+          distributor_id: string | null;
+        }
+      >(
+        `
+          select
+            cr.id::text,
+            cr.company_id::text,
+            cr.domain_id::text,
+            cr.distributor_id::text,
+            cr.user_uid,
+            cr.bank_name,
+            cr.account_number,
+            cr.account_holder,
+            cr.depositor,
+            cr.amount::text,
+            cr.status::text as status,
+            cr.requested_at,
+            cr.processed_at,
+            c.company_name,
+            d.domain_name,
+            coalesce(parent_dist.name, dist.name) as top_distributor_name,
+            case when parent_dist.id is null then null else dist.name end as distributor_name,
+            (
+              select string_agg(child.name, ', ' order by child.name)
+              from distributors base_dist
+              join distributors child on child.parent_distributor_id = base_dist.id
+              left join distributors base_parent on base_parent.id = base_dist.parent_distributor_id
+              where base_dist.id = cr.distributor_id
+                and base_parent.id is null
+                and child.status = 'ACTIVE'
+            ) as child_distributor_names
+          from charge_requests cr
+          join companies c on c.id = cr.company_id
+          left join domains d on d.id = cr.domain_id
+          left join distributors dist on dist.id = cr.distributor_id
+          left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
+          left join admins dist_admin on dist_admin.id = dist.admin_id
+          where cr.id = $1::uuid
+            and cr.status in ('REJECTED', 'CANCELED')
+            ${scopedSql}
+          for update of cr
+          limit 1
+        `,
+        [input.id, ...scope.values],
+      );
+      const rejected = rejectedResult.rows[0];
+
+      if (rejected) {
+        const historicalCommissionResult = await client.query<{
+          distributor_id: string | null;
+          saved_commission: string;
+        }>(
+          `
+            select distributor_id::text, saved_commission::text
+            from commission_records
+            where charge_request_id = $1::uuid
+            for update
+            limit 1
+          `,
+          [rejected.id],
+        );
+        const historicalCommission = historicalCommissionResult.rows[0];
+
+        if (!historicalCommission) {
+          await client.query(
+            `
+              update charge_requests
+              set status = 'PENDING', updated_at = now()
+              where id = $1::uuid
+                and status in ('REJECTED', 'CANCELED')
+            `,
+            [rejected.id],
+          );
+        } else {
+          const savedCommission = Number(historicalCommission.saved_commission);
+          const netChargeAmount = Number(rejected.amount) - savedCommission;
+
+          if (rejected.domain_id && netChargeAmount > 0) {
+            const balanceResult = await client.query<{ current_balance: string }>(
+              `
+                select current_balance::text
+                from domains
+                where id = $1::uuid
+                  and status <> 'DELETED'
+                for update
+              `,
+              [rejected.domain_id],
+            );
+
+            if (!balanceResult.rows.length) {
+              throw new Error("복구승인할 도메인 정보를 찾을 수 없습니다.");
+            }
+
+            const beforeBalance = Number(balanceResult.rows[0].current_balance);
+            const afterBalance = beforeBalance + netChargeAmount;
+
+            await client.query(
+              `
+                update domains
+                set current_balance = $2, updated_at = now()
+                where id = $1::uuid
+              `,
+              [rejected.domain_id, afterBalance],
+            );
+            await client.query(
+              `
+                insert into admin_audit_logs (
+                  admin_id,
+                  action,
+                  resource_type,
+                  resource_id,
+                  before_data,
+                  after_data
+                )
+                values ($1::uuid, 'charge_request_restored_approval', 'domain', $2::uuid, $3::jsonb, $4::jsonb)
+              `,
+              [
+                input.processedBy,
+                rejected.domain_id,
+                JSON.stringify({ balance: beforeBalance }),
+                JSON.stringify({
+                  balance: afterBalance,
+                  amount: netChargeAmount,
+                  chargeRequestId: rejected.id,
+                }),
+              ],
+            );
+          }
+
+          const commissionTransactions = await client.query<{
+            distributor_id: string;
+            amount: string;
+            source_type: string;
+          }>(
+            `
+              select distributor_id::text, amount::text, source_type
+              from distributor_balance_transactions
+              where source_id = $1::uuid
+                and source_type like 'COMMISSION%'
+              order by created_at asc
+              for update
+            `,
+            [rejected.id],
+          );
+          const originalSourceTypes = new Set([
+            "COMMISSION_TOP_DISTRIBUTOR",
+            "COMMISSION_DISTRIBUTOR",
+            "COMMISSION_SUB_DISTRIBUTOR",
+            "COMMISSION_PARTNER_1",
+            "COMMISSION_PARTNER_2",
+            "COMMISSION_PARTNER_3",
+          ]);
+          const originalByDistributor = new Map<string, number>();
+          const currentByDistributor = new Map<string, number>();
+
+          for (const transaction of commissionTransactions.rows) {
+            const amount = Number(transaction.amount);
+            currentByDistributor.set(
+              transaction.distributor_id,
+              (currentByDistributor.get(transaction.distributor_id) ?? 0) + amount,
+            );
+            if (originalSourceTypes.has(transaction.source_type) && amount > 0) {
+              originalByDistributor.set(
+                transaction.distributor_id,
+                (originalByDistributor.get(transaction.distributor_id) ?? 0) + amount,
+              );
+            }
+          }
+
+          if (originalByDistributor.size) {
+            for (const [distributorId, originalAmount] of originalByDistributor) {
+              const restoreAmount =
+                originalAmount - (currentByDistributor.get(distributorId) ?? 0);
+
+              if (restoreAmount < 0) {
+                throw new Error("수수료 원장 금액이 기존 승인액과 일치하지 않습니다.");
+              }
+              if (restoreAmount === 0) {
+                continue;
+              }
+
+              await applyDistributorCommissionCredit(client, {
+                distributorId,
+                amount: restoreAmount,
+                sourceType: await getNextCommissionAdjustmentSourceType(
+                  client,
+                  rejected.id,
+                  "COMMISSION_RESTORE",
+                ),
+                sourceId: rejected.id,
+                memo: "충전 복구승인 수수료 재적립",
+                processedBy: input.processedBy,
+              });
+            }
+          } else if (
+            historicalCommission.distributor_id &&
+            savedCommission > 0
+          ) {
+            await applyDistributorCommissionCredit(client, {
+              distributorId: historicalCommission.distributor_id,
+              amount: savedCommission,
+              sourceType: await getNextCommissionAdjustmentSourceType(
+                client,
+                rejected.id,
+                "COMMISSION_RESTORE",
+              ),
+              sourceId: rejected.id,
+              memo: "충전 복구승인 수수료 재적립",
+              processedBy: input.processedBy,
+            });
+          }
+
+          await client.query(
+            `
+              update commission_records
+              set status = 'APPROVED'
+              where charge_request_id = $1::uuid
+            `,
+            [rejected.id],
+          );
+
+          const restoredResult = await client.query<ChargeRequestRow>(
+            `
+              update charge_requests
+              set
+                status = 'APPROVED',
+                processed_at = now(),
+                processed_by = $2::uuid,
+                updated_at = now()
+              where id = $1::uuid
+                and status in ('REJECTED', 'CANCELED')
+              returning
+                id::text,
+                user_uid,
+                bank_name,
+                account_number,
+                account_holder,
+                depositor,
+                amount::text,
+                status::text as status,
+                requested_at,
+                processed_at,
+                $3::text as company_name,
+                $4::text as domain_name,
+                $5::text as top_distributor_name,
+                $6::text as distributor_name,
+                $7::text as child_distributor_names
+            `,
+            [
+              rejected.id,
+              input.processedBy,
+              rejected.company_name,
+              rejected.domain_name,
+              rejected.top_distributor_name,
+              rejected.distributor_name,
+              rejected.child_distributor_names,
+            ],
+          );
+
+          return restoredResult;
+        }
+      }
+    }
+
     const updateResult = await client.query<
       ChargeRequestRow & {
         company_id: string;
@@ -1226,36 +1513,74 @@ export async function processDbChargeRequest(input: {
           select distributor_id::text, amount::text, source_type
           from distributor_balance_transactions
           where source_id = $1::uuid
-            and source_type in (
-              'COMMISSION_TOP_DISTRIBUTOR',
-              'COMMISSION_DISTRIBUTOR',
-              'COMMISSION_SUB_DISTRIBUTOR',
-              'COMMISSION_PARTNER_1',
-              'COMMISSION_PARTNER_2',
-              'COMMISSION_PARTNER_3'
-            )
-            and amount > 0
+            and source_type like 'COMMISSION%'
           for update
         `,
         [approved.id],
       );
 
       if (commissionTransactionResult.rows.length) {
+        const balanceByDistributor = new Map<string, number>();
+        const hasOriginalCommission = commissionTransactionResult.rows.some(
+          (transaction) =>
+            [
+              "COMMISSION_TOP_DISTRIBUTOR",
+              "COMMISSION_DISTRIBUTOR",
+              "COMMISSION_SUB_DISTRIBUTOR",
+              "COMMISSION_PARTNER_1",
+              "COMMISSION_PARTNER_2",
+              "COMMISSION_PARTNER_3",
+            ].includes(transaction.source_type) && Number(transaction.amount) > 0,
+        );
+
         for (const transaction of commissionTransactionResult.rows) {
+          balanceByDistributor.set(
+            transaction.distributor_id,
+            (balanceByDistributor.get(transaction.distributor_id) ?? 0) +
+              Number(transaction.amount),
+          );
+        }
+
+        for (const [transactionDistributorId, currentCommission] of balanceByDistributor) {
+          if (!hasOriginalCommission || currentCommission === 0) {
+            continue;
+          }
           await applyDistributorCommissionCredit(client, {
-            distributorId: transaction.distributor_id,
-            amount: -Number(transaction.amount),
-            sourceType: `${transaction.source_type}_REVERSAL`,
+            distributorId: transactionDistributorId,
+            amount: -currentCommission,
+            sourceType: await getNextCommissionAdjustmentSourceType(
+              client,
+              approved.id,
+              "COMMISSION_REVERSAL",
+            ),
             sourceId: approved.id,
             memo: "충전 승인거절 수수료 차감",
             processedBy: input.processedBy,
           });
         }
-      } else if (distributorId && savedCommission > 0) {
+      }
+
+      const hasOriginalCommission = commissionTransactionResult.rows.some(
+        (transaction) =>
+          [
+            "COMMISSION_TOP_DISTRIBUTOR",
+            "COMMISSION_DISTRIBUTOR",
+            "COMMISSION_SUB_DISTRIBUTOR",
+            "COMMISSION_PARTNER_1",
+            "COMMISSION_PARTNER_2",
+            "COMMISSION_PARTNER_3",
+          ].includes(transaction.source_type) && Number(transaction.amount) > 0,
+      );
+
+      if (!hasOriginalCommission && distributorId && savedCommission > 0) {
         await applyDistributorCommissionCredit(client, {
           distributorId,
           amount: -savedCommission,
-          sourceType: "COMMISSION_REVERSAL",
+          sourceType: await getNextCommissionAdjustmentSourceType(
+            client,
+            approved.id,
+            "COMMISSION_REVERSAL",
+          ),
           sourceId: approved.id,
           memo: "충전 승인거절 수수료 차감",
           processedBy: input.processedBy,

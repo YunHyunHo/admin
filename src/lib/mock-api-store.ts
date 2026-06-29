@@ -76,7 +76,12 @@ export function processChargeRequest(
   state: ChargeRequestState = getStore(),
 ) {
   const companyPending = filterRequestsByCompany(state.pending, companyName);
-  const target = companyPending.find((request) => request.id === requestId);
+  const companyRejected = filterRequestsByCompany(state.rejected, companyName);
+  const target =
+    companyPending.find((request) => request.id === requestId) ??
+    (status === "승인"
+      ? companyRejected.find((request) => request.id === requestId)
+      : undefined);
 
   if (!target) {
     return null;
@@ -89,6 +94,7 @@ export function processChargeRequest(
   };
 
   state.pending = state.pending.filter((request) => request.id !== requestId);
+  state.rejected = state.rejected.filter((request) => request.id !== requestId);
 
   if (status === "승인") {
     state.approved = [processedRequest, ...state.approved];
