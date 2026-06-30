@@ -214,15 +214,16 @@ function appendHistoryFilters(
   input: Pick<DomainHistoryQuery, "from" | "to" | "status">,
 ) {
   const status = normalizeStatus(input.status);
+  const koreaDateColumn = `(${column} at time zone '${KOREA_TIME_ZONE}')::date`;
 
   if (input.from) {
     values.push(input.from);
-    clauses.push(`${column} >= $${values.length}::date`);
+    clauses.push(`${koreaDateColumn} >= $${values.length}::date`);
   }
 
   if (input.to) {
     values.push(input.to);
-    clauses.push(`${column} < ($${values.length}::date + interval '1 day')`);
+    clauses.push(`${koreaDateColumn} <= $${values.length}::date`);
   }
 
   if (status) {
