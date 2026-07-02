@@ -29,6 +29,7 @@ import type { SessionUser } from "@/lib/auth";
 const OPTION_ROW_LIMIT = 300;
 const RATE_SCALE = 10000;
 const PERCENT_SCALE = 100;
+const exchangeBalanceReservedKey = "__balanceReserved";
 
 function calculateCommissionAmount(amount: number, rate: number) {
   const scaledRate = Math.round(rate * RATE_SCALE);
@@ -124,59 +125,31 @@ async function getDomainChargeBalance(
   domainId: string,
 ): Promise<DomainChargeBalance> {
   const result = await executor.query<{
-    charge_amount: string;
-    fee_amount: string;
-    approved_exchange_amount: string;
+    current_balance: string;
     pending_exchange_amount: string;
   }>(
     `
       select
-        coalesce(sum(source.charge_amount), 0)::text as charge_amount,
-        coalesce(sum(source.fee_amount), 0)::text as fee_amount,
-        coalesce(sum(source.approved_exchange_amount), 0)::text as approved_exchange_amount,
-        coalesce(sum(source.pending_exchange_amount), 0)::text as pending_exchange_amount
-      from (
-        select
-          cr.amount as charge_amount,
-          coalesce(comm.saved_commission, 0) as fee_amount,
-          0::numeric as approved_exchange_amount,
-          0::numeric as pending_exchange_amount
-        from charge_requests cr
-        left join commission_records comm on comm.charge_request_id = cr.id
-        where cr.domain_id = $1::uuid
-          and cr.status in ('APPROVED', 'COMPLETED')
-
-        union all
-
-        select
-          0::numeric as charge_amount,
-          0::numeric as fee_amount,
-          er.amount as approved_exchange_amount,
-          0::numeric as pending_exchange_amount
-        from exchange_requests er
-        where er.domain_id = $1::uuid
-          and er.status in ('APPROVED', 'COMPLETED')
-
-        union all
-
-        select
-          0::numeric as charge_amount,
-          0::numeric as fee_amount,
-          0::numeric as approved_exchange_amount,
-          er.amount as pending_exchange_amount
-        from exchange_requests er
-        where er.domain_id = $1::uuid
-          and er.status = 'PENDING'
-      ) source
+        coalesce((
+          select dom.current_balance
+          from domains dom
+          where dom.id = $1::uuid
+            and dom.status <> 'DELETED'
+        ), 0)::text as current_balance,
+        coalesce((
+          select sum(er.amount)
+          from exchange_requests er
+          where er.domain_id = $1::uuid
+            and er.status = 'PENDING'
+            and coalesce(er.raw_payload ->> '${exchangeBalanceReservedKey}', 'false') <> 'true'
+        ), 0)::text as pending_exchange_amount
     `,
     [domainId],
   );
   const row = result.rows[0];
-  const chargeAmount = Number(row?.charge_amount ?? 0);
-  const feeAmount = Number(row?.fee_amount ?? 0);
-  const approvedExchangeAmount = Number(row?.approved_exchange_amount ?? 0);
+  const currentBalance = Number(row?.current_balance ?? 0);
   const pendingExchangeAmount = Number(row?.pending_exchange_amount ?? 0);
-  const approvedBalance = chargeAmount - feeAmount - approvedExchangeAmount;
+  const approvedBalance = currentBalance;
 
   return {
     approvedBalance,
