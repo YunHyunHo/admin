@@ -12,6 +12,7 @@ import {
 import { hasDatabaseUrl } from "@/lib/db";
 import { canManageMasterResources, canUseDistributorMenus } from "@/lib/permissions";
 import { notifyExchangeDecision } from "@/lib/telegram-notifications";
+import { isRealtimeSyncPilot } from "@/lib/realtime-sync-pilot";
 
 export const runtime = "nodejs";
 
@@ -42,15 +43,21 @@ function isPatchAction(value: string | undefined): value is NonNullable<PatchDom
   return value === "approve" || value === "reject" || value === "cancel";
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const user = await getSessionUser();
 
   if (!user) {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
 
+  const since = new URL(request.url).searchParams.get("since");
+  const updatedSince =
+    isRealtimeSyncPilot(user) && since && Number.isFinite(Date.parse(since))
+      ? since
+      : undefined;
+
   return NextResponse.json({
-    rows: await getDomainExchangeRows([], user),
+    rows: await getDomainExchangeRows([], user, updatedSince),
     createContext: canUseDistributorMenus(user)
       ? await getDomainExchangeCreateContext(user)
       : {

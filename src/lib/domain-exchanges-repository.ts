@@ -123,6 +123,7 @@ function toExchangeRow(row: ExchangeRequestDbRow): DomainExchangeRow {
 export async function getDomainExchangeRows(
   fallbackRows: DomainExchangeRow[],
   user?: SessionUser,
+  updatedSince?: string,
 ) {
   if (!hasDatabaseUrl()) {
     return fallbackRows;
@@ -135,6 +136,7 @@ export async function getDomainExchangeRows(
       })
     : { sql: "", values: [] as string[] };
 
+  const scopedSql = updatedSince ? shiftSqlParams(scope.sql, 1) : scope.sql;
   const result = await query<ExchangeRequestDbRow>(
     `
       select
@@ -165,11 +167,12 @@ export async function getDomainExchangeRows(
           and child.status = 'ACTIVE'
       ) child_dist on parent_dist.id is null
       where 1 = 1
-        ${scope.sql}
+        ${updatedSince ? "and er.updated_at >= $1::timestamptz" : ""}
+        ${scopedSql}
       order by er.requested_at desc
       limit ${DEFAULT_ROW_LIMIT}
     `,
-    scope.values,
+    updatedSince ? [updatedSince, ...scope.values] : scope.values,
   );
 
   return result.rows.map(toExchangeRow);

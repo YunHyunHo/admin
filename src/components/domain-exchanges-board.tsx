@@ -222,6 +222,7 @@ type DomainExchangesBoardProps = {
   hasConnectedDomain?: boolean;
   canCreateExchanges?: boolean;
   canProcessExchanges?: boolean;
+  incrementalSyncEnabled?: boolean;
 };
 
 function normalizeExchangeRow(row: DomainExchangeRow): DomainExchangeRow {
@@ -251,6 +252,7 @@ export function DomainExchangesBoard({
   hasConnectedDomain = false,
   canCreateExchanges = false,
   canProcessExchanges = true,
+  incrementalSyncEnabled = false,
 }: DomainExchangesBoardProps) {
   const [rows, setRows] = useState(initialRows.map(normalizeExchangeRow));
   const [page, setPage] = useState(1);
@@ -268,6 +270,7 @@ export function DomainExchangesBoard({
   );
   const refreshRowsPromiseRef = useRef<Promise<void> | null>(null);
   const needsRefreshRowsRef = useRef(false);
+  const lastSyncCursorRef = useRef("");
   const pageCount = Math.max(1, Math.ceil(rows.length / rowsPerPage));
   const currentPage = Math.min(page, pageCount);
   const pageRows = useMemo(
@@ -279,6 +282,48 @@ export function DomainExchangesBoard({
     [currentPage, rows],
   );
 
+  const applyChangedRows = useCallback((changedRows: DomainExchangeRow[]) => {
+    if (!changedRows.length) {
+      return;
+    }
+
+    const normalizedRows = changedRows.map(normalizeExchangeRow);
+    const changedById = new Map(normalizedRows.map((row) => [row.id, row]));
+
+    setRows((current) => {
+      const currentIds = new Set(current.map((row) => row.id));
+      const newRows = normalizedRows.filter((row) => !currentIds.has(row.id));
+      const nextRows = [
+        ...newRows,
+        ...current.map((row) => changedById.get(row.id) ?? row),
+      ];
+      pendingSignatureRef.current = getPendingExchangeSignature(nextRows);
+      return nextRows;
+    });
+  }, []);
+
+  const fetchIncrementalRows = useCallback(async () => {
+    if (!lastSyncCursorRef.current) {
+      lastSyncCursorRef.current = new Date(Date.now() - 5000).toISOString();
+    }
+
+    const nextCursor = new Date(Date.now() - 2000).toISOString();
+    const response = await fetch(
+      `/api/domain-exchanges?since=${encodeURIComponent(lastSyncCursorRef.current)}`,
+      { cache: "no-store" },
+    );
+    const data = (await response.json().catch(() => null)) as {
+      rows?: DomainExchangeRow[];
+    } | null;
+
+    if (!response.ok || !data?.rows) {
+      throw new Error("환전 자동 갱신에 실패했습니다.");
+    }
+
+    applyChangedRows(data.rows);
+    lastSyncCursorRef.current = nextCursor;
+  }, [applyChangedRows]);
+
   const refreshRows = useCallback(async () => {
     if (refreshRowsPromiseRef.current) {
       needsRefreshRowsRef.current = true;
@@ -288,6 +333,11 @@ export function DomainExchangesBoard({
     const refreshPromise = (async () => {
       do {
         needsRefreshRowsRef.current = false;
+        if (incrementalSyncEnabled) {
+          await fetchIncrementalRows();
+          continue;
+        }
+
         const response = await fetch("/api/domain-exchanges", {
           cache: "no-store",
         });
@@ -307,7 +357,37 @@ export function DomainExchangesBoard({
 
     refreshRowsPromiseRef.current = refreshPromise;
     return refreshPromise;
-  }, []);
+  }, [fetchIncrementalRows, incrementalSyncEnabled]);
+
+  useEffect(() => {
+    if (!incrementalSyncEnabled) {
+      return;
+    }
+
+    let isCancelled = false;
+    let timeoutId: number | null = null;
+
+    async function syncRows() {
+      try {
+        await fetchIncrementalRows();
+      } catch {
+        // Keep the cursor unchanged so the same window is retried.
+      } finally {
+        if (!isCancelled) {
+          timeoutId = window.setTimeout(() => void syncRows(), 5000);
+        }
+      }
+    }
+
+    void syncRows();
+
+    return () => {
+      isCancelled = true;
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [fetchIncrementalRows, incrementalSyncEnabled]);
 
   useEffect(() => {
     function handleNotificationSync(event: Event) {
@@ -390,9 +470,14 @@ export function DomainExchangesBoard({
       }
 
       if (data.rows) {
-        const nextRows = data.rows.map(normalizeExchangeRow);
-        pendingSignatureRef.current = getPendingExchangeSignature(nextRows);
-        setRows(nextRows);
+        if (incrementalSyncEnabled) {
+          const currentIds = new Set(rows.map((row) => row.id));
+          applyChangedRows(data.rows.filter((row) => !currentIds.has(row.id)));
+        } else {
+          const nextRows = data.rows.map(normalizeExchangeRow);
+          pendingSignatureRef.current = getPendingExchangeSignature(nextRows);
+          setRows(nextRows);
+        }
       }
 
       window.dispatchEvent(new Event(requestNotifierRefreshEventName));
@@ -427,9 +512,13 @@ export function DomainExchangesBoard({
     }
 
     if (data.rows) {
-      const nextRows = data.rows.map(normalizeExchangeRow);
-      pendingSignatureRef.current = getPendingExchangeSignature(nextRows);
-      setRows(nextRows);
+      if (incrementalSyncEnabled) {
+        applyChangedRows(data.rows.filter((row) => row.id === id));
+      } else {
+        const nextRows = data.rows.map(normalizeExchangeRow);
+        pendingSignatureRef.current = getPendingExchangeSignature(nextRows);
+        setRows(nextRows);
+      }
     }
 
     window.dispatchEvent(new Event(requestNotifierRefreshEventName));

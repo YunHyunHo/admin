@@ -8,6 +8,7 @@ import {
 import { getSessionUser } from "@/lib/auth";
 import { getDomainExchangeRows } from "@/lib/domain-exchanges-repository";
 import { canProcessRequests } from "@/lib/permissions";
+import { isRealtimeSyncPilot } from "@/lib/realtime-sync-pilot";
 
 
 export default async function ExchangesPage() {
@@ -32,6 +33,7 @@ export default async function ExchangesPage() {
         title="환전신청"
         description="환전 신청 내역을 확인하고 승인/삭제 처리하는 화면입니다."
         canProcessExchanges={canProcessRequests(user)}
+        incrementalSyncEnabled={isRealtimeSyncPilot(user)}
       />
     </AdminShell>
   );

@@ -21,6 +21,7 @@ type ChargeRequestsBoardProps = {
   canProcessCharges?: boolean;
   isDatabaseBacked?: boolean;
   domainOptions?: DomainExchangeOption[];
+  incrementalSyncEnabled?: boolean;
 };
 
 type ChargeRequestsResponse = {
@@ -265,6 +266,7 @@ export function ChargeRequestsBoard({
   canProcessCharges = true,
   isDatabaseBacked = false,
   domainOptions = [],
+  incrementalSyncEnabled = false,
 }: ChargeRequestsBoardProps) {
   const [pendingRequests, setPendingRequests] = useState(initialPendingRequests);
   const [approvedRequests, setApprovedRequests] = useState(initialApprovedRequests);
@@ -450,6 +452,28 @@ export function ChargeRequestsBoard({
     return (await response.json()) as ChargeRequestsResponse;
   }, []);
 
+  const syncIncrementalChanges = useCallback(async () => {
+    if (!lastSyncCursorRef.current) {
+      lastSyncCursorRef.current = new Date(Date.now() - 5000).toISOString();
+    }
+
+    const nextCursor = new Date(Date.now() - 2000).toISOString();
+    const response = await fetch(
+      `/api/charge-requests?since=${encodeURIComponent(lastSyncCursorRef.current)}`,
+      { cache: "no-store" },
+    );
+    const data = (await response.json().catch(() => null)) as {
+      changes?: ChargeRequestsResponse;
+    } | null;
+
+    if (!response.ok || !data?.changes) {
+      throw new Error("자동 갱신에 실패했습니다.");
+    }
+
+    applyServerChanges(data.changes);
+    lastSyncCursorRef.current = nextCursor;
+  }, [applyServerChanges]);
+
   const refreshRequestsForNotification = useCallback(async () => {
     if (notificationRefreshPromiseRef.current) {
       needsNotificationRefreshRef.current = true;
@@ -459,7 +483,11 @@ export function ChargeRequestsBoard({
     const refreshPromise = (async () => {
       do {
         needsNotificationRefreshRef.current = false;
-        applyServerData(await requestChargeData(), { resetPages: false });
+        if (incrementalSyncEnabled) {
+          await syncIncrementalChanges();
+        } else {
+          applyServerData(await requestChargeData(), { resetPages: false });
+        }
       } while (needsNotificationRefreshRef.current);
     })().finally(() => {
       notificationRefreshPromiseRef.current = null;
@@ -467,7 +495,12 @@ export function ChargeRequestsBoard({
 
     notificationRefreshPromiseRef.current = refreshPromise;
     return refreshPromise;
-  }, [applyServerData, requestChargeData]);
+  }, [
+    applyServerData,
+    incrementalSyncEnabled,
+    requestChargeData,
+    syncIncrementalChanges,
+  ]);
 
   useEffect(() => {
     function handleNotificationSync(event: Event) {
@@ -515,31 +548,14 @@ export function ChargeRequestsBoard({
     let isCancelled = false;
     let timeoutId: number | null = null;
 
-    if (!lastSyncCursorRef.current) {
-      lastSyncCursorRef.current = new Date(Date.now() - 5000).toISOString();
-    }
-
     async function syncRequests() {
       try {
-        const nextCursor = new Date(Date.now() - 2000).toISOString();
-        const response = await fetch(
-          `/api/charge-requests?since=${encodeURIComponent(lastSyncCursorRef.current)}`,
-          { cache: "no-store" },
-        );
-        const data = (await response.json().catch(() => null)) as {
-          changes?: ChargeRequestsResponse;
-        } | null;
-
-        if (!response.ok || !data?.changes) {
-          throw new Error("자동 갱신에 실패했습니다.");
-        }
+        await syncIncrementalChanges();
 
         if (isCancelled) {
           return;
         }
 
-        applyServerChanges(data.changes);
-        lastSyncCursorRef.current = nextCursor;
         setLastSyncedAt(getCurrentTimeLabel());
       } catch {
         if (!isCancelled) {
@@ -562,7 +578,7 @@ export function ChargeRequestsBoard({
         window.clearTimeout(timeoutId);
       }
     };
-  }, [applyServerChanges, isDatabaseBacked]);
+  }, [isDatabaseBacked, syncIncrementalChanges]);
 
   async function activateNoticeSound() {
     try {

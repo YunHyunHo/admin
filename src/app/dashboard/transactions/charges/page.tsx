@@ -7,6 +7,7 @@ import { getChargeRequestsForUser } from "@/lib/charge-requests-repository";
 import { hasDatabaseUrl } from "@/lib/db";
 import { getDomainExchangeOptions } from "@/lib/domain-exchanges-repository";
 import { canProcessRequests } from "@/lib/permissions";
+import { isRealtimeSyncPilot } from "@/lib/realtime-sync-pilot";
 
 
 export default async function ChargesPage() {
@@ -33,6 +34,7 @@ export default async function ChargesPage() {
         canProcessCharges={canProcessRequests(user)}
         isDatabaseBacked={hasDatabaseUrl()}
         domainOptions={domainOptions}
+        incrementalSyncEnabled={isRealtimeSyncPilot(user)}
       />
     </AdminShell>
   );

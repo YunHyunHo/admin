@@ -12,6 +12,7 @@ import {
   getDomainExchangeRows,
 } from "@/lib/domain-exchanges-repository";
 import { canManageMasterResources } from "@/lib/permissions";
+import { isRealtimeSyncPilot } from "@/lib/realtime-sync-pilot";
 
 
 export default async function DomainExchangesPage() {
@@ -49,6 +50,7 @@ export default async function DomainExchangesPage() {
         hasConnectedDomain={createContext.hasConnectedDomain}
         canCreateExchanges={!isMaster}
         canProcessExchanges={isMaster}
+        incrementalSyncEnabled={isRealtimeSyncPilot(user)}
       />
     </AdminShell>
   );
