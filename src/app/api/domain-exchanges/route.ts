@@ -9,7 +9,7 @@ import {
   getDomainExchangeRows,
   rejectDomainExchange,
 } from "@/lib/domain-exchanges-repository";
-import { hasDatabaseUrl } from "@/lib/db";
+import { getServerSyncCursor, hasDatabaseUrl } from "@/lib/db";
 import { canManageMasterResources, canUseDistributorMenus } from "@/lib/permissions";
 import { notifyExchangeDecision } from "@/lib/telegram-notifications";
 import { isRealtimeSyncPilot } from "@/lib/realtime-sync-pilot";
@@ -55,9 +55,11 @@ export async function GET(request: Request) {
     isRealtimeSyncPilot(user) && since && Number.isFinite(Date.parse(since))
       ? since
       : undefined;
+  const cursor = updatedSince ? await getServerSyncCursor() : undefined;
 
   return NextResponse.json({
     rows: await getDomainExchangeRows([], user, updatedSince),
+    ...(cursor ? { cursor } : {}),
     createContext: canUseDistributorMenus(user)
       ? await getDomainExchangeCreateContext(user)
       : {

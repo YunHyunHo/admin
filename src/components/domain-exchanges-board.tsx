@@ -223,6 +223,7 @@ type DomainExchangesBoardProps = {
   canCreateExchanges?: boolean;
   canProcessExchanges?: boolean;
   incrementalSyncEnabled?: boolean;
+  initialSyncCursor?: string;
 };
 
 function normalizeExchangeRow(row: DomainExchangeRow): DomainExchangeRow {
@@ -253,6 +254,7 @@ export function DomainExchangesBoard({
   canCreateExchanges = false,
   canProcessExchanges = true,
   incrementalSyncEnabled = false,
+  initialSyncCursor = "",
 }: DomainExchangesBoardProps) {
   const [rows, setRows] = useState(initialRows.map(normalizeExchangeRow));
   const [page, setPage] = useState(1);
@@ -270,7 +272,7 @@ export function DomainExchangesBoard({
   );
   const refreshRowsPromiseRef = useRef<Promise<void> | null>(null);
   const needsRefreshRowsRef = useRef(false);
-  const lastSyncCursorRef = useRef("");
+  const lastSyncCursorRef = useRef(initialSyncCursor);
   const pageCount = Math.max(1, Math.ceil(rows.length / rowsPerPage));
   const currentPage = Math.min(page, pageCount);
   const pageRows = useMemo(
@@ -314,6 +316,7 @@ export function DomainExchangesBoard({
     );
     const data = (await response.json().catch(() => null)) as {
       rows?: DomainExchangeRow[];
+      cursor?: string;
     } | null;
 
     if (!response.ok || !data?.rows) {
@@ -321,8 +324,9 @@ export function DomainExchangesBoard({
     }
 
     applyChangedRows(data.rows);
-    lastSyncCursorRef.current = nextCursor;
-  }, [applyChangedRows]);
+    lastSyncCursorRef.current =
+      incrementalSyncEnabled && data.cursor ? data.cursor : nextCursor;
+  }, [applyChangedRows, incrementalSyncEnabled]);
 
   const refreshRows = useCallback(async () => {
     if (refreshRowsPromiseRef.current) {

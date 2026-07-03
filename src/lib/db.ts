@@ -41,6 +41,19 @@ export async function query<T extends QueryResultRow>(
   return getPgPool().query<T>(text, values);
 }
 
+export async function getServerSyncCursor() {
+  if (!hasDatabaseUrl()) {
+    return new Date(Date.now() - 5000).toISOString();
+  }
+
+  const result = await query<{ cursor: Date | string }>(
+    `select clock_timestamp() - interval '5 seconds' as cursor`,
+  );
+  const cursor = result.rows[0]?.cursor;
+
+  return new Date(cursor ?? Date.now() - 5000).toISOString();
+}
+
 export async function withTransaction<T>(
   callback: (client: PoolClient) => Promise<T>,
 ) {

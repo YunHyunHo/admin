@@ -22,6 +22,7 @@ type ChargeRequestsBoardProps = {
   isDatabaseBacked?: boolean;
   domainOptions?: DomainExchangeOption[];
   incrementalSyncEnabled?: boolean;
+  initialSyncCursor?: string;
 };
 
 type ChargeRequestsResponse = {
@@ -267,6 +268,7 @@ export function ChargeRequestsBoard({
   isDatabaseBacked = false,
   domainOptions = [],
   incrementalSyncEnabled = false,
+  initialSyncCursor = "",
 }: ChargeRequestsBoardProps) {
   const [pendingRequests, setPendingRequests] = useState(initialPendingRequests);
   const [approvedRequests, setApprovedRequests] = useState(initialApprovedRequests);
@@ -313,7 +315,7 @@ export function ChargeRequestsBoard({
       .sort()
       .join(","),
   );
-  const lastSyncCursorRef = useRef("");
+  const lastSyncCursorRef = useRef(initialSyncCursor);
   const notificationRefreshPromiseRef = useRef<Promise<void> | null>(null);
   const needsNotificationRefreshRef = useRef(false);
 
@@ -464,6 +466,7 @@ export function ChargeRequestsBoard({
     );
     const data = (await response.json().catch(() => null)) as {
       changes?: ChargeRequestsResponse;
+      cursor?: string;
     } | null;
 
     if (!response.ok || !data?.changes) {
@@ -471,8 +474,9 @@ export function ChargeRequestsBoard({
     }
 
     applyServerChanges(data.changes);
-    lastSyncCursorRef.current = nextCursor;
-  }, [applyServerChanges]);
+    lastSyncCursorRef.current =
+      incrementalSyncEnabled && data.cursor ? data.cursor : nextCursor;
+  }, [applyServerChanges, incrementalSyncEnabled]);
 
   const refreshRequestsForNotification = useCallback(async () => {
     if (notificationRefreshPromiseRef.current) {

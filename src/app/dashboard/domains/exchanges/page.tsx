@@ -13,6 +13,7 @@ import {
 } from "@/lib/domain-exchanges-repository";
 import { canManageMasterResources } from "@/lib/permissions";
 import { isRealtimeSyncPilot } from "@/lib/realtime-sync-pilot";
+import { getServerSyncCursor } from "@/lib/db";
 
 
 export default async function DomainExchangesPage() {
@@ -23,6 +24,10 @@ export default async function DomainExchangesPage() {
   }
 
   const isMaster = canManageMasterResources(user);
+  const incrementalSyncEnabled = isRealtimeSyncPilot(user);
+  const initialSyncCursor = incrementalSyncEnabled
+    ? await getServerSyncCursor()
+    : undefined;
   const [exchangeRows, domainOptions, createContext] = await Promise.all([
     getDomainExchangeRows(fallbackDomainExchanges, user),
     getDomainExchangeOptions(user),
@@ -50,7 +55,8 @@ export default async function DomainExchangesPage() {
         hasConnectedDomain={createContext.hasConnectedDomain}
         canCreateExchanges={!isMaster}
         canProcessExchanges={isMaster}
-        incrementalSyncEnabled={isRealtimeSyncPilot(user)}
+        incrementalSyncEnabled={incrementalSyncEnabled}
+        initialSyncCursor={initialSyncCursor}
       />
     </AdminShell>
   );

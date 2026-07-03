@@ -9,7 +9,7 @@ import {
   processMockChargeRequest,
   resetChargeRequestsForUser,
 } from "@/lib/charge-requests-repository";
-import { hasDatabaseUrl } from "@/lib/db";
+import { getServerSyncCursor, hasDatabaseUrl } from "@/lib/db";
 import { getChargeRequestsByCompany } from "@/lib/mock-api-store";
 import {
   getMockChargeStateFromCookie,
@@ -18,6 +18,7 @@ import {
 import type { ProcessedRequest } from "@/lib/charge-utils";
 import { canProcessRequests } from "@/lib/permissions";
 import { notifyChargeDecision } from "@/lib/telegram-notifications";
+import { isRealtimeSyncPilot } from "@/lib/realtime-sync-pilot";
 
 const allowedStatuses: ProcessedRequest["status"][] = ["승인", "승인거절"];
 const minimumChargeAmount = 1000;
@@ -34,8 +35,12 @@ export async function GET(request: Request) {
   const since = new URL(request.url).searchParams.get("since");
 
   if (since && Number.isFinite(Date.parse(since))) {
+    const cursor = isRealtimeSyncPilot(user)
+      ? await getServerSyncCursor()
+      : undefined;
     return NextResponse.json({
       changes: await getChargeRequestChangesForUser(user, since),
+      ...(cursor ? { cursor } : {}),
     });
   }
 

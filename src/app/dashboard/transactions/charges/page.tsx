@@ -4,7 +4,7 @@ import { ChargeRequestsBoard } from "@/components/charge-requests-board";
 import { AdminShell } from "@/components/admin-shell";
 import { getSessionUser } from "@/lib/auth";
 import { getChargeRequestsForUser } from "@/lib/charge-requests-repository";
-import { hasDatabaseUrl } from "@/lib/db";
+import { getServerSyncCursor, hasDatabaseUrl } from "@/lib/db";
 import { getDomainExchangeOptions } from "@/lib/domain-exchanges-repository";
 import { canProcessRequests } from "@/lib/permissions";
 import { isRealtimeSyncPilot } from "@/lib/realtime-sync-pilot";
@@ -17,6 +17,10 @@ export default async function ChargesPage() {
     redirect("/");
   }
 
+  const incrementalSyncEnabled = isRealtimeSyncPilot(user);
+  const initialSyncCursor = incrementalSyncEnabled
+    ? await getServerSyncCursor()
+    : undefined;
   const companyRequests = await getChargeRequestsForUser(user);
   const domainOptions = await getDomainExchangeOptions(user);
 
@@ -34,7 +38,8 @@ export default async function ChargesPage() {
         canProcessCharges={canProcessRequests(user)}
         isDatabaseBacked={hasDatabaseUrl()}
         domainOptions={domainOptions}
-        incrementalSyncEnabled={isRealtimeSyncPilot(user)}
+        incrementalSyncEnabled={incrementalSyncEnabled}
+        initialSyncCursor={initialSyncCursor}
       />
     </AdminShell>
   );
