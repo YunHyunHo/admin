@@ -12,6 +12,7 @@ import {
   sortDashboardPartnerSummaries,
 } from "@/lib/dashboard-summary-repository";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { isRealtimeSyncPilot } from "@/lib/realtime-sync-pilot";
 
 const sideMenuGroups = [
   {
@@ -370,6 +371,7 @@ export async function AdminShell({
               <GlobalDashboardSummaryPanel
                 partnerSummaries={partnerSummaries}
                 canReorder={user.role === "MASTER"}
+                stableRefreshEnabled={isRealtimeSyncPilot(user)}
               />
               <div className="flex flex-col gap-3 border-b border-cyan-300/24 px-4 py-4 text-sm text-white/68 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex flex-wrap items-center gap-3">

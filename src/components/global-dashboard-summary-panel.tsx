@@ -42,9 +42,11 @@ function getMetricValues(item: DashboardPartnerSummary) {
 export function GlobalDashboardSummaryPanel({
   partnerSummaries: initialPartnerSummaries,
   canReorder = false,
+  stableRefreshEnabled = false,
 }: {
   partnerSummaries?: DashboardPartnerSummary[];
   canReorder?: boolean;
+  stableRefreshEnabled?: boolean;
 }) {
   const isOpen = useDashboardSummaryOpen();
   const [partnerSummaries, setPartnerSummaries] = useState<
@@ -54,7 +56,11 @@ export function GlobalDashboardSummaryPanel({
   const [savingOrderId, setSavingOrderId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [orderErrorMessage, setOrderErrorMessage] = useState("");
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const pendingSignatureRef = useRef<string | null>(null);
+  const loadedRefreshVersionRef = useRef(
+    initialPartnerSummaries === undefined ? -1 : 0,
+  );
   const visiblePartnerSummaries = useMemo(
     () => partnerSummaries ?? [],
     [partnerSummaries],
@@ -72,7 +78,11 @@ export function GlobalDashboardSummaryPanel({
 
   useEffect(() => {
     function requestSummaryRefresh() {
-      setPartnerSummaries(null);
+      if (stableRefreshEnabled) {
+        setRefreshVersion((current) => current + 1);
+      } else {
+        setPartnerSummaries(null);
+      }
     }
 
     function handleRequestSnapshot(event: Event) {
@@ -116,11 +126,19 @@ export function GlobalDashboardSummaryPanel({
       );
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, []);
+  }, [stableRefreshEnabled]);
 
   useEffect(() => {
-    if (!isOpen || partnerSummaries !== null) {
+    if (
+      !isOpen ||
+      (!stableRefreshEnabled && partnerSummaries !== null) ||
+      (stableRefreshEnabled && loadedRefreshVersionRef.current === refreshVersion)
+    ) {
       return;
+    }
+
+    if (stableRefreshEnabled) {
+      loadedRefreshVersionRef.current = refreshVersion;
     }
 
     let ignore = false;
@@ -152,7 +170,9 @@ export function GlobalDashboardSummaryPanel({
               ? error.message
               : "현황 데이터를 불러오지 못했습니다.",
           );
-          setPartnerSummaries([]);
+          if (!stableRefreshEnabled) {
+            setPartnerSummaries([]);
+          }
         }
       } finally {
         if (!ignore) {
@@ -166,7 +186,7 @@ export function GlobalDashboardSummaryPanel({
     return () => {
       ignore = true;
     };
-  }, [isOpen, partnerSummaries]);
+  }, [isOpen, partnerSummaries, refreshVersion, stableRefreshEnabled]);
 
   async function movePartnerSummary(index: number, offset: -1 | 1) {
     if (!partnerSummaries || savingOrderId) {
@@ -262,11 +282,11 @@ export function GlobalDashboardSummaryPanel({
           data-dashboard-summary-details
           className="grid gap-px bg-white/8 p-px lg:grid-cols-2"
         >
-          {isLoading ? (
+          {isLoading && !visiblePartnerSummaries.length ? (
             <div className="px-4 py-10 text-center text-sm text-white/42 lg:col-span-2">
               도메인 업체 현황을 불러오는 중입니다.
             </div>
-          ) : errorMessage ? (
+          ) : errorMessage && !visiblePartnerSummaries.length ? (
             <div className="px-4 py-10 text-center text-sm text-rose-200/80 lg:col-span-2">
               {errorMessage}
             </div>
