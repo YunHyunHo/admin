@@ -148,7 +148,10 @@ export async function GET(request: Request) {
       let queuedNotifications: StoredAdminRequestEvent[] = [];
       let lastDeliveredEventId = reconnectCursor;
 
-      const enqueueEvent = (event: AdminRequestEvent & { eventId?: string }) => {
+      const enqueueEvent = (
+        event: AdminRequestEvent & { eventId?: string },
+        replayed = false,
+      ) => {
         deliveryQueue = deliveryQueue
           .then(async () => {
             if (
@@ -160,7 +163,7 @@ export async function GET(request: Request) {
             }
 
             if (await canUserAccessEvent(user, event)) {
-              send("request-event", event, event.eventId);
+              send("request-event", { ...event, replayed }, event.eventId);
             }
 
             if (event.eventId) {
@@ -211,7 +214,7 @@ export async function GET(request: Request) {
               const missedEvents = await getAdminRequestEventsAfter(cursor);
 
               for (const event of missedEvents) {
-                enqueueEvent(event);
+                enqueueEvent(event, true);
                 cursor = event.eventId;
               }
 

@@ -70,6 +70,36 @@ function collectPendingSnapshot(data: RequestNotificationSnapshot) {
   return { ids, counts };
 }
 
+function createPendingSnapshot(ids: Set<string>): RequestNotificationSnapshot {
+  const snapshot: RequestNotificationSnapshot = {
+    pendingIds: {
+      charges: [],
+      domainExchanges: [],
+      distributorWithdrawals: [],
+    },
+  };
+
+  for (const value of ids) {
+    const separatorIndex = value.indexOf(":");
+    const kind = value.slice(0, separatorIndex);
+    const id = value.slice(separatorIndex + 1);
+
+    if (!id) {
+      continue;
+    }
+
+    if (kind === "charge") {
+      snapshot.pendingIds.charges.push(id);
+    } else if (kind === "domain-exchange") {
+      snapshot.pendingIds.domainExchanges.push(id);
+    } else if (kind === "distributor-withdrawal") {
+      snapshot.pendingIds.distributorWithdrawals.push(id);
+    }
+  }
+
+  return snapshot;
+}
+
 async function waitForListSync(promises: Promise<unknown>[]) {
   if (!promises.length) {
     return;
@@ -86,12 +116,14 @@ async function waitForListSync(promises: Promise<unknown>[]) {
 type GlobalRequestNotifierProps = {
   realtimeEventsEnabled?: boolean;
   realtimeEventsPath?: string;
+  eventDrivenSnapshotEnabled?: boolean;
   fallbackPollIntervalMs?: number;
 };
 
 export function GlobalRequestNotifier({
   realtimeEventsEnabled = false,
   realtimeEventsPath = "/api/request-events",
+  eventDrivenSnapshotEnabled = false,
   fallbackPollIntervalMs = defaultPollIntervalMs,
 }: GlobalRequestNotifierProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -291,6 +323,7 @@ export function GlobalRequestNotifier({
           const detail = JSON.parse(event.data) as {
             eventId?: string;
             kind?: string;
+            replayed?: boolean;
             requestId?: string;
             status?: string;
           };
@@ -308,6 +341,61 @@ export function GlobalRequestNotifier({
             lastRealtimeEventIdRef.current = eventId;
           }
 
+          const prefix =
+            detail.kind === "charge"
+              ? "charge"
+              : detail.kind === "domain_exchange"
+                ? "domain-exchange"
+                : detail.kind === "distributor_withdrawal"
+                  ? "distributor-withdrawal"
+                  : null;
+          const pendingKey =
+            prefix && detail.requestId ? `${prefix}:${detail.requestId}` : null;
+          const wasPending = pendingKey
+            ? knownPendingIdsRef.current.has(pendingKey)
+            : false;
+
+          if (eventDrivenSnapshotEnabled && pendingKey) {
+            if (detail.status === "PENDING") {
+              knownPendingIdsRef.current.add(pendingKey);
+            } else {
+              knownPendingIdsRef.current.delete(pendingKey);
+            }
+
+            const snapshot = createPendingSnapshot(knownPendingIdsRef.current);
+            const counts = collectPendingSnapshot(snapshot).counts;
+
+            try {
+              window.sessionStorage.setItem(
+                pendingRequestCountsStorageKey,
+                JSON.stringify(counts),
+              );
+            } catch {
+              // Session storage can be unavailable in restricted browser modes.
+            }
+
+            window.dispatchEvent(
+              new CustomEvent<PendingRequestCounts>(pendingRequestCountsEventName, {
+                detail: counts,
+              }),
+            );
+            window.dispatchEvent(
+              new CustomEvent<RequestNotificationSnapshot>(
+                requestNotificationSnapshotEventName,
+                { detail: snapshot },
+              ),
+            );
+
+            if (
+              detail.status === "PENDING" &&
+              !wasPending &&
+              !detail.replayed
+            ) {
+              setNoticeMessage("1건 신규 신청");
+              void playNoticeSoundWithRetry();
+            }
+          }
+
           window.dispatchEvent(
             new CustomEvent(requestRealtimeEventName, {
               detail,
@@ -317,7 +405,9 @@ export function GlobalRequestNotifier({
           // Ignore malformed realtime payloads and rely on the next refresh.
         }
 
-        void syncRequests();
+        if (!eventDrivenSnapshotEnabled) {
+          void syncRequests();
+        }
       };
 
       eventSource.addEventListener("ready", handleReady);
@@ -389,9 +479,11 @@ export function GlobalRequestNotifier({
   }, [
     clearNoticeRetry,
     ensureAudio,
+    eventDrivenSnapshotEnabled,
     fallbackPollIntervalMs,
     realtimeEventsEnabled,
     realtimeEventsPath,
+    playNoticeSoundWithRetry,
     syncRequests,
   ]);
 

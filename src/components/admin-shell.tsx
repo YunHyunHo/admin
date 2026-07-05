@@ -367,6 +367,7 @@ export async function AdminShell({
                     <GlobalRequestNotifier
                       realtimeEventsEnabled={realtimeEventsEnabled}
                       realtimeEventsPath={realtimeEventsPath}
+                      eventDrivenSnapshotEnabled={reducedNotificationPollingPilot}
                       fallbackPollIntervalMs={notificationFallbackPollIntervalMs}
                     />
                   <DashboardSummaryToggle />
