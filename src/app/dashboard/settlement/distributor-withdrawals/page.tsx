@@ -8,8 +8,10 @@ import {
 import { getSessionUser } from "@/lib/auth";
 import {
   getDistributorWithdrawalCreateBalance,
+  getDistributorWithdrawalRowsPage,
   getDistributorWithdrawalRows,
 } from "@/lib/distributor-withdrawals-repository";
+import { isPerformancePilotUser } from "@/lib/performance-pilot";
 import { canManageMasterResources } from "@/lib/permissions";
 
 
@@ -21,8 +23,11 @@ export default async function DistributorWithdrawalsPage() {
   }
 
   const isMaster = canManageMasterResources(user);
-  const [withdrawalRows, availableBalance] = await Promise.all([
-    getDistributorWithdrawalRows(fallbackDistributorWithdrawals, user),
+  const serverPagingEnabled = isPerformancePilotUser(user);
+  const [withdrawalData, availableBalance] = await Promise.all([
+    serverPagingEnabled
+      ? getDistributorWithdrawalRowsPage(user)
+      : getDistributorWithdrawalRows(fallbackDistributorWithdrawals, user),
     isMaster ? Promise.resolve(0) : getDistributorWithdrawalCreateBalance(user),
   ]);
 
@@ -34,10 +39,12 @@ export default async function DistributorWithdrawalsPage() {
       helperText="총판 보유금 환전 신청과 처리 내역을 확인하는 화면입니다."
     >
       <DistributorWithdrawalHistoryBoard
-        initialRows={withdrawalRows}
+        initialRows={Array.isArray(withdrawalData) ? withdrawalData : withdrawalData.rows}
         canCreateWithdrawals={!isMaster}
         canProcessWithdrawals={isMaster}
         availableBalance={availableBalance}
+        serverPagingEnabled={serverPagingEnabled}
+        initialPageData={Array.isArray(withdrawalData) ? undefined : withdrawalData}
       />
     </AdminShell>
   );

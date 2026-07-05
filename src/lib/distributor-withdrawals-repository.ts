@@ -90,6 +90,13 @@ export type DistributorWithdrawalRow = {
   status: "승인중" | "승인" | "승인거절";
 };
 
+export type DistributorWithdrawalPageResponse = {
+  rows: DistributorWithdrawalRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
 type WithdrawalDbRow = {
   id: string;
   top_distributor_name: string | null;
@@ -162,6 +169,18 @@ function toWithdrawalRow(row: WithdrawalDbRow): DistributorWithdrawalRow {
     requestedAt: formatStamp(row.requested_at),
     completedAt: formatStamp(row.processed_at),
     status: toStatus(row.status),
+  };
+}
+
+function getPageWindow(page?: string | number | null, pageSize?: string | number | null) {
+  const currentPage = Math.max(1, Number(page ?? 1) || 1);
+  const rawPageSize = Math.max(1, Number(pageSize ?? 10) || 10);
+  const normalizedPageSize = Math.min(rawPageSize, 100);
+
+  return {
+    page: currentPage,
+    pageSize: normalizedPageSize,
+    offset: (currentPage - 1) * normalizedPageSize,
   };
 }
 
@@ -238,6 +257,72 @@ export async function getDistributorWithdrawalRows(
     completedAt: "-",
     status: "승인" as const,
   }));
+}
+
+export async function getDistributorWithdrawalRowsPage(
+  user: SessionUser,
+  input: { page?: string | number | null; pageSize?: string | number | null } = {},
+): Promise<DistributorWithdrawalPageResponse> {
+  const { page, pageSize, offset } = getPageWindow(input.page, input.pageSize);
+
+  if (!hasDatabaseUrl()) {
+    const rows = await getDistributorWithdrawalRows([], user);
+
+    return {
+      rows: rows.slice(offset, offset + pageSize),
+      total: rows.length,
+      page,
+      pageSize,
+    };
+  }
+
+  const scope = await getWithdrawalScope(user);
+  const values: unknown[] = [...scope.values, pageSize, offset];
+  const limitParam = values.length - 1;
+  const offsetParam = values.length;
+  const withdrawals = await query<WithdrawalDbRow & { total_count: string }>(
+    `
+      select
+        dw.id::text,
+        coalesce(parent_dist.name, d.name) as top_distributor_name,
+        case when parent_dist.id is null then '-' else d.name end as distributor_name,
+        d.current_balance::text,
+        dw.bank_name,
+        dw.account_holder,
+        dw.account_number,
+        dw.request_amount::text,
+        dw.requested_at,
+        dw.processed_at,
+        dw.status::text as status,
+        count(*) over()::text as total_count
+      from distributor_withdrawals dw
+      join distributors d on d.id = dw.distributor_id
+      left join distributors parent_dist on parent_dist.id = d.parent_distributor_id
+      left join admins dist_admin on dist_admin.id = d.admin_id
+      where 1 = 1
+        ${scope.sql}
+      order by dw.requested_at desc
+      limit $${limitParam}
+      offset $${offsetParam}
+    `,
+    values,
+  );
+
+  if (withdrawals.rows.length) {
+    return {
+      rows: withdrawals.rows.map(toWithdrawalRow),
+      total: Number(withdrawals.rows[0]?.total_count ?? 0),
+      page,
+      pageSize,
+    };
+  }
+
+  return {
+    rows: [],
+    total: 0,
+    page,
+    pageSize,
+  };
 }
 
 export async function getPendingDistributorWithdrawalIds(user: SessionUser) {

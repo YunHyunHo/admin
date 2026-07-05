@@ -6,6 +6,7 @@ import {
   approveDistributorWithdrawal,
   cancelDistributorWithdrawal,
   createDistributorWithdrawal,
+  getDistributorWithdrawalRowsPage,
   getDistributorWithdrawalRows,
   rejectDistributorWithdrawal,
 } from "@/lib/distributor-withdrawals-repository";
@@ -37,11 +38,23 @@ function isPatchAction(value: string | undefined): value is NonNullable<PatchDis
   return value === "approve" || value === "reject" || value === "cancel";
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const user = await getSessionUser();
 
   if (!user) {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
+  }
+
+  const searchParams = new URL(request.url).searchParams;
+  const mode = searchParams.get("mode");
+
+  if (mode === "page") {
+    return NextResponse.json(
+      await getDistributorWithdrawalRowsPage(user, {
+        page: searchParams.get("page"),
+        pageSize: searchParams.get("pageSize"),
+      }),
+    );
   }
 
   return NextResponse.json({

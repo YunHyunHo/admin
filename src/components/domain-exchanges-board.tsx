@@ -224,6 +224,13 @@ type DomainExchangesBoardProps = {
   canProcessExchanges?: boolean;
   incrementalSyncEnabled?: boolean;
   initialSyncCursor?: string;
+  serverPagingEnabled?: boolean;
+  initialPageData?: {
+    rows: DomainExchangeRow[];
+    total: number;
+    page: number;
+    pageSize: number;
+  };
 };
 
 function normalizeExchangeRow(row: DomainExchangeRow): DomainExchangeRow {
@@ -255,9 +262,13 @@ export function DomainExchangesBoard({
   canProcessExchanges = true,
   incrementalSyncEnabled = false,
   initialSyncCursor = "",
+  serverPagingEnabled = false,
+  initialPageData,
 }: DomainExchangesBoardProps) {
   const [rows, setRows] = useState(initialRows.map(normalizeExchangeRow));
   const [page, setPage] = useState(1);
+  const [totalRows, setTotalRows] = useState(initialPageData?.total ?? initialRows.length);
+  const [isPageLoading, setIsPageLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -273,16 +284,51 @@ export function DomainExchangesBoard({
   const refreshRowsPromiseRef = useRef<Promise<void> | null>(null);
   const needsRefreshRowsRef = useRef(false);
   const lastSyncCursorRef = useRef(initialSyncCursor);
-  const pageCount = Math.max(1, Math.ceil(rows.length / rowsPerPage));
+  const pageRequestKeyRef = useRef(
+    serverPagingEnabled && initialPageData
+      ? JSON.stringify({ page: initialPageData.page })
+      : "",
+  );
+  const pageCount = Math.max(
+    1,
+    Math.ceil((serverPagingEnabled ? totalRows : rows.length) / rowsPerPage),
+  );
   const currentPage = Math.min(page, pageCount);
   const pageRows = useMemo(
     () =>
-      rows.slice(
-        (currentPage - 1) * rowsPerPage,
-        currentPage * rowsPerPage,
-      ),
-    [currentPage, rows],
+      serverPagingEnabled
+        ? rows
+        : rows.slice(
+            (currentPage - 1) * rowsPerPage,
+            currentPage * rowsPerPage,
+          ),
+    [currentPage, rows, serverPagingEnabled],
   );
+
+  const fetchPageRows = useCallback(async (targetPage: number) => {
+    const response = await fetch(
+      `/api/domain-exchanges?mode=page&page=${targetPage}&pageSize=${rowsPerPage}`,
+      { cache: "no-store" },
+    );
+    const data = (await response.json().catch(() => null)) as
+      | {
+          rows?: DomainExchangeRow[];
+          total?: number;
+        }
+      | { message?: string }
+      | null;
+
+    if (!response.ok || !data || !("rows" in data) || !Array.isArray(data.rows)) {
+      throw new Error(
+        (data && "message" in data && data.message) ||
+          "환전 목록을 불러오지 못했습니다.",
+      );
+    }
+
+    setRows(data.rows.map(normalizeExchangeRow));
+    setTotalRows(typeof data.total === "number" ? data.total : data.rows.length);
+    pendingSignatureRef.current = getPendingExchangeSignature(data.rows);
+  }, []);
 
   const applyChangedRows = useCallback((changedRows: DomainExchangeRow[]) => {
     if (!changedRows.length) {
@@ -337,6 +383,10 @@ export function DomainExchangesBoard({
     const refreshPromise = (async () => {
       do {
         needsRefreshRowsRef.current = false;
+        if (serverPagingEnabled) {
+          await fetchPageRows(currentPage);
+          continue;
+        }
         if (incrementalSyncEnabled) {
           await fetchIncrementalRows();
           continue;
@@ -361,7 +411,41 @@ export function DomainExchangesBoard({
 
     refreshRowsPromiseRef.current = refreshPromise;
     return refreshPromise;
-  }, [fetchIncrementalRows, incrementalSyncEnabled]);
+  }, [currentPage, fetchIncrementalRows, fetchPageRows, incrementalSyncEnabled, serverPagingEnabled]);
+
+  useEffect(() => {
+    if (!serverPagingEnabled) {
+      return;
+    }
+
+    const requestKey = JSON.stringify({ page: currentPage });
+
+    if (pageRequestKeyRef.current === requestKey) {
+      return;
+    }
+
+    pageRequestKeyRef.current = requestKey;
+    let cancelled = false;
+    setIsPageLoading(true);
+
+    void fetchPageRows(currentPage)
+      .catch((error) => {
+        if (!cancelled) {
+          setMessage(
+            error instanceof Error ? error.message : "환전 목록을 불러오지 못했습니다.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsPageLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentPage, fetchPageRows, serverPagingEnabled]);
 
   useEffect(() => {
     if (!incrementalSyncEnabled) {
@@ -373,7 +457,11 @@ export function DomainExchangesBoard({
 
     async function syncRows() {
       try {
-        await fetchIncrementalRows();
+        if (serverPagingEnabled) {
+          await fetchPageRows(currentPage);
+        } else {
+          await fetchIncrementalRows();
+        }
       } catch {
         // Keep the cursor unchanged so the same window is retried.
       } finally {
@@ -391,7 +479,7 @@ export function DomainExchangesBoard({
         window.clearTimeout(timeoutId);
       }
     };
-  }, [fetchIncrementalRows, incrementalSyncEnabled]);
+  }, [currentPage, fetchIncrementalRows, fetchPageRows, incrementalSyncEnabled, serverPagingEnabled]);
 
   useEffect(() => {
     function handleNotificationSync(event: Event) {
@@ -474,7 +562,9 @@ export function DomainExchangesBoard({
       }
 
       if (data.rows) {
-        if (incrementalSyncEnabled) {
+        if (serverPagingEnabled) {
+          await fetchPageRows(1);
+        } else if (incrementalSyncEnabled) {
           const currentIds = new Set(rows.map((row) => row.id));
           applyChangedRows(data.rows.filter((row) => !currentIds.has(row.id)));
         } else {
@@ -516,7 +606,9 @@ export function DomainExchangesBoard({
     }
 
     if (data.rows) {
-      if (incrementalSyncEnabled) {
+      if (serverPagingEnabled) {
+        await fetchPageRows(currentPage);
+      } else if (incrementalSyncEnabled) {
         applyChangedRows(data.rows.filter((row) => row.id === id));
       } else {
         const nextRows = data.rows.map(normalizeExchangeRow);

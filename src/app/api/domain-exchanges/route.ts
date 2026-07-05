@@ -6,6 +6,7 @@ import {
   cancelApprovedDomainExchange,
   createDomainExchange,
   getDomainExchangeCreateContext,
+  getDomainExchangeRowsPage,
   getDomainExchangeRows,
   rejectDomainExchange,
 } from "@/lib/domain-exchanges-repository";
@@ -50,7 +51,26 @@ export async function GET(request: Request) {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
 
-  const since = new URL(request.url).searchParams.get("since");
+  const searchParams = new URL(request.url).searchParams;
+  const mode = searchParams.get("mode");
+
+  if (mode === "page") {
+    return NextResponse.json({
+      ...(await getDomainExchangeRowsPage(user, {
+        page: searchParams.get("page"),
+        pageSize: searchParams.get("pageSize"),
+      })),
+      createContext: canUseDistributorMenus(user)
+        ? await getDomainExchangeCreateContext(user)
+        : {
+            defaultDomainId: null,
+            currentBalance: 0,
+            hasConnectedDomain: false,
+          },
+    });
+  }
+
+  const since = searchParams.get("since");
   const updatedSince =
     isRealtimeSyncPilot(user) && since && Number.isFinite(Date.parse(since))
       ? since

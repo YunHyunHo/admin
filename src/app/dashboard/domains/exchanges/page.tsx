@@ -9,8 +9,10 @@ import { getSessionUser } from "@/lib/auth";
 import {
   getDomainExchangeCreateContext,
   getDomainExchangeOptions,
+  getDomainExchangeRowsPage,
   getDomainExchangeRows,
 } from "@/lib/domain-exchanges-repository";
+import { isPerformancePilotUser } from "@/lib/performance-pilot";
 import { canManageMasterResources } from "@/lib/permissions";
 import { isRealtimeSyncPilot } from "@/lib/realtime-sync-pilot";
 import { getServerSyncCursor } from "@/lib/db";
@@ -25,11 +27,14 @@ export default async function DomainExchangesPage() {
 
   const isMaster = canManageMasterResources(user);
   const incrementalSyncEnabled = isRealtimeSyncPilot(user);
+  const serverPagingEnabled = isPerformancePilotUser(user);
   const initialSyncCursor = incrementalSyncEnabled
     ? await getServerSyncCursor()
     : undefined;
-  const [exchangeRows, domainOptions, createContext] = await Promise.all([
-    getDomainExchangeRows(fallbackDomainExchanges, user),
+  const [exchangeData, domainOptions, createContext] = await Promise.all([
+    serverPagingEnabled
+      ? getDomainExchangeRowsPage(user)
+      : getDomainExchangeRows(fallbackDomainExchanges, user),
     getDomainExchangeOptions(user),
     isMaster
       ? Promise.resolve({
@@ -48,7 +53,7 @@ export default async function DomainExchangesPage() {
       helperText="도메인 기준 환전 요청을 확인하고 처리하는 화면입니다."
     >
       <DomainExchangesBoard
-        initialRows={exchangeRows}
+        initialRows={Array.isArray(exchangeData) ? exchangeData : exchangeData.rows}
         domainOptions={domainOptions}
         defaultDomainId={createContext.defaultDomainId}
         currentBalance={createContext.currentBalance}
@@ -57,6 +62,8 @@ export default async function DomainExchangesPage() {
         canProcessExchanges={isMaster}
         incrementalSyncEnabled={incrementalSyncEnabled}
         initialSyncCursor={initialSyncCursor}
+        serverPagingEnabled={serverPagingEnabled}
+        initialPageData={Array.isArray(exchangeData) ? undefined : exchangeData}
       />
     </AdminShell>
   );

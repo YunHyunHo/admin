@@ -70,6 +70,13 @@ export type DomainExchangeCreateContext = {
   hasConnectedDomain: boolean;
 };
 
+export type DomainExchangePageResponse = {
+  rows: DomainExchangeRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
 function formatStamp(value: Date | string | null) {
   return formatKoreanDateTime(value, { emptyValue: "" });
 }
@@ -117,6 +124,18 @@ function toExchangeRow(row: ExchangeRequestDbRow): DomainExchangeRow {
     requestedAt: formatStamp(row.requested_at),
     completedAt: formatStamp(row.processed_at),
     status: toStatus(row.status),
+  };
+}
+
+function getPageWindow(page?: string | number | null, pageSize?: string | number | null) {
+  const currentPage = Math.max(1, Number(page ?? 1) || 1);
+  const rawPageSize = Math.max(1, Number(pageSize ?? 10) || 10);
+  const normalizedPageSize = Math.min(rawPageSize, 100);
+
+  return {
+    page: currentPage,
+    pageSize: normalizedPageSize,
+    offset: (currentPage - 1) * normalizedPageSize,
   };
 }
 
@@ -176,6 +195,78 @@ export async function getDomainExchangeRows(
   );
 
   return result.rows.map(toExchangeRow);
+}
+
+export async function getDomainExchangeRowsPage(
+  user: SessionUser,
+  input: { page?: string | number | null; pageSize?: string | number | null } = {},
+): Promise<DomainExchangePageResponse> {
+  const { page, pageSize, offset } = getPageWindow(input.page, input.pageSize);
+
+  if (!hasDatabaseUrl()) {
+    const rows = await getDomainExchangeRows([], user);
+
+    return {
+      rows: rows.slice(offset, offset + pageSize),
+      total: rows.length,
+      page,
+      pageSize,
+    };
+  }
+
+  const scope = await getScopedDataCondition(user, {
+    company: "er",
+    distributor: "dist",
+    distributorAdmin: "dist_admin",
+  });
+  const values: unknown[] = [...scope.values, pageSize, offset];
+  const limitParam = values.length - 1;
+  const offsetParam = values.length;
+  const result = await query<ExchangeRequestDbRow & { total_count: string }>(
+    `
+      select
+        er.id::text,
+        er.user_uid,
+        case when parent_dist.id is null then null else dist.name end as distributor_name,
+        child_dist.names as child_distributor_names,
+        coalesce(parent_dist.name, dist.name) as top_distributor_name,
+        c.company_name,
+        dom.domain_name,
+        er.bank_name,
+        er.account_holder,
+        er.account_number,
+        er.amount::text,
+        er.requested_at,
+        er.processed_at,
+        er.status::text as status,
+        count(*) over()::text as total_count
+      from exchange_requests er
+      join companies c on c.id = er.company_id
+      left join domains dom on dom.id = er.domain_id
+      left join distributors dist on dist.id = er.distributor_id
+      left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
+      left join admins dist_admin on dist_admin.id = dist.admin_id
+      left join lateral (
+        select string_agg(child.name, ', ' order by child.name) as names
+        from distributors child
+        where child.parent_distributor_id = dist.id
+          and child.status = 'ACTIVE'
+      ) child_dist on parent_dist.id is null
+      where 1 = 1
+        ${scope.sql}
+      order by er.requested_at desc
+      limit $${limitParam}
+      offset $${offsetParam}
+    `,
+    values,
+  );
+
+  return {
+    rows: result.rows.map(toExchangeRow),
+    total: Number(result.rows[0]?.total_count ?? 0),
+    page,
+    pageSize,
+  };
 }
 
 export async function getPendingDomainExchangeIds(user: SessionUser) {

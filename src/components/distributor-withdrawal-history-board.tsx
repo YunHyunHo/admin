@@ -244,14 +244,25 @@ export function DistributorWithdrawalHistoryBoard({
   canCreateWithdrawals = false,
   canProcessWithdrawals = false,
   availableBalance = 0,
+  serverPagingEnabled = false,
+  initialPageData,
 }: {
   initialRows?: WithdrawalRow[];
   canCreateWithdrawals?: boolean;
   canProcessWithdrawals?: boolean;
   availableBalance?: number;
+  serverPagingEnabled?: boolean;
+  initialPageData?: {
+    rows: WithdrawalRow[];
+    total: number;
+    page: number;
+    pageSize: number;
+  };
 }) {
   const [rows, setRows] = useState(initialRows);
   const [page, setPage] = useState(1);
+  const [totalRows, setTotalRows] = useState(initialPageData?.total ?? initialRows.length);
+  const [isPageLoading, setIsPageLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -265,10 +276,21 @@ export function DistributorWithdrawalHistoryBoard({
   );
   const refreshRowsPromiseRef = useRef<Promise<void> | null>(null);
   const needsRefreshRowsRef = useRef(false);
-  const pageCount = Math.max(1, Math.ceil(rows.length / rowsPerPage));
+  const pageRequestKeyRef = useRef(
+    serverPagingEnabled && initialPageData
+      ? JSON.stringify({ page: initialPageData.page })
+      : "",
+  );
+  const pageCount = Math.max(
+    1,
+    Math.ceil((serverPagingEnabled ? totalRows : rows.length) / rowsPerPage),
+  );
   const pageRows = useMemo(
-    () => rows.slice((page - 1) * rowsPerPage, page * rowsPerPage),
-    [rows, page],
+    () =>
+      serverPagingEnabled
+        ? rows
+        : rows.slice((page - 1) * rowsPerPage, page * rowsPerPage),
+    [rows, page, serverPagingEnabled],
   );
   const numericAmount = Number(amount.replaceAll(",", ""));
   const isAmountOverBalance =
@@ -278,7 +300,29 @@ export function DistributorWithdrawalHistoryBoard({
     availableBalance > 0 &&
     Number.isFinite(numericAmount) &&
     numericAmount > 0 &&
-    numericAmount <= availableBalance;
+      numericAmount <= availableBalance;
+
+  const fetchPageRows = useCallback(async (targetPage: number) => {
+    const response = await fetch(
+      `/api/distributor-withdrawals?mode=page&page=${targetPage}&pageSize=${rowsPerPage}`,
+      { cache: "no-store" },
+    );
+    const data = (await response.json().catch(() => null)) as
+      | { rows?: WithdrawalRow[]; total?: number }
+      | { message?: string }
+      | null;
+
+    if (!response.ok || !data || !("rows" in data) || !Array.isArray(data.rows)) {
+      throw new Error(
+        (data && "message" in data && data.message) ||
+          "총판 환전 목록을 불러오지 못했습니다.",
+      );
+    }
+
+    pendingSignatureRef.current = getPendingWithdrawalSignature(data.rows);
+    setRows(data.rows);
+    setTotalRows(typeof data.total === "number" ? data.total : data.rows.length);
+  }, []);
 
   function handleAmountChange(value: string) {
     const digits = value.replace(/[^0-9]/g, "");
@@ -312,6 +356,10 @@ export function DistributorWithdrawalHistoryBoard({
     const refreshPromise = (async () => {
       do {
         needsRefreshRowsRef.current = false;
+        if (serverPagingEnabled) {
+          await fetchPageRows(page);
+          continue;
+        }
         const response = await fetch("/api/distributor-withdrawals", {
           cache: "no-store",
         });
@@ -330,7 +378,43 @@ export function DistributorWithdrawalHistoryBoard({
 
     refreshRowsPromiseRef.current = refreshPromise;
     return refreshPromise;
-  }, []);
+  }, [fetchPageRows, page, serverPagingEnabled]);
+
+  useEffect(() => {
+    if (!serverPagingEnabled) {
+      return;
+    }
+
+    const requestKey = JSON.stringify({ page });
+
+    if (pageRequestKeyRef.current === requestKey) {
+      return;
+    }
+
+    pageRequestKeyRef.current = requestKey;
+    let cancelled = false;
+    setIsPageLoading(true);
+
+    void fetchPageRows(page)
+      .catch((error) => {
+        if (!cancelled) {
+          setMessage(
+            error instanceof Error
+              ? error.message
+              : "총판 환전 목록을 불러오지 못했습니다.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsPageLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchPageRows, page, serverPagingEnabled]);
 
   useEffect(() => {
     function handleNotificationSync(event: Event) {
@@ -410,8 +494,12 @@ export function DistributorWithdrawalHistoryBoard({
       }
 
       if (data.rows) {
-        pendingSignatureRef.current = getPendingWithdrawalSignature(data.rows);
-        setRows(data.rows);
+        if (serverPagingEnabled) {
+          await fetchPageRows(1);
+        } else {
+          pendingSignatureRef.current = getPendingWithdrawalSignature(data.rows);
+          setRows(data.rows);
+        }
       }
       window.dispatchEvent(new Event(requestNotifierRefreshEventName));
 
@@ -458,8 +546,12 @@ export function DistributorWithdrawalHistoryBoard({
     }
 
     if (data.rows) {
-      pendingSignatureRef.current = getPendingWithdrawalSignature(data.rows);
-      setRows(data.rows);
+      if (serverPagingEnabled) {
+        await fetchPageRows(page);
+      } else {
+        pendingSignatureRef.current = getPendingWithdrawalSignature(data.rows);
+        setRows(data.rows);
+      }
     }
     window.dispatchEvent(new Event(requestNotifierRefreshEventName));
 
@@ -541,7 +633,11 @@ export function DistributorWithdrawalHistoryBoard({
 
       <div className="mt-5 overflow-hidden border border-white/24 bg-black/10">
         <div className="space-y-3 p-3 md:hidden">
-          {pageRows.length ? (
+          {isPageLoading ? (
+            <div className="px-4 py-12 text-center text-sm text-white/48">
+              총판 환전 내역을 불러오는 중입니다.
+            </div>
+          ) : pageRows.length ? (
             pageRows.map((row) => (
               <article
                 key={`mobile-${row.id}`}
@@ -658,6 +754,13 @@ export function DistributorWithdrawalHistoryBoard({
                   </td>
                 </tr>
               ))}
+              {!isPageLoading && !pageRows.length ? (
+                <tr>
+                  <td colSpan={11} className="px-4 py-10 text-center text-sm text-white/40">
+                    총판 환전 내역이 없습니다.
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
