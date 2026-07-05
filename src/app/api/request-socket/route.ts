@@ -46,10 +46,6 @@ function isSameOrigin(requestUrl: URL, origin: string | null) {
 }
 
 async function canUserAccessEvent(user: SessionUser, event: AdminRequestEvent) {
-  if (user.role === "MASTER") {
-    return true;
-  }
-
   if (event.kind === "charge") {
     return canUserAccessChargeRequest(user, event.requestId);
   }

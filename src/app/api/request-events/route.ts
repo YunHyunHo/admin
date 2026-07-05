@@ -46,10 +46,6 @@ async function canUserAccessEvent(user: Awaited<ReturnType<typeof getSessionUser
     return false;
   }
 
-  if (user.role === "MASTER") {
-    return true;
-  }
-
   if (event.kind === "charge") {
     return canUserAccessChargeRequest(user, event.requestId);
   }
