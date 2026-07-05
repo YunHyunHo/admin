@@ -85,11 +85,13 @@ async function waitForListSync(promises: Promise<unknown>[]) {
 
 type GlobalRequestNotifierProps = {
   realtimeEventsEnabled?: boolean;
+  realtimeEventsPath?: string;
   fallbackPollIntervalMs?: number;
 };
 
 export function GlobalRequestNotifier({
   realtimeEventsEnabled = false,
+  realtimeEventsPath = "/api/request-events",
   fallbackPollIntervalMs = defaultPollIntervalMs,
 }: GlobalRequestNotifierProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -277,7 +279,7 @@ export function GlobalRequestNotifier({
 
   useEffect(() => {
     if (realtimeEventsEnabled && typeof window !== "undefined" && "EventSource" in window) {
-      const eventSource = new EventSource("/api/request-events");
+      const eventSource = new EventSource(realtimeEventsPath);
       let isCancelled = false;
       let timeoutId: number | null = null;
 
@@ -389,6 +391,7 @@ export function GlobalRequestNotifier({
     ensureAudio,
     fallbackPollIntervalMs,
     realtimeEventsEnabled,
+    realtimeEventsPath,
     syncRequests,
   ]);
 
