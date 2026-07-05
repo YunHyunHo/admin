@@ -5,8 +5,8 @@ import { AdminShell } from "@/components/admin-shell";
 import { getSessionUser } from "@/lib/auth";
 import {
   getChargeRequestHistoryPageForUser,
+  getPendingChargeRequestPageForUser,
   getChargeRequestsForUser,
-  getPendingChargeRequestsForUser,
 } from "@/lib/charge-requests-repository";
 import { getServerSyncCursor, hasDatabaseUrl } from "@/lib/db";
 import { getDomainExchangeOptions } from "@/lib/domain-exchanges-repository";
@@ -21,10 +21,15 @@ type ChargeHistoryPage = {
   pageSize: number;
 };
 
+type ChargePendingPage = Awaited<
+  ReturnType<typeof getPendingChargeRequestPageForUser>
+>;
+
 type ChargeRequestsPilotPayload = {
-  pending: Awaited<ReturnType<typeof getPendingChargeRequestsForUser>>;
+  pending: ChargePendingPage["items"];
   approved: ChargeHistoryPage["items"];
   rejected: ChargeHistoryPage["items"];
+  pendingPage: ChargePendingPage;
   approvedPage: ChargeHistoryPage;
   rejectedPage: ChargeHistoryPage;
 };
@@ -32,7 +37,9 @@ type ChargeRequestsPilotPayload = {
 function hasPilotHistoryPages(
   value: Awaited<ReturnType<typeof getChargeRequestsForUser>> | ChargeRequestsPilotPayload,
 ): value is ChargeRequestsPilotPayload {
-  return "approvedPage" in value && "rejectedPage" in value;
+  return (
+    "pendingPage" in value && "approvedPage" in value && "rejectedPage" in value
+  );
 }
 
 
@@ -51,13 +58,14 @@ export default async function ChargesPage() {
   const [companyRequests, domainOptions] = await Promise.all([
     serverHistoryEnabled
       ? Promise.all([
-          getPendingChargeRequestsForUser(user),
+          getPendingChargeRequestPageForUser(user),
           getChargeRequestHistoryPageForUser(user, { status: "approved" }),
           getChargeRequestHistoryPageForUser(user, { status: "rejected" }),
-        ]).then(([pending, approvedPage, rejectedPage]) => ({
-          pending,
+        ]).then(([pendingPage, approvedPage, rejectedPage]) => ({
+          pending: pendingPage.items,
           approved: approvedPage.items,
           rejected: rejectedPage.items,
+          pendingPage,
           approvedPage,
           rejectedPage,
         }))
@@ -76,6 +84,11 @@ export default async function ChargesPage() {
         initialPendingRequests={companyRequests.pending}
         initialApprovedRequests={companyRequests.approved}
         initialRejectedRequests={companyRequests.rejected}
+        initialPendingPage={
+          hasPilotHistoryPages(companyRequests)
+            ? companyRequests.pendingPage
+            : undefined
+        }
         canProcessCharges={canProcessRequests(user)}
         isDatabaseBacked={hasDatabaseUrl()}
         domainOptions={domainOptions}

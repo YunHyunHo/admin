@@ -25,6 +25,7 @@ type ChargeRequestsBoardProps = {
   incrementalSyncEnabled?: boolean;
   initialSyncCursor?: string;
   serverHistoryEnabled?: boolean;
+  initialPendingPage?: ChargePendingPageResponse;
   initialApprovedHistoryPage?: ChargeHistoryPageResponse;
   initialRejectedHistoryPage?: ChargeHistoryPageResponse;
 };
@@ -37,6 +38,13 @@ type ChargeRequestsResponse = {
 
 type ChargeHistoryPageResponse = {
   items: ProcessedRequest[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+type ChargePendingPageResponse = {
+  items: PendingRequest[];
   total: number;
   page: number;
   pageSize: number;
@@ -282,6 +290,7 @@ export function ChargeRequestsBoard({
   incrementalSyncEnabled = false,
   initialSyncCursor = "",
   serverHistoryEnabled = false,
+  initialPendingPage,
   initialApprovedHistoryPage,
   initialRejectedHistoryPage,
 }: ChargeRequestsBoardProps) {
@@ -304,6 +313,10 @@ export function ChargeRequestsBoard({
   const [rejectedHistoryTotal, setRejectedHistoryTotal] = useState(
     initialRejectedHistoryPage?.total ?? initialRejectedRequests.length,
   );
+  const [pendingTotal, setPendingTotal] = useState(
+    initialPendingPage?.total ?? initialPendingRequests.length,
+  );
+  const [pendingLoading, setPendingLoading] = useState(false);
   const [approvedHistoryLoading, setApprovedHistoryLoading] = useState(false);
   const [rejectedHistoryLoading, setRejectedHistoryLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -339,9 +352,18 @@ export function ChargeRequestsBoard({
       .sort()
       .join(","),
   );
+  const pendingNotificationSignatureRef = useRef<string | null>(null);
   const lastSyncCursorRef = useRef(initialSyncCursor);
   const notificationRefreshPromiseRef = useRef<Promise<void> | null>(null);
   const needsNotificationRefreshRef = useRef(false);
+  const pendingRequestKeyRef = useRef(
+    serverHistoryEnabled && initialPendingPage
+      ? JSON.stringify({
+          page: initialPendingPage.page,
+          keyword: "",
+        })
+      : "",
+  );
   const approvedHistoryRequestKeyRef = useRef(
     serverHistoryEnabled && initialApprovedHistoryPage
       ? JSON.stringify({
@@ -379,6 +401,47 @@ export function ChargeRequestsBoard({
     setIsSoundReady(true);
     setSoundMessage("");
   }, []);
+
+  const applyPendingPageData = useCallback(
+    (
+      data: ChargePendingPageResponse,
+      options: {
+        notifyNewPending?: boolean;
+        resetPage?: boolean;
+      } = {},
+    ) => {
+      const newPendingCount = data.items.filter(
+        (request) => !knownPendingIdsRef.current.has(request.id),
+      ).length;
+
+      knownPendingIdsRef.current = new Set(data.items.map((request) => request.id));
+      pendingSignatureRef.current = data.items
+        .map((request) => request.id)
+        .sort()
+        .join(",");
+
+      setPendingRequests(data.items);
+      setPendingTotal(data.total);
+      setArmedApprovalId((current) =>
+        current && data.items.some((request) => request.id === current)
+          ? current
+          : null,
+      );
+
+      if (options.resetPage) {
+        setPendingPage(1);
+      }
+
+      if (options.notifyNewPending && newPendingCount > 0) {
+        setMessage(`${newPendingCount}건의 신규 충전신청이 도착했습니다.`);
+        void playNoticeSound().catch(() => {
+          setIsSoundReady(false);
+          setSoundMessage("브라우저가 알림음을 차단했습니다. 알림음 켜짐 버튼을 눌러주세요.");
+        });
+      }
+    },
+    [playNoticeSound],
+  );
 
   const applyServerData = useCallback(
     (
@@ -551,6 +614,38 @@ export function ChargeRequestsBoard({
     [],
   );
 
+  const requestPendingPage = useCallback(
+    async (page: number, keyword: string) => {
+      const params = new URLSearchParams({
+        mode: "pending",
+        page: String(page),
+        pageSize: String(rowsPerPage),
+      });
+
+      if (keyword.trim()) {
+        params.set("keyword", keyword.trim());
+      }
+
+      const response = await fetch(`/api/charge-requests?${params.toString()}`, {
+        cache: "no-store",
+      });
+      const data = (await response.json().catch(() => null)) as
+        | ChargePendingPageResponse
+        | { message?: string }
+        | null;
+
+      if (!response.ok || !data || !("items" in data)) {
+        throw new Error(
+          (data && "message" in data && data.message) ||
+            "충전신청 데이터를 불러오지 못했습니다.",
+        );
+      }
+
+      return data;
+    },
+    [],
+  );
+
   const syncIncrementalChanges = useCallback(async () => {
     if (!lastSyncCursorRef.current) {
       lastSyncCursorRef.current = new Date(Date.now() - 5000).toISOString();
@@ -591,15 +686,9 @@ export function ChargeRequestsBoard({
       do {
         needsNotificationRefreshRef.current = false;
         if (serverHistoryEnabled) {
-          const data = await requestChargeData();
-          applyServerData(data, {
-            resetPages: false,
-            preserveHistoryPages: true,
-          });
-
-          if (data.approved.length > 0 || data.rejected.length > 0) {
-            setHistoryRefreshVersion((current) => current + 1);
-          }
+          const pendingData = await requestPendingPage(pendingPage, searchKeyword);
+          applyPendingPageData(pendingData);
+          setHistoryRefreshVersion((current) => current + 1);
         } else if (incrementalSyncEnabled) {
           await syncIncrementalChanges();
         } else {
@@ -614,8 +703,12 @@ export function ChargeRequestsBoard({
     return refreshPromise;
   }, [
     applyServerData,
+    applyPendingPageData,
     incrementalSyncEnabled,
+    pendingPage,
     requestChargeData,
+    requestPendingPage,
+    searchKeyword,
     serverHistoryEnabled,
     syncIncrementalChanges,
   ]);
@@ -631,6 +724,21 @@ export function ChargeRequestsBoard({
       }
 
       const nextSignature = [...pendingIds].sort().join(",");
+
+      if (serverHistoryEnabled) {
+        if (pendingNotificationSignatureRef.current === null) {
+          pendingNotificationSignatureRef.current = nextSignature;
+          return;
+        }
+
+        if (nextSignature === pendingNotificationSignatureRef.current) {
+          return;
+        }
+
+        pendingNotificationSignatureRef.current = nextSignature;
+        snapshot.waitUntil(refreshRequestsForNotification());
+        return;
+      }
 
       if (nextSignature === pendingSignatureRef.current) {
         return;
@@ -651,7 +759,7 @@ export function ChargeRequestsBoard({
         handleNotificationSync,
       );
     };
-  }, [refreshRequestsForNotification]);
+  }, [refreshRequestsForNotification, serverHistoryEnabled]);
 
   useEffect(() => {
     if (serverHistoryEnabled) {
@@ -749,6 +857,58 @@ export function ChargeRequestsBoard({
       }
     };
   }, [refreshRequestsForNotification, serverHistoryEnabled]);
+
+  useEffect(() => {
+    if (!serverHistoryEnabled) {
+      return;
+    }
+
+    const requestKey = JSON.stringify({
+      page: pendingPage,
+      keyword: searchKeyword.trim(),
+    });
+
+    if (pendingRequestKeyRef.current === requestKey) {
+      return;
+    }
+
+    pendingRequestKeyRef.current = requestKey;
+    let cancelled = false;
+    setPendingLoading(true);
+
+    void requestPendingPage(pendingPage, searchKeyword)
+      .then((data) => {
+        if (cancelled) {
+          return;
+        }
+
+        applyPendingPageData(data);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setMessage(
+            error instanceof Error
+              ? error.message
+              : "충전신청 데이터를 불러오지 못했습니다.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setPendingLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    applyPendingPageData,
+    pendingPage,
+    requestPendingPage,
+    searchKeyword,
+    serverHistoryEnabled,
+  ]);
 
   useEffect(() => {
     if (!serverHistoryEnabled) {
@@ -898,7 +1058,11 @@ export function ChargeRequestsBoard({
     setMessage("최신 충전신청 데이터를 불러오는 중입니다.");
 
     try {
-      applyServerData(await requestChargeData());
+      if (serverHistoryEnabled) {
+        applyPendingPageData(await requestPendingPage(pendingPage, searchKeyword));
+      } else {
+        applyServerData(await requestChargeData());
+      }
       await refreshHistoryPages();
       setMessage("충전신청 데이터가 갱신되었습니다.");
     } catch (error) {
@@ -944,18 +1108,22 @@ export function ChargeRequestsBoard({
     setMessage("충전신청을 생성하는 중입니다.");
 
     try {
-      applyServerData(
-        await requestChargeData({
-          action: "create",
-          userId: depositorName,
-          amount,
-          depositor: depositorName,
-          bankName: createBankName,
-          accountNumber: createAccountNumber,
-          domainId,
-          domainName,
-        }),
-      );
+      await requestChargeData({
+        action: "create",
+        userId: depositorName,
+        amount,
+        depositor: depositorName,
+        bankName: createBankName,
+        accountNumber: createAccountNumber,
+        domainId,
+        domainName,
+      });
+      if (serverHistoryEnabled) {
+        pendingRequestKeyRef.current = "";
+        await refreshRequestsForNotification();
+      } else {
+        applyServerData(await requestChargeData());
+      }
       resetCreateForm();
       setIsCreateModalOpen(false);
       setMessage("충전신청이 생성되었습니다.");
@@ -970,6 +1138,10 @@ export function ChargeRequestsBoard({
   }
 
   const filteredPendingRequests = useMemo(() => {
+    if (serverHistoryEnabled) {
+      return pendingRequests;
+    }
+
     const keyword = searchKeyword.trim().toLowerCase();
     const source = [...pendingRequests].sort((left, right) => {
       const dateOrder = (left.requestedDate ?? "").localeCompare(
@@ -989,15 +1161,20 @@ export function ChargeRequestsBoard({
         row.userId.toLowerCase().includes(keyword) ||
         row.accountNumber.toLowerCase().includes(keyword),
     );
-  }, [pendingRequests, searchKeyword]);
+  }, [pendingRequests, searchKeyword, serverHistoryEnabled]);
   const pendingPageCount = Math.max(
     1,
-    Math.ceil(filteredPendingRequests.length / rowsPerPage),
+    Math.ceil(
+      (serverHistoryEnabled ? pendingTotal : filteredPendingRequests.length) /
+        rowsPerPage,
+    ),
   );
-  const visiblePendingRequests = filteredPendingRequests.slice(
-    (pendingPage - 1) * rowsPerPage,
-    pendingPage * rowsPerPage,
-  );
+  const visiblePendingRequests = serverHistoryEnabled
+    ? filteredPendingRequests
+    : filteredPendingRequests.slice(
+        (pendingPage - 1) * rowsPerPage,
+        pendingPage * rowsPerPage,
+      );
   const filteredApprovedRequests = useMemo(
     () =>
       serverHistoryEnabled
@@ -1170,7 +1347,10 @@ export function ChargeRequestsBoard({
       ) : null}
       <div className="grid gap-5">
         <div className="space-y-5">
-          <SectionCard title="충전신청" count={filteredPendingRequests.length}>
+          <SectionCard
+            title="충전신청"
+            count={serverHistoryEnabled ? pendingTotal : filteredPendingRequests.length}
+          >
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="text-sm text-white/52">
                 {message}
@@ -1275,7 +1455,7 @@ export function ChargeRequestsBoard({
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredPendingRequests.length ? (
+                  {visiblePendingRequests.length ? (
                     visiblePendingRequests.map((row) => (
                       <tr key={row.id} className="border-t border-cyan-300/18 text-white/82">
                         <td className="px-4 py-4">{row.branch}</td>
@@ -1327,6 +1507,15 @@ export function ChargeRequestsBoard({
                         </td>
                       </tr>
                     ))
+                  ) : pendingLoading ? (
+                    <tr>
+                      <td
+                        colSpan={11}
+                        className="px-4 py-10 text-center text-sm text-white/40"
+                      >
+                        충전신청 데이터를 불러오는 중입니다.
+                      </td>
+                    </tr>
                   ) : (
                     <tr>
                       <td
@@ -1340,7 +1529,7 @@ export function ChargeRequestsBoard({
                 </tbody>
               </table>
             </Table>
-            {filteredPendingRequests.length > rowsPerPage ? (
+            {pendingPageCount > 1 ? (
               <PaginationControls
                 page={pendingPage}
                 pageCount={pendingPageCount}

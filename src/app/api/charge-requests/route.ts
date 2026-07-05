@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/auth";
 import { publishAdminRequestEventWithQuery } from "@/lib/admin-request-events";
 import {
   getChargeRequestHistoryPageForUser,
+  getPendingChargeRequestPageForUser,
   createDbChargeRequest,
   getChargeRequestChangesForUser,
   getChargeRequestsForUser,
@@ -57,6 +58,16 @@ export async function GET(request: Request) {
         endDate: searchParams.get("endDate"),
         name: searchParams.get("name"),
         amount: searchParams.get("amount"),
+      }),
+    );
+  }
+
+  if (mode === "pending") {
+    return NextResponse.json(
+      await getPendingChargeRequestPageForUser(user, {
+        page: searchParams.get("page"),
+        pageSize: searchParams.get("pageSize"),
+        keyword: searchParams.get("keyword"),
       }),
     );
   }
@@ -152,7 +163,7 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json(await getChargeRequestsForUser(user), { status: 201 });
+    return NextResponse.json({ ok: true }, { status: 201 });
   }
 
   if (!body.id || !body.status || !allowedStatuses.includes(body.status)) {

@@ -134,6 +134,19 @@ export type ChargeHistoryPageResponse = {
   pageSize: number;
 };
 
+export type ChargePendingPageInput = {
+  page?: string | number | null;
+  pageSize?: string | number | null;
+  keyword?: string | null;
+};
+
+export type ChargePendingPageResponse = {
+  items: PendingRequest[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
 function formatStamp(value: Date | string | null) {
   return formatKoreanDateTime(value);
 }
@@ -499,6 +512,103 @@ export async function getPendingChargeRequestsForUser(user: SessionUser) {
   }
 
   return (await getDbChargeRequests(user)).pending;
+}
+
+export async function getPendingChargeRequestPageForUser(
+  user: SessionUser,
+  input: ChargePendingPageInput = {},
+): Promise<ChargePendingPageResponse> {
+  const { page, pageSize, offset } = getHistoryPagination(input);
+  const keyword = input.keyword?.trim().toLowerCase() ?? "";
+
+  if (!hasDatabaseUrl()) {
+    const requests = await getChargeRequestsForUser(user);
+    const filtered = requests.pending.filter((row) => {
+      if (!keyword) {
+        return true;
+      }
+
+      return (
+        row.depositor.toLowerCase().includes(keyword) ||
+        row.userId.toLowerCase().includes(keyword) ||
+        row.accountNumber.toLowerCase().includes(keyword)
+      );
+    });
+
+    return {
+      items: filtered.slice(offset, offset + pageSize),
+      total: filtered.length,
+      page,
+      pageSize,
+    };
+  }
+
+  const scope = await getChargeRequestScope(user);
+  const values: unknown[] = [...scope.values];
+  const clauses = ["cr.status = 'PENDING'"];
+
+  if (keyword) {
+    values.push(`%${keyword}%`);
+    clauses.push(
+      `(
+        lower(coalesce(cr.depositor, '')) like $${values.length}
+        or lower(cr.user_uid) like $${values.length}
+        or lower(coalesce(cr.account_number, '')) like $${values.length}
+      )`,
+    );
+  }
+
+  values.push(pageSize, offset);
+  const limitParam = values.length - 1;
+  const offsetParam = values.length;
+
+  const result = await query<ChargeRequestRow & { total_count: string }>(
+    `
+      select
+        cr.id::text,
+        cr.user_uid,
+        cr.bank_name,
+        cr.account_number,
+        cr.account_holder,
+        cr.depositor,
+        cr.amount::text,
+        cr.status::text as status,
+        cr.requested_at,
+        cr.processed_at,
+        c.company_name,
+        coalesce(nullif(d.domain_name, ''), c.company_name) as domain_name,
+        coalesce(parent_dist.name, dist.name) as top_distributor_name,
+        case when parent_dist.id is null then null else dist.name end as distributor_name,
+        child_dist.names as child_distributor_names,
+        count(*) over()::text as total_count
+      from charge_requests cr
+      join companies c on c.id = cr.company_id
+      left join domains d on d.id = cr.domain_id
+      left join distributors dist on dist.id = cr.distributor_id
+      left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
+      left join admins dist_admin on dist_admin.id = dist.admin_id
+      left join lateral (
+        select string_agg(child.name, ', ' order by child.name) as names
+        from distributors child
+        where child.parent_distributor_id = dist.id
+          and child.status = 'ACTIVE'
+      ) child_dist on parent_dist.id is null
+      where 1 = 1
+        ${scope.sql}
+        and ${clauses.join("\n        and ")}
+      order by cr.requested_at asc, cr.created_at asc
+      limit $${limitParam}
+      offset $${offsetParam}
+    `,
+    values,
+  );
+
+  return {
+    items: result.rows.map(toPendingRequest),
+    total: Number(result.rows[0]?.total_count ?? 0),
+    page,
+    pageSize,
+  };
 }
 
 export async function getChargeRequestHistoryPageForUser(

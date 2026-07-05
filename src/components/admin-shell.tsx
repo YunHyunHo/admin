@@ -7,12 +7,7 @@ import { GlobalDashboardSummaryPanel } from "@/components/global-dashboard-summa
 import { GlobalRequestNotifier } from "@/components/global-request-notifier";
 import { QuickActionNav } from "@/components/quick-action-nav";
 import type { SessionUser } from "@/lib/auth";
-import {
-  getDashboardPartnerSummariesForUser,
-  sortDashboardPartnerSummaries,
-} from "@/lib/dashboard-summary-repository";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { isPerformancePilotUser } from "@/lib/performance-pilot";
 import { isRealtimeSyncPilot } from "@/lib/realtime-sync-pilot";
 
 const sideMenuGroups = [
@@ -185,9 +180,6 @@ export async function AdminShell({
     user.role === "MASTER" ||
     (user.role === "DOMAIN_ADMIN" && !user.hasDomainMapping);
   const isSettlementOnlyUser = settlementOnlyRoles.has(user.role);
-  const partnerSummaries = sortDashboardPartnerSummaries(
-    await getDashboardPartnerSummariesForUser(user),
-  );
   const visibleMenuGroups = sideMenuGroups
     .filter((group) => {
       if (isSettlementOnlyUser) {
@@ -371,7 +363,6 @@ export async function AdminShell({
 
             <div className="flex min-w-0 flex-1 flex-col">
               <GlobalDashboardSummaryPanel
-                partnerSummaries={partnerSummaries}
                 canReorder={user.role === "MASTER"}
                 stableRefreshEnabled={isRealtimeSyncPilot(user)}
               />
