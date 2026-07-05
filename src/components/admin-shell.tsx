@@ -208,7 +208,7 @@ export async function AdminShell({
     }))
     .filter((group) => group.items.length > 0);
   const visibleQuickActions = isSettlementOnlyUser ? [] : quickActions;
-  const realtimeEventsEnabled = isPerformancePilotUser(user);
+  const realtimeEventsEnabled = isRealtimeSyncPilot(user);
 
   return (
     <main className="admin-app-shell min-h-screen bg-[#09090b] text-white">

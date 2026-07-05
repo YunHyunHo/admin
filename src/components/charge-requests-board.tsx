@@ -687,10 +687,6 @@ export function ChargeRequestsBoard({
   }, [isDatabaseBacked, serverHistoryEnabled, syncIncrementalChanges]);
 
   useEffect(() => {
-    if (!serverHistoryEnabled) {
-      return;
-    }
-
     function handleRealtimeEvent(event: Event) {
       const detail = (event as CustomEvent<{ kind?: string }>).detail;
 
@@ -706,7 +702,7 @@ export function ChargeRequestsBoard({
     return () => {
       window.removeEventListener(requestRealtimeEventName, handleRealtimeEvent);
     };
-  }, [refreshRequestsForNotification, serverHistoryEnabled]);
+  }, [refreshRequestsForNotification]);
 
   useEffect(() => {
     if (!serverHistoryEnabled) {

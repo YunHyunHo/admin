@@ -452,10 +452,6 @@ export function DistributorWithdrawalHistoryBoard({
   }, [refreshRows]);
 
   useEffect(() => {
-    if (!serverPagingEnabled) {
-      return;
-    }
-
     function handleRealtimeEvent(event: Event) {
       const detail = (event as CustomEvent<{ kind?: string }>).detail;
 
@@ -471,7 +467,7 @@ export function DistributorWithdrawalHistoryBoard({
     return () => {
       window.removeEventListener(requestRealtimeEventName, handleRealtimeEvent);
     };
-  }, [refreshRows, serverPagingEnabled]);
+  }, [refreshRows]);
 
   useEffect(() => {
     if (!serverPagingEnabled) {

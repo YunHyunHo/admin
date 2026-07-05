@@ -11,7 +11,6 @@ import { canUserAccessChargeRequest } from "@/lib/charge-requests-repository";
 import { getPgPool, hasDatabaseUrl } from "@/lib/db";
 import { canUserAccessDistributorWithdrawal } from "@/lib/distributor-withdrawals-repository";
 import { canUserAccessDomainExchange } from "@/lib/domain-exchanges-repository";
-import { isPerformancePilotUser } from "@/lib/performance-pilot";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,10 +56,6 @@ export async function GET(request: Request) {
 
   if (!user) {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
-  }
-
-  if (!isPerformancePilotUser(user)) {
-    return NextResponse.json({ message: "실시간 테스트 계정만 사용할 수 있습니다." }, { status: 403 });
   }
 
   if (!hasDatabaseUrl()) {
