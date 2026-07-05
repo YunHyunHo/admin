@@ -174,6 +174,9 @@ export async function GET(request: Request) {
 
     try {
       await redis.connect();
+      console.info("[request-socket] Redis connected", {
+        loginId: user.loginId,
+      });
 
       void (async () => {
         let redisCursor = "$";
@@ -207,6 +210,9 @@ export async function GET(request: Request) {
         }
       })().catch(() => {
         if (!closed) {
+          console.error("[request-socket] Redis read failed", {
+            loginId: user.loginId,
+          });
           sendJson(ws, { type: "error", message: "Redis 실시간 연결이 끊겼습니다." });
           ws.close(1011, "redis realtime connection failed");
         }
@@ -263,7 +269,11 @@ export async function GET(request: Request) {
       }, heartbeatIntervalMs);
 
       await socketClosed;
-    } catch {
+    } catch (error) {
+      console.error("[request-socket] Connection failed", {
+        loginId: user.loginId,
+        message: error instanceof Error ? error.message : "unknown error",
+      });
       sendJson(ws, { type: "error", message: "실시간 연결에 실패했습니다." });
       ws.close(1011, "realtime connection failed");
       close();

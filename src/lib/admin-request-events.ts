@@ -92,9 +92,17 @@ async function persistAndPublishAdminRequestEvent(
     JSON.stringify(storedEvent),
   ]);
 
-  runAfterTransactionCommit(executor, () =>
-    appendAdminRequestEventToRedis(storedEvent),
-  );
+  runAfterTransactionCommit(executor, async () => {
+    try {
+      await appendAdminRequestEventToRedis(storedEvent);
+    } catch (error) {
+      console.error("[request-events] Redis publish failed", {
+        eventId: storedEvent.eventId,
+        kind: storedEvent.kind,
+        message: error instanceof Error ? error.message : "unknown error",
+      });
+    }
+  });
 }
 
 export async function publishAdminRequestEvent(
