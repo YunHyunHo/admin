@@ -5,6 +5,7 @@ import {
   type PendingRequest,
   type ProcessedRequest,
 } from "@/lib/charge-utils";
+import { publishAdminRequestEventWithQuery } from "@/lib/admin-request-events";
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
 import { ensureDomainChargeIntegrationSchema } from "@/lib/domain-charge-integration";
 import { ensureFeeRateSchema } from "@/lib/fee-rate-schema";
@@ -648,6 +649,32 @@ export async function getPendingChargeRequestIds(user: SessionUser) {
   return result.rows.map((row) => row.id);
 }
 
+export async function canUserAccessChargeRequest(
+  user: SessionUser,
+  requestId: string,
+) {
+  if (!hasDatabaseUrl()) {
+    return false;
+  }
+
+  const scope = await getChargeRequestScope(user);
+  const scopedSql = shiftSqlParams(scope.sql, 1);
+  const result = await query<{ id: string }>(
+    `
+      select cr.id::text as id
+      from charge_requests cr
+      left join distributors dist on dist.id = cr.distributor_id
+      left join admins dist_admin on dist_admin.id = dist.admin_id
+      where cr.id = $1::uuid
+        ${scopedSql}
+      limit 1
+    `,
+    [requestId, ...scope.values],
+  );
+
+  return Boolean(result.rows[0]);
+}
+
 async function getLinkedChargeRequestAccount(input: {
   domainId: string | null;
   companyId: string;
@@ -1009,7 +1036,21 @@ async function insertChargeRequest(input: CreateChargeRequestInput & {
     ],
   );
 
-  return result.rows[0]?.id;
+  const requestId = result.rows[0]?.id;
+
+  if (requestId) {
+    await publishAdminRequestEventWithQuery({
+      kind: "charge",
+      requestId,
+      companyId: input.companyId,
+      domainId: input.domainId,
+      distributorId: input.distributorId,
+      status: "PENDING",
+      occurredAt: new Date().toISOString(),
+    });
+  }
+
+  return requestId;
 }
 
 export async function createDbChargeRequest(input: CreateChargeRequestInput & { user: SessionUser }) {

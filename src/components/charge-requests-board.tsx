@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   requestNotificationSyncEventName,
   requestNotifierRefreshEventName,
+  requestRealtimeEventName,
   type RequestNotificationSyncDetail,
 } from "@/components/global-request-notifier";
 import { ModalFeedback } from "@/components/modal-feedback";
@@ -633,6 +634,10 @@ export function ChargeRequestsBoard({
   }, [refreshRequestsForNotification]);
 
   useEffect(() => {
+    if (serverHistoryEnabled) {
+      return;
+    }
+
     if (!isDatabaseBacked) {
       return;
     }
@@ -675,7 +680,29 @@ export function ChargeRequestsBoard({
         window.clearTimeout(timeoutId);
       }
     };
-  }, [isDatabaseBacked, syncIncrementalChanges]);
+  }, [isDatabaseBacked, serverHistoryEnabled, syncIncrementalChanges]);
+
+  useEffect(() => {
+    if (!serverHistoryEnabled) {
+      return;
+    }
+
+    function handleRealtimeEvent(event: Event) {
+      const detail = (event as CustomEvent<{ kind?: string }>).detail;
+
+      if (detail?.kind !== "charge") {
+        return;
+      }
+
+      void refreshRequestsForNotification();
+    }
+
+    window.addEventListener(requestRealtimeEventName, handleRealtimeEvent);
+
+    return () => {
+      window.removeEventListener(requestRealtimeEventName, handleRealtimeEvent);
+    };
+  }, [refreshRequestsForNotification, serverHistoryEnabled]);
 
   useEffect(() => {
     if (!serverHistoryEnabled) {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getSessionUser } from "@/lib/auth";
+import { publishAdminRequestEventWithQuery } from "@/lib/admin-request-events";
 import {
   getChargeRequestHistoryPageForUser,
   createDbChargeRequest,
@@ -201,6 +202,16 @@ export async function POST(request: Request) {
       body.id,
       body.status === "승인" ? "APPROVED" : "REJECTED",
     );
+
+    await publishAdminRequestEventWithQuery({
+      kind: "charge",
+      requestId: body.id,
+      companyId: null,
+      domainId: null,
+      distributorId: null,
+      status: body.status === "승인" ? "APPROVED" : "REJECTED",
+      occurredAt: new Date().toISOString(),
+    });
 
     return NextResponse.json({
       processedRequest,

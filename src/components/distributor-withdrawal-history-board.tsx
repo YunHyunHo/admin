@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   requestNotificationSyncEventName,
   requestNotifierRefreshEventName,
+  requestRealtimeEventName,
   type RequestNotificationSyncDetail,
 } from "@/components/global-request-notifier";
 import { ModalFeedback } from "@/components/modal-feedback";
@@ -448,6 +449,28 @@ export function DistributorWithdrawalHistoryBoard({
       );
     };
   }, [refreshRows]);
+
+  useEffect(() => {
+    if (!serverPagingEnabled) {
+      return;
+    }
+
+    function handleRealtimeEvent(event: Event) {
+      const detail = (event as CustomEvent<{ kind?: string }>).detail;
+
+      if (detail?.kind !== "distributor_withdrawal") {
+        return;
+      }
+
+      void refreshRows();
+    }
+
+    window.addEventListener(requestRealtimeEventName, handleRealtimeEvent);
+
+    return () => {
+      window.removeEventListener(requestRealtimeEventName, handleRealtimeEvent);
+    };
+  }, [refreshRows, serverPagingEnabled]);
 
   async function createWithdrawal() {
     if (isSubmitting) {

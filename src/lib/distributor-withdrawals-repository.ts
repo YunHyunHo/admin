@@ -1,4 +1,8 @@
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
+import {
+  publishAdminRequestEvent,
+  publishAdminRequestEventWithQuery,
+} from "@/lib/admin-request-events";
 import { formatKoreanDateTime } from "@/lib/korean-time";
 import {
   getManagedCompanyIds,
@@ -348,6 +352,32 @@ export async function getPendingDistributorWithdrawalIds(user: SessionUser) {
   return result.rows.map((row) => row.id);
 }
 
+export async function canUserAccessDistributorWithdrawal(
+  user: SessionUser,
+  requestId: string,
+) {
+  if (!hasDatabaseUrl()) {
+    return false;
+  }
+
+  const scope = await getWithdrawalScope(user);
+  const scopedSql = shiftSqlParams(scope.sql, 1);
+  const result = await query<{ id: string }>(
+    `
+      select dw.id::text as id
+      from distributor_withdrawals dw
+      join distributors d on d.id = dw.distributor_id
+      left join admins dist_admin on dist_admin.id = d.admin_id
+      where dw.id = $1::uuid
+        ${scopedSql}
+      limit 1
+    `,
+    [requestId, ...scope.values],
+  );
+
+  return Boolean(result.rows[0]);
+}
+
 export async function getDistributorWithdrawalCreateBalance(user: SessionUser) {
   if (!hasDatabaseUrl()) {
     return 0;
@@ -433,7 +463,21 @@ export async function createDistributorWithdrawal(input: CreateDistributorWithdr
     ],
   );
 
-  return result.rows[0]?.id;
+  const requestId = result.rows[0]?.id;
+
+  if (requestId) {
+    await publishAdminRequestEventWithQuery({
+      kind: "distributor_withdrawal",
+      requestId,
+      companyId: distributorScope.company_id,
+      domainId: null,
+      distributorId: distributorScope.distributor_id,
+      status: "PENDING",
+      occurredAt: new Date().toISOString(),
+    });
+  }
+
+  return requestId;
 }
 
 export async function approveDistributorWithdrawal(id: string, processedBy: SessionUser) {
@@ -526,6 +570,16 @@ export async function approveDistributorWithdrawal(id: string, processedBy: Sess
       `,
       [row.distributor_id, -requestAmount, beforeBalance, afterBalance, id, processedBy.id],
     );
+
+    await publishAdminRequestEvent(client, {
+      kind: "distributor_withdrawal",
+      requestId: id,
+      companyId: null,
+      domainId: null,
+      distributorId: row.distributor_id,
+      status: "APPROVED",
+      occurredAt: new Date().toISOString(),
+    });
   });
 }
 
@@ -553,6 +607,16 @@ export async function rejectDistributorWithdrawal(id: string, processedBy: Sessi
   if (!result.rows[0]) {
     throw new Error("처리할 총판 환전 요청을 찾을 수 없습니다.");
   }
+
+  await publishAdminRequestEventWithQuery({
+    kind: "distributor_withdrawal",
+    requestId: id,
+    companyId: null,
+    domainId: null,
+    distributorId: null,
+    status: "REJECTED",
+    occurredAt: new Date().toISOString(),
+  });
 }
 
 export async function cancelDistributorWithdrawal(id: string, processedBy: SessionUser) {
@@ -638,5 +702,15 @@ export async function cancelDistributorWithdrawal(id: string, processedBy: Sessi
       `,
       [row.distributor_id, requestAmount, beforeBalance, afterBalance, id, processedBy.id],
     );
+
+    await publishAdminRequestEvent(client, {
+      kind: "distributor_withdrawal",
+      requestId: id,
+      companyId: null,
+      domainId: null,
+      distributorId: row.distributor_id,
+      status: "CANCELED",
+      occurredAt: new Date().toISOString(),
+    });
   });
 }

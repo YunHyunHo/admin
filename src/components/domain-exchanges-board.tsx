@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   requestNotificationSyncEventName,
   requestNotifierRefreshEventName,
+  requestRealtimeEventName,
   type RequestNotificationSyncDetail,
 } from "@/components/global-request-notifier";
 import { ModalFeedback } from "@/components/modal-feedback";
@@ -448,6 +449,10 @@ export function DomainExchangesBoard({
   }, [currentPage, fetchPageRows, serverPagingEnabled]);
 
   useEffect(() => {
+    if (serverPagingEnabled) {
+      return;
+    }
+
     if (!incrementalSyncEnabled) {
       return;
     }
@@ -480,6 +485,28 @@ export function DomainExchangesBoard({
       }
     };
   }, [currentPage, fetchIncrementalRows, fetchPageRows, incrementalSyncEnabled, serverPagingEnabled]);
+
+  useEffect(() => {
+    if (!serverPagingEnabled) {
+      return;
+    }
+
+    function handleRealtimeEvent(event: Event) {
+      const detail = (event as CustomEvent<{ kind?: string }>).detail;
+
+      if (detail?.kind !== "domain_exchange") {
+        return;
+      }
+
+      void refreshRows();
+    }
+
+    window.addEventListener(requestRealtimeEventName, handleRealtimeEvent);
+
+    return () => {
+      window.removeEventListener(requestRealtimeEventName, handleRealtimeEvent);
+    };
+  }, [refreshRows, serverPagingEnabled]);
 
   useEffect(() => {
     function handleNotificationSync(event: Event) {

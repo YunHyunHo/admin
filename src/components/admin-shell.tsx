@@ -12,6 +12,7 @@ import {
   sortDashboardPartnerSummaries,
 } from "@/lib/dashboard-summary-repository";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { isPerformancePilotUser } from "@/lib/performance-pilot";
 import { isRealtimeSyncPilot } from "@/lib/realtime-sync-pilot";
 
 const sideMenuGroups = [
@@ -207,6 +208,7 @@ export async function AdminShell({
     }))
     .filter((group) => group.items.length > 0);
   const visibleQuickActions = isSettlementOnlyUser ? [] : quickActions;
+  const realtimeEventsEnabled = isPerformancePilotUser(user);
 
   return (
     <main className="admin-app-shell min-h-screen bg-[#09090b] text-white">
@@ -360,7 +362,7 @@ export async function AdminShell({
                   />
                 ) : null}
                 <div className="absolute right-4 top-4 flex items-center gap-2 sm:right-6 lg:static">
-                  <GlobalRequestNotifier />
+                    <GlobalRequestNotifier realtimeEventsEnabled={realtimeEventsEnabled} />
                   <DashboardSummaryToggle />
                   <ThemeToggle />
                 </div>

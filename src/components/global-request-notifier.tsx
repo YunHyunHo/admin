@@ -34,6 +34,7 @@ export const requestNotificationSyncEventName = "request-notification-sync";
 export const requestNotificationSnapshotEventName =
   "request-notification-snapshot";
 export const requestNotifierRefreshEventName = "request-notifier-refresh";
+export const requestRealtimeEventName = "request-realtime-event";
 export const pendingRequestCountsStorageKey = "pending-request-counts-snapshot";
 
 async function fetchJson<T>(url: string) {
@@ -82,7 +83,13 @@ async function waitForListSync(promises: Promise<unknown>[]) {
   ]);
 }
 
-export function GlobalRequestNotifier() {
+type GlobalRequestNotifierProps = {
+  realtimeEventsEnabled?: boolean;
+};
+
+export function GlobalRequestNotifier({
+  realtimeEventsEnabled = false,
+}: GlobalRequestNotifierProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const knownPendingIdsRef = useRef<Set<string>>(new Set());
   const hasInitializedRef = useRef(false);
@@ -266,6 +273,45 @@ export function GlobalRequestNotifier() {
   }, [playNoticeSoundWithRetry]);
 
   useEffect(() => {
+    if (realtimeEventsEnabled && typeof window !== "undefined" && "EventSource" in window) {
+      const eventSource = new EventSource("/api/request-events");
+
+      const handleReady = () => {
+        void syncRequests();
+      };
+      const handleRequestEvent = (event: MessageEvent<string>) => {
+        try {
+          const detail = JSON.parse(event.data) as {
+            kind?: string;
+            requestId?: string;
+            status?: string;
+          };
+          window.dispatchEvent(
+            new CustomEvent(requestRealtimeEventName, {
+              detail,
+            }),
+          );
+        } catch {
+          // Ignore malformed realtime payloads and rely on the next refresh.
+        }
+
+        void syncRequests();
+      };
+
+      eventSource.addEventListener("ready", handleReady);
+      eventSource.addEventListener("request-event", handleRequestEvent);
+      eventSource.onerror = () => {
+        setNoticeMessage("실시간 재연결 중");
+      };
+
+      return () => {
+        eventSource.removeEventListener("ready", handleReady);
+        eventSource.removeEventListener("request-event", handleRequestEvent);
+        eventSource.close();
+        clearNoticeRetry();
+      };
+    }
+
     ensureAudio();
 
     let isCancelled = false;
@@ -294,7 +340,7 @@ export function GlobalRequestNotifier() {
       }
       clearNoticeRetry();
     };
-  }, [clearNoticeRetry, ensureAudio, syncRequests]);
+  }, [clearNoticeRetry, ensureAudio, realtimeEventsEnabled, syncRequests]);
 
   useEffect(() => {
     function handleRefreshRequest() {

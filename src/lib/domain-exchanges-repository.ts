@@ -1,4 +1,5 @@
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
+import { publishAdminRequestEvent } from "@/lib/admin-request-events";
 import { getDomainWithdrawAccount } from "@/lib/domain-withdraw-account";
 import { formatKoreanDateTime } from "@/lib/korean-time";
 import { getScopedDataCondition } from "@/lib/master-scope";
@@ -294,6 +295,36 @@ export async function getPendingDomainExchangeIds(user: SessionUser) {
   );
 
   return result.rows.map((row) => row.id);
+}
+
+export async function canUserAccessDomainExchange(
+  user: SessionUser,
+  requestId: string,
+) {
+  if (!hasDatabaseUrl()) {
+    return false;
+  }
+
+  const scope = await getScopedDataCondition(user, {
+    company: "er",
+    distributor: "dist",
+    distributorAdmin: "dist_admin",
+  });
+  const scopedSql = shiftSqlParams(scope.sql, 1);
+  const result = await query<{ id: string }>(
+    `
+      select er.id::text as id
+      from exchange_requests er
+      left join distributors dist on dist.id = er.distributor_id
+      left join admins dist_admin on dist_admin.id = dist.admin_id
+      where er.id = $1::uuid
+        ${scopedSql}
+      limit 1
+    `,
+    [requestId, ...scope.values],
+  );
+
+  return Boolean(result.rows[0]);
 }
 
 export async function getDomainExchangeOptions(user: SessionUser) {
@@ -717,7 +748,21 @@ async function insertExchangeRequest(
         [input.domainId, afterBalance],
       );
 
-      return result.rows[0]?.id;
+      const requestId = result.rows[0]?.id;
+
+      if (requestId) {
+        await publishAdminRequestEvent(client, {
+          kind: "domain_exchange",
+          requestId,
+          companyId: input.companyId,
+          domainId: input.domainId,
+          distributorId: input.distributorId,
+          status: "PENDING",
+          occurredAt: new Date().toISOString(),
+        });
+      }
+
+      return requestId;
     }
 
     if (input.distributorId) {
@@ -797,7 +842,21 @@ async function insertExchangeRequest(
         [input.distributorId, afterBalance],
       );
 
-      return result.rows[0]?.id;
+      const requestId = result.rows[0]?.id;
+
+      if (requestId) {
+        await publishAdminRequestEvent(client, {
+          kind: "domain_exchange",
+          requestId,
+          companyId: input.companyId,
+          domainId: input.domainId,
+          distributorId: input.distributorId,
+          status: "PENDING",
+          occurredAt: new Date().toISOString(),
+        });
+      }
+
+      return requestId;
     }
 
     const result = await client.query<{ id: string }>(
@@ -846,7 +905,21 @@ async function insertExchangeRequest(
       ],
     );
 
-    return result.rows[0]?.id;
+    const requestId = result.rows[0]?.id;
+
+    if (requestId) {
+      await publishAdminRequestEvent(client, {
+        kind: "domain_exchange",
+        requestId,
+        companyId: input.companyId,
+        domainId: input.domainId,
+        distributorId: input.distributorId,
+        status: "PENDING",
+        occurredAt: new Date().toISOString(),
+      });
+    }
+
+    return requestId;
   });
 }
 
@@ -1098,6 +1171,16 @@ export async function approveDomainExchange(id: string, processedBy: SessionUser
       ]);
     }
 
+    await publishAdminRequestEvent(client, {
+      kind: "domain_exchange",
+      requestId: approvedExchange.id,
+      companyId: exchange.company_id,
+      domainId: exchange.domain_id,
+      distributorId: exchange.distributor_id,
+      status: "APPROVED",
+      occurredAt: new Date().toISOString(),
+    });
+
     return {
       id: approvedExchange.id,
       domainId: exchange.domain_id,
@@ -1233,6 +1316,16 @@ export async function rejectDomainExchange(id: string, processedBy: SessionUser)
       `,
       [id, processedBy.id, exchangeBalanceReleasedAtKey],
     );
+
+    await publishAdminRequestEvent(client, {
+      kind: "domain_exchange",
+      requestId: exchange.id,
+      companyId: null,
+      domainId: exchange.domain_id,
+      distributorId: exchange.distributor_id,
+      status: "REJECTED",
+      occurredAt: new Date().toISOString(),
+    });
 
     return {
       id: exchange.id,
@@ -1395,5 +1488,15 @@ export async function cancelApprovedDomainExchange(id: string, processedBy: Sess
       `,
       [id, processedBy.id],
     );
+
+    await publishAdminRequestEvent(client, {
+      kind: "domain_exchange",
+      requestId: exchange.id,
+      companyId: null,
+      domainId: exchange.domain_id,
+      distributorId: exchange.distributor_id,
+      status: "CANCELED",
+      occurredAt: new Date().toISOString(),
+    });
   });
 }
