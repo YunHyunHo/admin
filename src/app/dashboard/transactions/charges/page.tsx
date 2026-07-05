@@ -3,11 +3,37 @@ import { redirect } from "next/navigation";
 import { ChargeRequestsBoard } from "@/components/charge-requests-board";
 import { AdminShell } from "@/components/admin-shell";
 import { getSessionUser } from "@/lib/auth";
-import { getChargeRequestsForUser } from "@/lib/charge-requests-repository";
+import {
+  getChargeRequestHistoryPageForUser,
+  getChargeRequestsForUser,
+  getPendingChargeRequestsForUser,
+} from "@/lib/charge-requests-repository";
 import { getServerSyncCursor, hasDatabaseUrl } from "@/lib/db";
 import { getDomainExchangeOptions } from "@/lib/domain-exchanges-repository";
+import { isPerformancePilotUser } from "@/lib/performance-pilot";
 import { canProcessRequests } from "@/lib/permissions";
 import { isRealtimeSyncPilot } from "@/lib/realtime-sync-pilot";
+
+type ChargeHistoryPage = {
+  items: Awaited<ReturnType<typeof getChargeRequestHistoryPageForUser>>["items"];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+type ChargeRequestsPilotPayload = {
+  pending: Awaited<ReturnType<typeof getPendingChargeRequestsForUser>>;
+  approved: ChargeHistoryPage["items"];
+  rejected: ChargeHistoryPage["items"];
+  approvedPage: ChargeHistoryPage;
+  rejectedPage: ChargeHistoryPage;
+};
+
+function hasPilotHistoryPages(
+  value: Awaited<ReturnType<typeof getChargeRequestsForUser>> | ChargeRequestsPilotPayload,
+): value is ChargeRequestsPilotPayload {
+  return "approvedPage" in value && "rejectedPage" in value;
+}
 
 
 export default async function ChargesPage() {
@@ -18,11 +44,26 @@ export default async function ChargesPage() {
   }
 
   const incrementalSyncEnabled = isRealtimeSyncPilot(user);
+  const serverHistoryEnabled = isPerformancePilotUser(user);
   const initialSyncCursor = incrementalSyncEnabled
     ? await getServerSyncCursor()
     : undefined;
-  const companyRequests = await getChargeRequestsForUser(user);
-  const domainOptions = await getDomainExchangeOptions(user);
+  const [companyRequests, domainOptions] = await Promise.all([
+    serverHistoryEnabled
+      ? Promise.all([
+          getPendingChargeRequestsForUser(user),
+          getChargeRequestHistoryPageForUser(user, { status: "approved" }),
+          getChargeRequestHistoryPageForUser(user, { status: "rejected" }),
+        ]).then(([pending, approvedPage, rejectedPage]) => ({
+          pending,
+          approved: approvedPage.items,
+          rejected: rejectedPage.items,
+          approvedPage,
+          rejectedPage,
+        }))
+      : getChargeRequestsForUser(user),
+    getDomainExchangeOptions(user),
+  ]);
 
   return (
     <AdminShell
@@ -40,6 +81,17 @@ export default async function ChargesPage() {
         domainOptions={domainOptions}
         incrementalSyncEnabled={incrementalSyncEnabled}
         initialSyncCursor={initialSyncCursor}
+        serverHistoryEnabled={serverHistoryEnabled}
+        initialApprovedHistoryPage={
+          hasPilotHistoryPages(companyRequests)
+            ? companyRequests.approvedPage
+            : undefined
+        }
+        initialRejectedHistoryPage={
+          hasPilotHistoryPages(companyRequests)
+            ? companyRequests.rejectedPage
+            : undefined
+        }
       />
     </AdminShell>
   );

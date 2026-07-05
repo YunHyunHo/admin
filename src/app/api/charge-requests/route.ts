@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getSessionUser } from "@/lib/auth";
 import {
+  getChargeRequestHistoryPageForUser,
   createDbChargeRequest,
   getChargeRequestChangesForUser,
   getChargeRequestsForUser,
@@ -32,7 +33,32 @@ export async function GET(request: Request) {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
 
-  const since = new URL(request.url).searchParams.get("since");
+  const searchParams = new URL(request.url).searchParams;
+  const since = searchParams.get("since");
+  const mode = searchParams.get("mode");
+
+  if (mode === "history") {
+    const status = searchParams.get("status");
+
+    if (status !== "approved" && status !== "rejected") {
+      return NextResponse.json(
+        { message: "조회할 히스토리 상태를 확인해주세요." },
+        { status: 400 },
+      );
+    }
+
+    return NextResponse.json(
+      await getChargeRequestHistoryPageForUser(user, {
+        status,
+        page: searchParams.get("page"),
+        pageSize: searchParams.get("pageSize"),
+        startDate: searchParams.get("startDate"),
+        endDate: searchParams.get("endDate"),
+        name: searchParams.get("name"),
+        amount: searchParams.get("amount"),
+      }),
+    );
+  }
 
   if (since && Number.isFinite(Date.parse(since))) {
     const cursor = isRealtimeSyncPilot(user)

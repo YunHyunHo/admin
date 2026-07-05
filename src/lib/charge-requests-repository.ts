@@ -116,6 +116,23 @@ export type ChargeRequestsResponse = {
   rejected: ProcessedRequest[];
 };
 
+export type ChargeHistoryPageInput = {
+  page?: string | number | null;
+  pageSize?: string | number | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  name?: string | null;
+  amount?: string | number | null;
+  status: "approved" | "rejected";
+};
+
+export type ChargeHistoryPageResponse = {
+  items: ProcessedRequest[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
 function formatStamp(value: Date | string | null) {
   return formatKoreanDateTime(value);
 }
@@ -344,6 +361,31 @@ function shiftSqlParams(sql: string, offset: number) {
   });
 }
 
+function getHistoryPagination(input: Pick<ChargeHistoryPageInput, "page" | "pageSize">) {
+  const page = Math.max(1, Number(input.page ?? 1) || 1);
+  const rawPageSize = Math.max(1, Number(input.pageSize ?? 10) || 10);
+  const pageSize = Math.min(rawPageSize, 100);
+
+  return {
+    page,
+    pageSize,
+    offset: (page - 1) * pageSize,
+  };
+}
+
+function normalizeHistoryAmount(value: ChargeHistoryPageInput["amount"]) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(0, Math.trunc(value));
+  }
+
+  if (typeof value !== "string") {
+    return 0;
+  }
+
+  const numeric = Number(value.replace(/[^\d]/g, ""));
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
 async function getManagedCompanyIds(userId: string) {
   const result = await query<{ company_id: string }>(
     `
@@ -448,6 +490,139 @@ async function getDbChargeRequests(user: SessionUser, updatedSince?: string) {
   );
 
   return splitRows(result.rows);
+}
+
+export async function getPendingChargeRequestsForUser(user: SessionUser) {
+  if (!hasDatabaseUrl()) {
+    return (await getChargeRequestsForUser(user)).pending;
+  }
+
+  return (await getDbChargeRequests(user)).pending;
+}
+
+export async function getChargeRequestHistoryPageForUser(
+  user: SessionUser,
+  input: ChargeHistoryPageInput,
+): Promise<ChargeHistoryPageResponse> {
+  const { page, pageSize, offset } = getHistoryPagination(input);
+
+  if (!hasDatabaseUrl()) {
+    const requests = await getChargeRequestsForUser(user);
+    const source =
+      input.status === "approved" ? requests.approved : requests.rejected;
+    const amount = normalizeHistoryAmount(input.amount);
+    const keyword = input.name?.trim().toLowerCase() ?? "";
+    const filtered = source.filter((row) => {
+      const completedDate = row.completedDate ?? "";
+
+      return (
+        (!input.startDate || completedDate >= input.startDate) &&
+        (!input.endDate || completedDate <= input.endDate) &&
+        (!keyword ||
+          row.companyName.toLowerCase().includes(keyword) ||
+          row.userId.toLowerCase().includes(keyword) ||
+          row.accountHolder.toLowerCase().includes(keyword) ||
+          row.depositor.toLowerCase().includes(keyword)) &&
+        (!amount || Number(row.amount.replace(/[^\d]/g, "")) === amount)
+      );
+    });
+
+    return {
+      items: filtered.slice(offset, offset + pageSize),
+      total: filtered.length,
+      page,
+      pageSize,
+    };
+  }
+
+  const scope = await getChargeRequestScope(user);
+  const statusSql =
+    input.status === "approved"
+      ? "cr.status in ('APPROVED', 'COMPLETED')"
+      : "cr.status in ('REJECTED', 'CANCELED')";
+  const values: unknown[] = [...scope.values];
+  const clauses = [statusSql, "cr.processed_at is not null"];
+  const koreanProcessedDate = "(cr.processed_at at time zone 'Asia/Seoul')::date";
+  const keyword = input.name?.trim().toLowerCase() ?? "";
+  const amount = normalizeHistoryAmount(input.amount);
+
+  if (input.startDate) {
+    values.push(input.startDate);
+    clauses.push(`${koreanProcessedDate} >= $${values.length}::date`);
+  }
+
+  if (input.endDate) {
+    values.push(input.endDate);
+    clauses.push(`${koreanProcessedDate} <= $${values.length}::date`);
+  }
+
+  if (keyword) {
+    values.push(`%${keyword}%`);
+    clauses.push(
+      `(
+        lower(c.company_name) like $${values.length}
+        or lower(cr.user_uid) like $${values.length}
+        or lower(coalesce(cr.account_holder, '')) like $${values.length}
+        or lower(coalesce(cr.depositor, '')) like $${values.length}
+      )`,
+    );
+  }
+
+  if (amount > 0) {
+    values.push(amount);
+    clauses.push(`cr.amount = $${values.length}`);
+  }
+
+  values.push(pageSize, offset);
+  const limitParam = values.length - 1;
+  const offsetParam = values.length;
+  const result = await query<ChargeRequestRow & { total_count: string }>(
+    `
+      select
+        cr.id::text,
+        cr.user_uid,
+        cr.bank_name,
+        cr.account_number,
+        cr.account_holder,
+        cr.depositor,
+        cr.amount::text,
+        cr.status::text as status,
+        cr.requested_at,
+        cr.processed_at,
+        c.company_name,
+        coalesce(nullif(d.domain_name, ''), c.company_name) as domain_name,
+        coalesce(parent_dist.name, dist.name) as top_distributor_name,
+        case when parent_dist.id is null then null else dist.name end as distributor_name,
+        child_dist.names as child_distributor_names,
+        count(*) over()::text as total_count
+      from charge_requests cr
+      join companies c on c.id = cr.company_id
+      left join domains d on d.id = cr.domain_id
+      left join distributors dist on dist.id = cr.distributor_id
+      left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
+      left join admins dist_admin on dist_admin.id = dist.admin_id
+      left join lateral (
+        select string_agg(child.name, ', ' order by child.name) as names
+        from distributors child
+        where child.parent_distributor_id = dist.id
+          and child.status = 'ACTIVE'
+      ) child_dist on parent_dist.id is null
+      where 1 = 1
+        ${scope.sql}
+        and ${clauses.join("\n        and ")}
+      order by cr.processed_at desc, cr.requested_at desc, cr.created_at desc
+      limit $${limitParam}
+      offset $${offsetParam}
+    `,
+    values,
+  );
+
+  return {
+    items: result.rows.map(toProcessedRequest),
+    total: Number(result.rows[0]?.total_count ?? 0),
+    page,
+    pageSize,
+  };
 }
 
 export async function getPendingChargeRequestIds(user: SessionUser) {

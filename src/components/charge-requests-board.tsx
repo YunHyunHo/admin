@@ -23,12 +23,22 @@ type ChargeRequestsBoardProps = {
   domainOptions?: DomainExchangeOption[];
   incrementalSyncEnabled?: boolean;
   initialSyncCursor?: string;
+  serverHistoryEnabled?: boolean;
+  initialApprovedHistoryPage?: ChargeHistoryPageResponse;
+  initialRejectedHistoryPage?: ChargeHistoryPageResponse;
 };
 
 type ChargeRequestsResponse = {
   pending: PendingRequest[];
   approved: ProcessedRequest[];
   rejected: ProcessedRequest[];
+};
+
+type ChargeHistoryPageResponse = {
+  items: ProcessedRequest[];
+  total: number;
+  page: number;
+  pageSize: number;
 };
 
 type ChargeRequestPayload = {
@@ -269,6 +279,9 @@ export function ChargeRequestsBoard({
   domainOptions = [],
   incrementalSyncEnabled = false,
   initialSyncCursor = "",
+  serverHistoryEnabled = false,
+  initialApprovedHistoryPage,
+  initialRejectedHistoryPage,
 }: ChargeRequestsBoardProps) {
   const [pendingRequests, setPendingRequests] = useState(initialPendingRequests);
   const [approvedRequests, setApprovedRequests] = useState(initialApprovedRequests);
@@ -283,6 +296,14 @@ export function ChargeRequestsBoard({
   const [rejectedFilters, setRejectedFilters] = useState<HistoryFilters>({
     ...emptyHistoryFilters,
   });
+  const [approvedHistoryTotal, setApprovedHistoryTotal] = useState(
+    initialApprovedHistoryPage?.total ?? initialApprovedRequests.length,
+  );
+  const [rejectedHistoryTotal, setRejectedHistoryTotal] = useState(
+    initialRejectedHistoryPage?.total ?? initialRejectedRequests.length,
+  );
+  const [approvedHistoryLoading, setApprovedHistoryLoading] = useState(false);
+  const [rejectedHistoryLoading, setRejectedHistoryLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [armedApprovalId, setArmedApprovalId] = useState<string | null>(null);
@@ -305,6 +326,7 @@ export function ChargeRequestsBoard({
   const [confirmAction, setConfirmAction] = useState<ChargeConfirmAction | null>(
     null,
   );
+  const [historyRefreshVersion, setHistoryRefreshVersion] = useState(0);
   const noticeAudioRef = useRef<HTMLAudioElement | null>(null);
   const knownPendingIdsRef = useRef(
     new Set(initialPendingRequests.map((request) => request.id)),
@@ -318,6 +340,22 @@ export function ChargeRequestsBoard({
   const lastSyncCursorRef = useRef(initialSyncCursor);
   const notificationRefreshPromiseRef = useRef<Promise<void> | null>(null);
   const needsNotificationRefreshRef = useRef(false);
+  const approvedHistoryRequestKeyRef = useRef(
+    serverHistoryEnabled && initialApprovedHistoryPage
+      ? JSON.stringify({
+          page: initialApprovedHistoryPage.page,
+          filters: emptyHistoryFilters,
+        })
+      : "",
+  );
+  const rejectedHistoryRequestKeyRef = useRef(
+    serverHistoryEnabled && initialRejectedHistoryPage
+      ? JSON.stringify({
+          page: initialRejectedHistoryPage.page,
+          filters: emptyHistoryFilters,
+        })
+      : "",
+  );
 
   function resetCreateForm() {
     setCreateDomainId("");
@@ -454,6 +492,55 @@ export function ChargeRequestsBoard({
     return (await response.json()) as ChargeRequestsResponse;
   }, []);
 
+  const requestChargeHistoryPage = useCallback(
+    async (
+      status: "approved" | "rejected",
+      page: number,
+      filters: HistoryFilters,
+    ) => {
+      const params = new URLSearchParams({
+        mode: "history",
+        status,
+        page: String(page),
+        pageSize: String(rowsPerPage),
+      });
+
+      if (filters.startDate) {
+        params.set("startDate", filters.startDate);
+      }
+
+      if (filters.endDate) {
+        params.set("endDate", filters.endDate);
+      }
+
+      if (filters.name.trim()) {
+        params.set("name", filters.name.trim());
+      }
+
+      if (filters.amount.trim()) {
+        params.set("amount", filters.amount.trim());
+      }
+
+      const response = await fetch(`/api/charge-requests?${params.toString()}`, {
+        cache: "no-store",
+      });
+      const data = (await response.json().catch(() => null)) as
+        | ChargeHistoryPageResponse
+        | { message?: string }
+        | null;
+
+      if (!response.ok || !data || !("items" in data)) {
+        throw new Error(
+          (data && "message" in data && data.message) ||
+            "히스토리 데이터를 불러오지 못했습니다.",
+        );
+      }
+
+      return data;
+    },
+    [],
+  );
+
   const syncIncrementalChanges = useCallback(async () => {
     if (!lastSyncCursorRef.current) {
       lastSyncCursorRef.current = new Date(Date.now() - 5000).toISOString();
@@ -474,9 +561,15 @@ export function ChargeRequestsBoard({
     }
 
     applyServerChanges(data.changes);
+    if (
+      serverHistoryEnabled &&
+      (data.changes.approved.length > 0 || data.changes.rejected.length > 0)
+    ) {
+      setHistoryRefreshVersion((current) => current + 1);
+    }
     lastSyncCursorRef.current =
       incrementalSyncEnabled && data.cursor ? data.cursor : nextCursor;
-  }, [applyServerChanges, incrementalSyncEnabled]);
+  }, [applyServerChanges, incrementalSyncEnabled, serverHistoryEnabled]);
 
   const refreshRequestsForNotification = useCallback(async () => {
     if (notificationRefreshPromiseRef.current) {
@@ -584,6 +677,100 @@ export function ChargeRequestsBoard({
     };
   }, [isDatabaseBacked, syncIncrementalChanges]);
 
+  useEffect(() => {
+    if (!serverHistoryEnabled) {
+      return;
+    }
+
+    const requestKey = JSON.stringify({
+      page: approvedPage,
+      filters: approvedFilters,
+    });
+
+    if (approvedHistoryRequestKeyRef.current === requestKey) {
+      return;
+    }
+
+    approvedHistoryRequestKeyRef.current = requestKey;
+    let cancelled = false;
+    setApprovedHistoryLoading(true);
+
+    void requestChargeHistoryPage("approved", approvedPage, approvedFilters)
+      .then((data) => {
+        if (cancelled) {
+          return;
+        }
+
+        setApprovedRequests(data.items);
+        setApprovedHistoryTotal(data.total);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setMessage(
+            error instanceof Error
+              ? error.message
+              : "승인내역을 불러오지 못했습니다.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setApprovedHistoryLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [approvedFilters, approvedPage, requestChargeHistoryPage, serverHistoryEnabled]);
+
+  useEffect(() => {
+    if (!serverHistoryEnabled) {
+      return;
+    }
+
+    const requestKey = JSON.stringify({
+      page: rejectedPage,
+      filters: rejectedFilters,
+    });
+
+    if (rejectedHistoryRequestKeyRef.current === requestKey) {
+      return;
+    }
+
+    rejectedHistoryRequestKeyRef.current = requestKey;
+    let cancelled = false;
+    setRejectedHistoryLoading(true);
+
+    void requestChargeHistoryPage("rejected", rejectedPage, rejectedFilters)
+      .then((data) => {
+        if (cancelled) {
+          return;
+        }
+
+        setRejectedRequests(data.items);
+        setRejectedHistoryTotal(data.total);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setMessage(
+            error instanceof Error
+              ? error.message
+              : "승인거절내역을 불러오지 못했습니다.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setRejectedHistoryLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [rejectedFilters, rejectedPage, requestChargeHistoryPage, serverHistoryEnabled]);
+
   async function activateNoticeSound() {
     try {
       await playNoticeSound();
@@ -594,12 +781,52 @@ export function ChargeRequestsBoard({
     }
   }
 
+  const refreshHistoryPages = useCallback(async () => {
+    if (!serverHistoryEnabled) {
+      return;
+    }
+
+    const [approvedData, rejectedData] = await Promise.all([
+      requestChargeHistoryPage("approved", approvedPage, approvedFilters),
+      requestChargeHistoryPage("rejected", rejectedPage, rejectedFilters),
+    ]);
+
+    setApprovedRequests(approvedData.items);
+    setApprovedHistoryTotal(approvedData.total);
+    setRejectedRequests(rejectedData.items);
+    setRejectedHistoryTotal(rejectedData.total);
+    approvedHistoryRequestKeyRef.current = JSON.stringify({
+      page: approvedPage,
+      filters: approvedFilters,
+    });
+    rejectedHistoryRequestKeyRef.current = JSON.stringify({
+      page: rejectedPage,
+      filters: rejectedFilters,
+    });
+  }, [
+    approvedFilters,
+    approvedPage,
+    rejectedFilters,
+    rejectedPage,
+    requestChargeHistoryPage,
+    serverHistoryEnabled,
+  ]);
+
+  useEffect(() => {
+    if (!serverHistoryEnabled || historyRefreshVersion === 0) {
+      return;
+    }
+
+    void refreshHistoryPages().catch(() => undefined);
+  }, [historyRefreshVersion, refreshHistoryPages, serverHistoryEnabled]);
+
   async function refreshRequests() {
     setIsLoading(true);
     setMessage("최신 충전신청 데이터를 불러오는 중입니다.");
 
     try {
       applyServerData(await requestChargeData());
+      await refreshHistoryPages();
       setMessage("충전신청 데이터가 갱신되었습니다.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "데이터 갱신에 실패했습니다.");
@@ -700,34 +927,50 @@ export function ChargeRequestsBoard({
   );
   const filteredApprovedRequests = useMemo(
     () =>
-      approvedRequests.filter((row) =>
-        matchesHistoryFilters(row, approvedFilters),
-      ),
-    [approvedFilters, approvedRequests],
+      serverHistoryEnabled
+        ? approvedRequests
+        : approvedRequests.filter((row) =>
+            matchesHistoryFilters(row, approvedFilters),
+          ),
+    [approvedFilters, approvedRequests, serverHistoryEnabled],
   );
   const filteredRejectedRequests = useMemo(
     () =>
-      rejectedRequests.filter((row) =>
-        matchesHistoryFilters(row, rejectedFilters),
-      ),
-    [rejectedFilters, rejectedRequests],
+      serverHistoryEnabled
+        ? rejectedRequests
+        : rejectedRequests.filter((row) =>
+            matchesHistoryFilters(row, rejectedFilters),
+          ),
+    [rejectedFilters, rejectedRequests, serverHistoryEnabled],
   );
   const approvedPageCount = Math.max(
     1,
-    Math.ceil(filteredApprovedRequests.length / rowsPerPage),
+    Math.ceil(
+      (serverHistoryEnabled
+        ? approvedHistoryTotal
+        : filteredApprovedRequests.length) / rowsPerPage,
+    ),
   );
-  const visibleApprovedRequests = filteredApprovedRequests.slice(
-    (approvedPage - 1) * rowsPerPage,
-    approvedPage * rowsPerPage,
-  );
+  const visibleApprovedRequests = serverHistoryEnabled
+    ? filteredApprovedRequests
+    : filteredApprovedRequests.slice(
+        (approvedPage - 1) * rowsPerPage,
+        approvedPage * rowsPerPage,
+      );
   const rejectedPageCount = Math.max(
     1,
-    Math.ceil(filteredRejectedRequests.length / rowsPerPage),
+    Math.ceil(
+      (serverHistoryEnabled
+        ? rejectedHistoryTotal
+        : filteredRejectedRequests.length) / rowsPerPage,
+    ),
   );
-  const visibleRejectedRequests = filteredRejectedRequests.slice(
-    (rejectedPage - 1) * rowsPerPage,
-    rejectedPage * rowsPerPage,
-  );
+  const visibleRejectedRequests = serverHistoryEnabled
+    ? filteredRejectedRequests
+    : filteredRejectedRequests.slice(
+        (rejectedPage - 1) * rowsPerPage,
+        rejectedPage * rowsPerPage,
+      );
 
   function moveRequest(
     row: PendingRequest | ProcessedRequest,
@@ -770,6 +1013,7 @@ export function ChargeRequestsBoard({
       }
 
       applyProcessedRequest(data.processedRequest);
+      await refreshHistoryPages();
       window.dispatchEvent(new Event(requestNotifierRefreshEventName));
       window.dispatchEvent(new Event(dashboardSummaryRefreshEvent));
       setMessage(`${subjectLabel} 요청이 ${actionLabel} 처리되었습니다.`);
@@ -1028,7 +1272,10 @@ export function ChargeRequestsBoard({
           </SectionCard>
 
           <div className="space-y-5">
-            <SectionCard title="승인내역" count={filteredApprovedRequests.length}>
+            <SectionCard
+              title="승인내역"
+              count={serverHistoryEnabled ? approvedHistoryTotal : filteredApprovedRequests.length}
+            >
               <HistorySearch
                 filters={approvedFilters}
                 onChange={(filters) => {
@@ -1065,7 +1312,13 @@ export function ChargeRequestsBoard({
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleApprovedRequests.length ? (
+                    {approvedHistoryLoading ? (
+                      <tr>
+                        <td colSpan={9} className="px-4 py-10 text-center text-sm text-white/40">
+                          승인내역을 불러오는 중입니다.
+                        </td>
+                      </tr>
+                    ) : visibleApprovedRequests.length ? (
                       visibleApprovedRequests.map((row) => (
                         <tr key={row.id} className="border-t border-cyan-300/18 text-white/82">
                           <td className="px-4 py-4">{row.companyName}</td>
@@ -1105,7 +1358,7 @@ export function ChargeRequestsBoard({
                   </tbody>
                 </table>
               </Table>
-              {filteredApprovedRequests.length > rowsPerPage ? (
+              {approvedPageCount > 1 ? (
                 <PaginationControls
                   page={approvedPage}
                   pageCount={approvedPageCount}
@@ -1114,7 +1367,10 @@ export function ChargeRequestsBoard({
               ) : null}
             </SectionCard>
 
-            <SectionCard title="승인거절내역" count={filteredRejectedRequests.length}>
+            <SectionCard
+              title="승인거절내역"
+              count={serverHistoryEnabled ? rejectedHistoryTotal : filteredRejectedRequests.length}
+            >
               <HistorySearch
                 filters={rejectedFilters}
                 onChange={(filters) => {
@@ -1150,7 +1406,13 @@ export function ChargeRequestsBoard({
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleRejectedRequests.length ? (
+                    {rejectedHistoryLoading ? (
+                      <tr>
+                        <td colSpan={8} className="px-4 py-10 text-center text-sm text-white/40">
+                          승인거절내역을 불러오는 중입니다.
+                        </td>
+                      </tr>
+                    ) : visibleRejectedRequests.length ? (
                       visibleRejectedRequests.map((row) => (
                         <tr key={row.id} className="border-t border-cyan-300/18 text-white/82">
                           <td className="px-4 py-4">{row.userId}</td>
@@ -1189,7 +1451,7 @@ export function ChargeRequestsBoard({
                   </tbody>
                 </table>
               </Table>
-              {filteredRejectedRequests.length > rowsPerPage ? (
+              {rejectedPageCount > 1 ? (
                 <PaginationControls
                   page={rejectedPage}
                   pageCount={rejectedPageCount}
