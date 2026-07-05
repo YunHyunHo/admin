@@ -581,7 +581,9 @@ export function ChargeRequestsBoard({
     const refreshPromise = (async () => {
       do {
         needsNotificationRefreshRef.current = false;
-        if (incrementalSyncEnabled) {
+        if (serverHistoryEnabled) {
+          applyServerData(await requestChargeData(), { resetPages: false });
+        } else if (incrementalSyncEnabled) {
           await syncIncrementalChanges();
         } else {
           applyServerData(await requestChargeData(), { resetPages: false });
@@ -597,6 +599,7 @@ export function ChargeRequestsBoard({
     applyServerData,
     incrementalSyncEnabled,
     requestChargeData,
+    serverHistoryEnabled,
     syncIncrementalChanges,
   ]);
 
