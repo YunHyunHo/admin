@@ -8,7 +8,10 @@ import { GlobalRequestNotifier } from "@/components/global-request-notifier";
 import { QuickActionNav } from "@/components/quick-action-nav";
 import type { SessionUser } from "@/lib/auth";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { isRealtimeSyncPilot } from "@/lib/realtime-sync-pilot";
+import {
+  isRealtimeSyncPilot,
+  isReducedNotificationPollingPilot,
+} from "@/lib/realtime-sync-pilot";
 
 const sideMenuGroups = [
   {
@@ -201,6 +204,8 @@ export async function AdminShell({
     .filter((group) => group.items.length > 0);
   const visibleQuickActions = isSettlementOnlyUser ? [] : quickActions;
   const realtimeEventsEnabled = isRealtimeSyncPilot(user);
+  const notificationFallbackPollIntervalMs =
+    isReducedNotificationPollingPilot(user) ? 30_000 : 1_000;
 
   return (
     <main className="admin-app-shell min-h-screen bg-[#09090b] text-white">
@@ -354,7 +359,10 @@ export async function AdminShell({
                   />
                 ) : null}
                 <div className="absolute right-4 top-4 flex items-center gap-2 sm:right-6 lg:static">
-                    <GlobalRequestNotifier realtimeEventsEnabled={realtimeEventsEnabled} />
+                    <GlobalRequestNotifier
+                      realtimeEventsEnabled={realtimeEventsEnabled}
+                      fallbackPollIntervalMs={notificationFallbackPollIntervalMs}
+                    />
                   <DashboardSummaryToggle />
                   <ThemeToggle />
                 </div>

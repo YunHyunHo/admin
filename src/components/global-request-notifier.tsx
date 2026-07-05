@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const noticeSoundPath = "/sounds/notice.mp3";
-const pollIntervalMs = 1000;
+const defaultPollIntervalMs = 1000;
 const noticeSoundReadyKey = "winpay-notice-sound-ready";
 const noticeRetryDelayMs = 1200;
 const maxNoticePlayAttempts = 3;
@@ -85,10 +85,12 @@ async function waitForListSync(promises: Promise<unknown>[]) {
 
 type GlobalRequestNotifierProps = {
   realtimeEventsEnabled?: boolean;
+  fallbackPollIntervalMs?: number;
 };
 
 export function GlobalRequestNotifier({
   realtimeEventsEnabled = false,
+  fallbackPollIntervalMs = defaultPollIntervalMs,
 }: GlobalRequestNotifierProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const knownPendingIdsRef = useRef<Set<string>>(new Set());
@@ -316,7 +318,7 @@ export function GlobalRequestNotifier({
         if (!isCancelled) {
           timeoutId = window.setTimeout(() => {
             void runFallbackSync();
-          }, pollIntervalMs);
+          }, fallbackPollIntervalMs);
         }
       }
 
@@ -349,7 +351,7 @@ export function GlobalRequestNotifier({
       if (!isCancelled) {
         timeoutId = window.setTimeout(() => {
           void runSync();
-        }, pollIntervalMs);
+        }, fallbackPollIntervalMs);
       }
     }
 
@@ -362,7 +364,13 @@ export function GlobalRequestNotifier({
       }
       clearNoticeRetry();
     };
-  }, [clearNoticeRetry, ensureAudio, realtimeEventsEnabled, syncRequests]);
+  }, [
+    clearNoticeRetry,
+    ensureAudio,
+    fallbackPollIntervalMs,
+    realtimeEventsEnabled,
+    syncRequests,
+  ]);
 
   useEffect(() => {
     function handleRefreshRequest() {
