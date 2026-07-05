@@ -109,6 +109,10 @@ export async function GET(request: Request) {
     let bufferedEvents: Array<AdminRequestEvent & { eventId?: string }> = [];
     let deliveryQueue = Promise.resolve();
     let lastDeliveredEventId = reconnectCursor;
+    let resolveSocketClosed: (() => void) | null = null;
+    const socketClosed = new Promise<void>((resolve) => {
+      resolveSocketClosed = resolve;
+    });
 
     const enqueueEvent = (
       event: AdminRequestEvent & { eventId?: string },
@@ -141,6 +145,8 @@ export async function GET(request: Request) {
       }
 
       closed = true;
+      resolveSocketClosed?.();
+      resolveSocketClosed = null;
 
       if (heartbeatId) {
         clearInterval(heartbeatId);
@@ -245,6 +251,8 @@ export async function GET(request: Request) {
           ws.ping();
         }
       }, heartbeatIntervalMs);
+
+      await socketClosed;
     } catch {
       sendJson(ws, { type: "error", message: "실시간 연결에 실패했습니다." });
       ws.close(1011, "realtime connection failed");
