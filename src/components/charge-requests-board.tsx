@@ -383,9 +383,15 @@ export function ChargeRequestsBoard({
   const applyServerData = useCallback(
     (
       data: ChargeRequestsResponse,
-      options: { notifyNewPending?: boolean; resetPages?: boolean } = {},
+      options: {
+        notifyNewPending?: boolean;
+        resetPages?: boolean;
+        preserveHistoryPages?: boolean;
+      } = {},
     ) => {
       const shouldResetPages = options.resetPages ?? true;
+      const shouldPreserveHistoryPages =
+        options.preserveHistoryPages ?? serverHistoryEnabled;
       const newPendingCount = data.pending.filter(
         (request) => !knownPendingIdsRef.current.has(request.id),
       ).length;
@@ -399,8 +405,10 @@ export function ChargeRequestsBoard({
         .join(",");
 
       setPendingRequests(data.pending);
-      setApprovedRequests(data.approved);
-      setRejectedRequests(data.rejected);
+      if (!shouldPreserveHistoryPages) {
+        setApprovedRequests(data.approved);
+        setRejectedRequests(data.rejected);
+      }
       setArmedApprovalId((current) =>
         current && data.pending.some((request) => request.id === current)
           ? current
@@ -421,7 +429,7 @@ export function ChargeRequestsBoard({
         });
       }
     },
-    [playNoticeSound],
+    [playNoticeSound, serverHistoryEnabled],
   );
 
   const applyProcessedRequest = useCallback((request: ProcessedRequest) => {
@@ -583,7 +591,15 @@ export function ChargeRequestsBoard({
       do {
         needsNotificationRefreshRef.current = false;
         if (serverHistoryEnabled) {
-          applyServerData(await requestChargeData(), { resetPages: false });
+          const data = await requestChargeData();
+          applyServerData(data, {
+            resetPages: false,
+            preserveHistoryPages: true,
+          });
+
+          if (data.approved.length > 0 || data.rejected.length > 0) {
+            setHistoryRefreshVersion((current) => current + 1);
+          }
         } else if (incrementalSyncEnabled) {
           await syncIncrementalChanges();
         } else {
