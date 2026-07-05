@@ -4,13 +4,18 @@ import type { Notification } from "pg";
 import { getSessionUser } from "@/lib/auth";
 import {
   adminRequestEventsChannel,
+  ensureAdminRequestEventsSchema,
+  getAdminRequestEventsAfter,
+  getLatestAdminRequestEventId,
   parseAdminRequestEvent,
   type AdminRequestEvent,
+  type StoredAdminRequestEvent,
 } from "@/lib/admin-request-events";
 import { canUserAccessChargeRequest } from "@/lib/charge-requests-repository";
 import { getPgPool, hasDatabaseUrl } from "@/lib/db";
 import { canUserAccessDistributorWithdrawal } from "@/lib/distributor-withdrawals-repository";
 import { canUserAccessDomainExchange } from "@/lib/domain-exchanges-repository";
+import { isReducedNotificationPollingPilot } from "@/lib/realtime-sync-pilot";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,8 +32,13 @@ function sseHeaders() {
   };
 }
 
-function encodeSse(event: string, data: unknown) {
-  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+function encodeSse(event: string, data: unknown, id?: string) {
+  return `${id ? `id: ${id}\n` : ""}event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+function normalizeEventId(value: string | null) {
+  const normalized = value?.trim() ?? "";
+  return /^\d+$/.test(normalized) ? normalized : null;
 }
 
 async function canUserAccessEvent(user: Awaited<ReturnType<typeof getSessionUser>>, event: AdminRequestEvent) {
@@ -64,6 +74,13 @@ export async function GET(request: Request) {
       { status: 400 },
     );
   }
+
+  await ensureAdminRequestEventsSchema();
+
+  const replayEnabled = isReducedNotificationPollingPilot(user);
+  const reconnectCursor = replayEnabled
+    ? normalizeEventId(request.headers.get("last-event-id"))
+    : null;
 
   const client = await getPgPool().connect();
 
@@ -112,18 +129,45 @@ export async function GET(request: Request) {
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      const send = (event: string, data: unknown) => {
+      const send = (event: string, data: unknown, id?: string) => {
         if (isClosed) {
           return;
         }
 
-        controller.enqueue(encoder.encode(encodeSse(event, data)));
+        controller.enqueue(encoder.encode(encodeSse(event, data, id)));
       };
 
       const keepAlive = () => {
         if (!isClosed) {
           controller.enqueue(encoder.encode(": keep-alive\n\n"));
         }
+      };
+
+      let isReplaying = replayEnabled;
+      let deliveryQueue = Promise.resolve();
+      let queuedNotifications: StoredAdminRequestEvent[] = [];
+      let lastDeliveredEventId = reconnectCursor;
+
+      const enqueueEvent = (event: AdminRequestEvent & { eventId?: string }) => {
+        deliveryQueue = deliveryQueue
+          .then(async () => {
+            if (
+              event.eventId &&
+              lastDeliveredEventId &&
+              BigInt(event.eventId) <= BigInt(lastDeliveredEventId)
+            ) {
+              return;
+            }
+
+            if (await canUserAccessEvent(user, event)) {
+              send("request-event", event, event.eventId);
+            }
+
+            if (event.eventId) {
+              lastDeliveredEventId = event.eventId;
+            }
+          })
+          .catch(() => undefined);
       };
 
       const handleNotification = (notification: Notification) => {
@@ -137,11 +181,12 @@ export async function GET(request: Request) {
           return;
         }
 
-        void canUserAccessEvent(user, event).then((canAccess) => {
-          if (canAccess) {
-            send("request-event", event);
-          }
-        });
+        if (isReplaying && event.eventId) {
+          queuedNotifications.push(event as StoredAdminRequestEvent);
+          return;
+        }
+
+        enqueueEvent(event);
       };
 
       notificationHandler = handleNotification;
@@ -155,8 +200,53 @@ export async function GET(request: Request) {
       );
 
       controller.enqueue(encoder.encode("retry: 3000\n"));
-      send("ready", { ok: true });
       heartbeatId = setInterval(keepAlive, heartbeatIntervalMs);
+
+      void (async () => {
+        try {
+          if (reconnectCursor) {
+            let cursor = reconnectCursor;
+
+            while (!isClosed) {
+              const missedEvents = await getAdminRequestEventsAfter(cursor);
+
+              for (const event of missedEvents) {
+                enqueueEvent(event);
+                cursor = event.eventId;
+              }
+
+              if (missedEvents.length < 500) {
+                break;
+              }
+            }
+          } else if (replayEnabled) {
+            lastDeliveredEventId = await getLatestAdminRequestEventId();
+          }
+        } catch {
+          send("replay-error", { message: "누락 이벤트 복구에 실패했습니다." });
+        } finally {
+          const bufferedEvents = queuedNotifications.sort((left, right) =>
+            BigInt(left.eventId) === BigInt(right.eventId)
+              ? 0
+              : BigInt(left.eventId) < BigInt(right.eventId)
+                ? -1
+                : 1,
+          );
+          queuedNotifications = [];
+          isReplaying = false;
+
+          for (const event of bufferedEvents) {
+            enqueueEvent(event);
+          }
+
+          await deliveryQueue;
+          send("ready", {
+            ok: true,
+            replayed: Boolean(reconnectCursor),
+            cursor: lastDeliveredEventId,
+          }, lastDeliveredEventId ?? undefined);
+        }
+      })();
     },
     cancel() {
       close();

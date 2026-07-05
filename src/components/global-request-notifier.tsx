@@ -97,6 +97,7 @@ export function GlobalRequestNotifier({
   const hasInitializedRef = useRef(false);
   const isSyncingRef = useRef(false);
   const retryTimeoutRef = useRef<number | null>(null);
+  const lastRealtimeEventIdRef = useRef<string | null>(null);
   const [isSoundReady, setIsSoundReady] = useState(true);
   const [noticeMessage, setNoticeMessage] = useState("알림 대기중");
 
@@ -286,10 +287,25 @@ export function GlobalRequestNotifier({
       const handleRequestEvent = (event: MessageEvent<string>) => {
         try {
           const detail = JSON.parse(event.data) as {
+            eventId?: string;
             kind?: string;
             requestId?: string;
             status?: string;
           };
+          const eventId = detail.eventId ?? event.lastEventId;
+
+          if (
+            eventId &&
+            lastRealtimeEventIdRef.current &&
+            BigInt(eventId) <= BigInt(lastRealtimeEventIdRef.current)
+          ) {
+            return;
+          }
+
+          if (eventId) {
+            lastRealtimeEventIdRef.current = eventId;
+          }
+
           window.dispatchEvent(
             new CustomEvent(requestRealtimeEventName, {
               detail,
@@ -304,6 +320,10 @@ export function GlobalRequestNotifier({
 
       eventSource.addEventListener("ready", handleReady);
       eventSource.addEventListener("request-event", handleRequestEvent);
+      eventSource.addEventListener("replay-error", () => {
+        setNoticeMessage("실시간 복구 확인 중");
+        void syncRequests();
+      });
       eventSource.onerror = () => {
         setNoticeMessage("실시간 재연결 중");
       };
