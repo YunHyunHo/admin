@@ -435,7 +435,7 @@ export function GlobalRequestNotifier({
 
           socket.onopen = () => {
             socketRetryDelayMs = 500;
-            setNoticeMessage("실시간 연결됨");
+            setNoticeMessage("실시간 연결 준비중");
           };
           socket.onmessage = (message) => {
             try {
@@ -455,6 +455,7 @@ export function GlobalRequestNotifier({
                 if (payload.cursor) {
                   lastRealtimeEventIdRef.current = payload.cursor;
                 }
+                setNoticeMessage("실시간 연결됨");
                 handleReady();
               } else if (payload.type === "request-event" && payload.event) {
                 handleRequestEvent(JSON.stringify(payload.event));

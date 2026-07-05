@@ -100,7 +100,7 @@ export async function GET(request: Request) {
 
   const reconnectCursor = normalizeEventId(requestUrl.searchParams.get("cursor"));
 
-  return experimental_upgradeWebSocket((ws) => {
+  return experimental_upgradeWebSocket(async (ws) => {
     let client: PoolClient | null = null;
     let notificationHandler: ((notification: Notification) => void) | null = null;
     let heartbeatId: ReturnType<typeof setInterval> | null = null;
@@ -169,88 +169,86 @@ export async function GET(request: Request) {
       }
     });
 
-    void (async () => {
-      try {
-        const connectedClient = await getPgPool().connect();
+    try {
+      const connectedClient = await getPgPool().connect();
 
-        if (closed) {
-          connectedClient.release();
+      if (closed) {
+        connectedClient.release();
+        return;
+      }
+
+      client = connectedClient;
+      notificationHandler = (notification) => {
+        if (notification.channel !== adminRequestEventsChannel) {
           return;
         }
 
-        client = connectedClient;
-        notificationHandler = (notification) => {
-          if (notification.channel !== adminRequestEventsChannel) {
-            return;
+        const event = parseAdminRequestEvent(notification.payload);
+
+        if (event) {
+          if (replaying) {
+            bufferedEvents.push(event);
+          } else {
+            enqueueEvent(event);
           }
-
-          const event = parseAdminRequestEvent(notification.payload);
-
-          if (event) {
-            if (replaying) {
-              bufferedEvents.push(event);
-            } else {
-              enqueueEvent(event);
-            }
-          }
-        };
-        client.on("notification", notificationHandler);
-        await client.query(`listen ${adminRequestEventsChannel}`);
-
-        if (reconnectCursor) {
-          let cursor = reconnectCursor;
-
-          while (!closed) {
-            const missedEvents = await getAdminRequestEventsAfter(cursor);
-
-            for (const event of missedEvents) {
-              enqueueEvent(event, true);
-              cursor = event.eventId;
-            }
-
-            if (missedEvents.length < replayPageSize) {
-              break;
-            }
-          }
-        } else {
-          lastDeliveredEventId = await getLatestAdminRequestEventId();
         }
+      };
+      client.on("notification", notificationHandler);
+      await client.query(`listen ${adminRequestEventsChannel}`);
 
-        const eventsReceivedDuringReplay = bufferedEvents.sort((left, right) => {
-          if (!left.eventId || !right.eventId) {
-            return 0;
+      if (reconnectCursor) {
+        let cursor = reconnectCursor;
+
+        while (!closed) {
+          const missedEvents = await getAdminRequestEventsAfter(cursor);
+
+          for (const event of missedEvents) {
+            enqueueEvent(event, true);
+            cursor = event.eventId;
           }
 
-          return BigInt(left.eventId) === BigInt(right.eventId)
-            ? 0
-            : BigInt(left.eventId) < BigInt(right.eventId)
-              ? -1
-              : 1;
-        });
-        bufferedEvents = [];
-        replaying = false;
-
-        for (const event of eventsReceivedDuringReplay) {
-          enqueueEvent(event);
+          if (missedEvents.length < replayPageSize) {
+            break;
+          }
         }
-
-        await deliveryQueue;
-        sendJson(ws, {
-          type: "ready",
-          cursor: lastDeliveredEventId,
-          replayed: Boolean(reconnectCursor),
-        });
-
-        heartbeatId = setInterval(() => {
-          if (ws.readyState === 1) {
-            ws.ping();
-          }
-        }, heartbeatIntervalMs);
-      } catch {
-        sendJson(ws, { type: "error", message: "실시간 연결에 실패했습니다." });
-        ws.close(1011, "realtime connection failed");
-        close();
+      } else {
+        lastDeliveredEventId = await getLatestAdminRequestEventId();
       }
-    })();
+
+      const eventsReceivedDuringReplay = bufferedEvents.sort((left, right) => {
+        if (!left.eventId || !right.eventId) {
+          return 0;
+        }
+
+        return BigInt(left.eventId) === BigInt(right.eventId)
+          ? 0
+          : BigInt(left.eventId) < BigInt(right.eventId)
+            ? -1
+            : 1;
+      });
+      bufferedEvents = [];
+      replaying = false;
+
+      for (const event of eventsReceivedDuringReplay) {
+        enqueueEvent(event);
+      }
+
+      await deliveryQueue;
+      sendJson(ws, {
+        type: "ready",
+        cursor: lastDeliveredEventId,
+        replayed: Boolean(reconnectCursor),
+      });
+
+      heartbeatId = setInterval(() => {
+        if (ws.readyState === 1) {
+          ws.ping();
+        }
+      }, heartbeatIntervalMs);
+    } catch {
+      sendJson(ws, { type: "error", message: "실시간 연결에 실패했습니다." });
+      ws.close(1011, "realtime connection failed");
+      close();
+    }
   }, { maxPayload: 16 * 1024 });
 }
