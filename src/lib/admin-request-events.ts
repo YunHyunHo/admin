@@ -1,4 +1,10 @@
-import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
+import { appendAdminRequestEventToRedis } from "@/lib/admin-request-events-redis";
+import {
+  hasDatabaseUrl,
+  query,
+  runAfterTransactionCommit,
+  withTransaction,
+} from "@/lib/db";
 
 export const adminRequestEventsChannel = "admin_request_events";
 
@@ -85,6 +91,10 @@ async function persistAndPublishAdminRequestEvent(
     adminRequestEventsChannel,
     JSON.stringify(storedEvent),
   ]);
+
+  runAfterTransactionCommit(executor, () =>
+    appendAdminRequestEventToRedis(storedEvent),
+  );
 }
 
 export async function publishAdminRequestEvent(

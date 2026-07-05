@@ -4,6 +4,24 @@ type GlobalWithPgPool = typeof globalThis & {
   __vendorAdminPgPool?: Pool;
 };
 
+type PostCommitTask = () => Promise<void>;
+
+const postCommitTasks = new WeakMap<object, PostCommitTask[]>();
+
+export function runAfterTransactionCommit(
+  executor: object,
+  task: PostCommitTask,
+) {
+  const tasks = postCommitTasks.get(executor);
+
+  if (tasks) {
+    tasks.push(task);
+    return;
+  }
+
+  void task().catch(() => undefined);
+}
+
 function getDatabaseUrl() {
   return process.env.DATABASE_URL?.trim() ?? "";
 }
@@ -58,6 +76,7 @@ export async function withTransaction<T>(
   callback: (client: PoolClient) => Promise<T>,
 ) {
   const client = await getPgPool().connect();
+  postCommitTasks.set(client, []);
 
   try {
     await client.query("begin");
@@ -65,11 +84,15 @@ export async function withTransaction<T>(
 
     await client.query("commit");
 
+    const tasks = postCommitTasks.get(client) ?? [];
+    await Promise.allSettled(tasks.map((task) => task()));
+
     return result;
   } catch (error) {
     await client.query("rollback");
     throw error;
   } finally {
+    postCommitTasks.delete(client);
     client.release();
   }
 }

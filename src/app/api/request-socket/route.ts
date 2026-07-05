@@ -2,19 +2,21 @@ import {
   experimental_upgradeWebSocket,
   type WebSocket,
 } from "@vercel/functions";
-import type { Notification, PoolClient } from "pg";
-
 import {
-  adminRequestEventsChannel,
   ensureAdminRequestEventsSchema,
   getAdminRequestEventsAfter,
   getLatestAdminRequestEventId,
   parseAdminRequestEvent,
   type AdminRequestEvent,
 } from "@/lib/admin-request-events";
+import {
+  adminRequestEventsRedisStream,
+  createAdminRequestEventsRedis,
+  hasAdminRequestEventsRedis,
+} from "@/lib/admin-request-events-redis";
 import { getSessionUser, type SessionUser } from "@/lib/auth";
 import { canUserAccessChargeRequest } from "@/lib/charge-requests-repository";
-import { getPgPool, hasDatabaseUrl } from "@/lib/db";
+import { hasDatabaseUrl } from "@/lib/db";
 import { canUserAccessDistributorWithdrawal } from "@/lib/distributor-withdrawals-repository";
 import { canUserAccessDomainExchange } from "@/lib/domain-exchanges-repository";
 import { isReducedNotificationPollingPilot } from "@/lib/realtime-sync-pilot";
@@ -96,13 +98,19 @@ export async function GET(request: Request) {
     );
   }
 
+  if (!hasAdminRequestEventsRedis()) {
+    return Response.json(
+      { message: "Redis 연결 환경에서만 웹소켓을 사용할 수 있습니다." },
+      { status: 503 },
+    );
+  }
+
   await ensureAdminRequestEventsSchema();
 
   const reconnectCursor = normalizeEventId(requestUrl.searchParams.get("cursor"));
 
   return experimental_upgradeWebSocket(async (ws) => {
-    let client: PoolClient | null = null;
-    let notificationHandler: ((notification: Notification) => void) | null = null;
+    const redis = createAdminRequestEventsRedis({ blocking: true });
     let heartbeatId: ReturnType<typeof setInterval> | null = null;
     let closed = false;
     let replaying = true;
@@ -153,18 +161,7 @@ export async function GET(request: Request) {
         heartbeatId = null;
       }
 
-      if (client) {
-        if (notificationHandler) {
-          client.off("notification", notificationHandler);
-          notificationHandler = null;
-        }
-
-        const activeClient = client;
-        client = null;
-        void activeClient
-          .query(`unlisten ${adminRequestEventsChannel}`)
-          .finally(() => activeClient.release());
-      }
+      redis.disconnect();
     };
 
     ws.on("close", close);
@@ -176,31 +173,44 @@ export async function GET(request: Request) {
     });
 
     try {
-      const connectedClient = await getPgPool().connect();
+      await redis.connect();
 
-      if (closed) {
-        connectedClient.release();
-        return;
-      }
+      void (async () => {
+        let redisCursor = "$";
 
-      client = connectedClient;
-      notificationHandler = (notification) => {
-        if (notification.channel !== adminRequestEventsChannel) {
-          return;
-        }
+        while (!closed) {
+          const streams = await redis.xread(
+            "BLOCK",
+            0,
+            "STREAMS",
+            adminRequestEventsRedisStream,
+            redisCursor,
+          );
 
-        const event = parseAdminRequestEvent(notification.payload);
+          for (const [, entries] of streams ?? []) {
+            for (const [streamId, fields] of entries) {
+              redisCursor = streamId;
+              const eventIndex = fields.indexOf("event");
+              const event = parseAdminRequestEvent(
+                eventIndex >= 0 ? fields[eventIndex + 1] : undefined,
+              );
 
-        if (event) {
-          if (replaying) {
-            bufferedEvents.push(event);
-          } else {
-            enqueueEvent(event);
+              if (event) {
+                if (replaying) {
+                  bufferedEvents.push(event);
+                } else {
+                  enqueueEvent(event);
+                }
+              }
+            }
           }
         }
-      };
-      client.on("notification", notificationHandler);
-      await client.query(`listen ${adminRequestEventsChannel}`);
+      })().catch(() => {
+        if (!closed) {
+          sendJson(ws, { type: "error", message: "Redis 실시간 연결이 끊겼습니다." });
+          ws.close(1011, "redis realtime connection failed");
+        }
+      });
 
       if (reconnectCursor) {
         let cursor = reconnectCursor;
