@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const noticeSoundPath = "/sounds/notice.mp3";
 const pollIntervalMs = 1000;
+const realtimeFallbackPollIntervalMs = 10000;
 const noticeSoundReadyKey = "winpay-notice-sound-ready";
 const noticeRetryDelayMs = 1200;
 const maxNoticePlayAttempts = 3;
@@ -275,6 +276,8 @@ export function GlobalRequestNotifier({
   useEffect(() => {
     if (realtimeEventsEnabled && typeof window !== "undefined" && "EventSource" in window) {
       const eventSource = new EventSource("/api/request-events");
+      let isCancelled = false;
+      let timeoutId: number | null = null;
 
       const handleReady = () => {
         void syncRequests();
@@ -304,7 +307,27 @@ export function GlobalRequestNotifier({
         setNoticeMessage("실시간 재연결 중");
       };
 
+      async function runFallbackSync() {
+        if (isCancelled) {
+          return;
+        }
+
+        await syncRequests();
+
+        if (!isCancelled) {
+          timeoutId = window.setTimeout(() => {
+            void runFallbackSync();
+          }, realtimeFallbackPollIntervalMs);
+        }
+      }
+
+      void runFallbackSync();
+
       return () => {
+        isCancelled = true;
+        if (timeoutId !== null) {
+          window.clearTimeout(timeoutId);
+        }
         eventSource.removeEventListener("ready", handleReady);
         eventSource.removeEventListener("request-event", handleRequestEvent);
         eventSource.close();

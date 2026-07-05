@@ -72,6 +72,7 @@ type HistoryFilters = {
 const rowsPerPage = 10;
 const pagesPerGroup = 10;
 const minimumChargeAmount = 1000;
+const serverHistoryFallbackRefreshMs = 10000;
 const chargeNoticeSoundPath = "/sounds/notice.mp3";
 const dashboardSummaryRefreshEvent = "dashboard-summary-refresh";
 const emptyHistoryFilters: HistoryFilters = {
@@ -704,6 +705,36 @@ export function ChargeRequestsBoard({
 
     return () => {
       window.removeEventListener(requestRealtimeEventName, handleRealtimeEvent);
+    };
+  }, [refreshRequestsForNotification, serverHistoryEnabled]);
+
+  useEffect(() => {
+    if (!serverHistoryEnabled) {
+      return;
+    }
+
+    let isCancelled = false;
+    let timeoutId: number | null = null;
+
+    async function runFallbackRefresh() {
+      try {
+        await refreshRequestsForNotification();
+      } finally {
+        if (!isCancelled) {
+          timeoutId = window.setTimeout(() => {
+            void runFallbackRefresh();
+          }, serverHistoryFallbackRefreshMs);
+        }
+      }
+    }
+
+    void runFallbackRefresh();
+
+    return () => {
+      isCancelled = true;
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
     };
   }, [refreshRequestsForNotification, serverHistoryEnabled]);
 

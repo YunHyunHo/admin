@@ -225,6 +225,7 @@ export const fallbackDistributorWithdrawals: WithdrawalRow[] = [
     status: "승인",
   },
 ];
+const serverPagingFallbackRefreshMs = 10000;
 
 const rowsPerPage = 10;
 
@@ -469,6 +470,36 @@ export function DistributorWithdrawalHistoryBoard({
 
     return () => {
       window.removeEventListener(requestRealtimeEventName, handleRealtimeEvent);
+    };
+  }, [refreshRows, serverPagingEnabled]);
+
+  useEffect(() => {
+    if (!serverPagingEnabled) {
+      return;
+    }
+
+    let isCancelled = false;
+    let timeoutId: number | null = null;
+
+    async function runFallbackRefresh() {
+      try {
+        await refreshRows();
+      } finally {
+        if (!isCancelled) {
+          timeoutId = window.setTimeout(() => {
+            void runFallbackRefresh();
+          }, serverPagingFallbackRefreshMs);
+        }
+      }
+    }
+
+    void runFallbackRefresh();
+
+    return () => {
+      isCancelled = true;
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
     };
   }, [refreshRows, serverPagingEnabled]);
 
