@@ -1085,8 +1085,13 @@ export function ChargeRequestsBoard({
         throw new Error(data.message ?? "충전신청 처리에 실패했습니다.");
       }
 
-      applyProcessedRequest(data.processedRequest);
-      await refreshHistoryPages();
+      if (serverHistoryEnabled) {
+        await refreshRequestsForNotification();
+        await refreshHistoryPages();
+      } else {
+        applyProcessedRequest(data.processedRequest);
+        await refreshHistoryPages();
+      }
       window.dispatchEvent(new Event(requestNotifierRefreshEventName));
       window.dispatchEvent(new Event(dashboardSummaryRefreshEvent));
       setMessage(`${subjectLabel} 요청이 ${actionLabel} 처리되었습니다.`);
