@@ -310,24 +310,26 @@ export function GlobalRequestNotifier({
   }, [playNoticeSoundWithRetry]);
 
   useEffect(() => {
-    if (realtimeEventsEnabled && typeof window !== "undefined" && "EventSource" in window) {
-      const eventSource = new EventSource(realtimeEventsPath);
+    if (realtimeEventsEnabled && typeof window !== "undefined") {
       let isCancelled = false;
       let timeoutId: number | null = null;
+      let streamRetryTimeoutId: number | null = null;
+      let streamAbortController: AbortController | null = null;
+      let eventSource: EventSource | null = null;
 
       const handleReady = () => {
         void syncRequests();
       };
-      const handleRequestEvent = (event: MessageEvent<string>) => {
+      const handleRequestEvent = (data: string, lastEventId = "") => {
         try {
-          const detail = JSON.parse(event.data) as {
+          const detail = JSON.parse(data) as {
             eventId?: string;
             kind?: string;
             replayed?: boolean;
             requestId?: string;
             status?: string;
           };
-          const eventId = detail.eventId ?? event.lastEventId;
+          const eventId = detail.eventId ?? lastEventId;
 
           if (
             eventId &&
@@ -410,15 +412,112 @@ export function GlobalRequestNotifier({
         }
       };
 
-      eventSource.addEventListener("ready", handleReady);
-      eventSource.addEventListener("request-event", handleRequestEvent);
-      eventSource.addEventListener("replay-error", () => {
-        setNoticeMessage("실시간 복구 확인 중");
-        void syncRequests();
-      });
-      eventSource.onerror = () => {
-        setNoticeMessage("실시간 재연결 중");
-      };
+      if (eventDrivenSnapshotEnabled) {
+        const handleStreamBlock = (block: string) => {
+          let eventName = "message";
+          let eventId = "";
+          const dataLines: string[] = [];
+
+          for (const line of block.split("\n")) {
+            if (line.startsWith("event:")) {
+              eventName = line.slice(6).trim();
+            } else if (line.startsWith("id:")) {
+              eventId = line.slice(3).trim();
+            } else if (line.startsWith("data:")) {
+              dataLines.push(line.slice(5).trimStart());
+            }
+          }
+
+          const data = dataLines.join("\n");
+
+          if (eventName === "ready") {
+            handleReady();
+          } else if (eventName === "request-event" && data) {
+            handleRequestEvent(data, eventId);
+          } else if (eventName === "replay-error") {
+            setNoticeMessage("실시간 복구 확인 중");
+            void syncRequests();
+          }
+        };
+
+        async function connectStream() {
+          while (!isCancelled) {
+            try {
+              streamAbortController = new AbortController();
+              const headers: Record<string, string> = {
+                Accept: "application/x-ndjson",
+              };
+
+              if (lastRealtimeEventIdRef.current) {
+                headers["Last-Event-ID"] = lastRealtimeEventIdRef.current;
+              }
+
+              const response = await fetch(realtimeEventsPath, {
+                cache: "no-store",
+                headers,
+                signal: streamAbortController.signal,
+              });
+
+              if (!response.ok || !response.body) {
+                throw new Error("실시간 스트림에 연결하지 못했습니다.");
+              }
+
+              const reader = response.body.getReader();
+              const decoder = new TextDecoder();
+              let buffer = "";
+
+              while (!isCancelled) {
+                const { done, value } = await reader.read();
+
+                if (done) {
+                  break;
+                }
+
+                buffer += decoder.decode(value, { stream: true }).replaceAll(
+                  "\r\n",
+                  "\n",
+                );
+                const blocks = buffer.split("\n\n");
+                buffer = blocks.pop() ?? "";
+
+                for (const block of blocks) {
+                  handleStreamBlock(block);
+                }
+              }
+            } catch {
+              if (!isCancelled) {
+                setNoticeMessage("실시간 재연결 중");
+              }
+            } finally {
+              streamAbortController = null;
+            }
+
+            if (!isCancelled) {
+              await new Promise<void>((resolve) => {
+                streamRetryTimeoutId = window.setTimeout(resolve, 500);
+              });
+              streamRetryTimeoutId = null;
+            }
+          }
+        }
+
+        void connectStream();
+      } else if ("EventSource" in window) {
+        eventSource = new EventSource(realtimeEventsPath);
+        const handleEventSourceRequest = (event: MessageEvent<string>) => {
+          handleRequestEvent(event.data, event.lastEventId);
+        };
+
+        eventSource.addEventListener("ready", handleReady);
+        eventSource.addEventListener("request-event", handleEventSourceRequest);
+        eventSource.addEventListener("replay-error", () => {
+          setNoticeMessage("실시간 복구 확인 중");
+          void syncRequests();
+        });
+        eventSource.onerror = () => {
+          setNoticeMessage("실시간 재연결 중");
+        };
+      }
 
       async function runFallbackSync() {
         if (isCancelled) {
@@ -441,9 +540,11 @@ export function GlobalRequestNotifier({
         if (timeoutId !== null) {
           window.clearTimeout(timeoutId);
         }
-        eventSource.removeEventListener("ready", handleReady);
-        eventSource.removeEventListener("request-event", handleRequestEvent);
-        eventSource.close();
+        if (streamRetryTimeoutId !== null) {
+          window.clearTimeout(streamRetryTimeoutId);
+        }
+        streamAbortController?.abort();
+        eventSource?.close();
         clearNoticeRetry();
       };
     }
