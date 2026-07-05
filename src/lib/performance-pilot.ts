@@ -2,6 +2,7 @@ import type { SessionUser } from "@/lib/auth";
 
 const performancePilotLoginIds = new Set([
   "maple",
+  "as@112233",
 ]);
 
 export function isPerformancePilotUser(
