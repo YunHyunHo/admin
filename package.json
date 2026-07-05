@@ -15,6 +15,7 @@
     "ops:check": "node scripts/ops-check.mjs"
   },
   "dependencies": {
+    "@vercel/speed-insights": "^2.0.0",
     "next": "16.2.4",
     "pg": "^8.20.0",
     "react": "19.2.4",
