@@ -44,6 +44,7 @@ export async function appendAdminRequestEventToRedis(
       "MAXLEN",
       "~",
       10000,
+      "*",
       "event",
       JSON.stringify(event),
     );
