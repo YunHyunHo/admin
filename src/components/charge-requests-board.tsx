@@ -1360,6 +1360,11 @@ export function ChargeRequestsBoard({
                   setApprovedPage(1);
                 }}
               />
+              {approvedHistoryLoading && visibleApprovedRequests.length ? (
+                <div className="mb-3 text-xs text-white/42">
+                  승인내역을 갱신하는 중입니다.
+                </div>
+              ) : null}
               <Table>
                 <table className="min-w-full text-left text-sm">
                   <thead className="bg-black/30 text-white/58">
@@ -1385,7 +1390,7 @@ export function ChargeRequestsBoard({
                     </tr>
                   </thead>
                   <tbody>
-                    {approvedHistoryLoading ? (
+                    {approvedHistoryLoading && !visibleApprovedRequests.length ? (
                       <tr>
                         <td colSpan={9} className="px-4 py-10 text-center text-sm text-white/40">
                           승인내역을 불러오는 중입니다.
@@ -1455,6 +1460,11 @@ export function ChargeRequestsBoard({
                   setRejectedPage(1);
                 }}
               />
+              {rejectedHistoryLoading && visibleRejectedRequests.length ? (
+                <div className="mb-3 text-xs text-white/42">
+                  승인거절내역을 갱신하는 중입니다.
+                </div>
+              ) : null}
               <Table>
                 <table className="min-w-full text-left text-sm">
                   <thead className="bg-black/30 text-white/58">
@@ -1479,7 +1489,7 @@ export function ChargeRequestsBoard({
                     </tr>
                   </thead>
                   <tbody>
-                    {rejectedHistoryLoading ? (
+                    {rejectedHistoryLoading && !visibleRejectedRequests.length ? (
                       <tr>
                         <td colSpan={8} className="px-4 py-10 text-center text-sm text-white/40">
                           승인거절내역을 불러오는 중입니다.
