@@ -313,8 +313,9 @@ export function GlobalRequestNotifier({
     if (realtimeEventsEnabled && typeof window !== "undefined") {
       let isCancelled = false;
       let timeoutId: number | null = null;
-      let streamRetryTimeoutId: number | null = null;
-      let streamAbortController: AbortController | null = null;
+      let socketRetryTimeoutId: number | null = null;
+      let socketRetryDelayMs = 500;
+      let webSocket: WebSocket | null = null;
       let eventSource: EventSource | null = null;
 
       const handleReady = () => {
@@ -413,95 +414,79 @@ export function GlobalRequestNotifier({
       };
 
       if (eventDrivenSnapshotEnabled) {
-        const handleStreamBlock = (block: string) => {
-          let eventName = "message";
-          let eventId = "";
-          const dataLines: string[] = [];
-
-          for (const line of block.split("\n")) {
-            if (line.startsWith("event:")) {
-              eventName = line.slice(6).trim();
-            } else if (line.startsWith("id:")) {
-              eventId = line.slice(3).trim();
-            } else if (line.startsWith("data:")) {
-              dataLines.push(line.slice(5).trimStart());
-            }
+        const connectWebSocket = () => {
+          if (isCancelled) {
+            return;
           }
 
-          const data = dataLines.join("\n");
+          const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+          const socketUrl = new URL("/api/request-socket", window.location.href);
+          socketUrl.protocol = protocol;
 
-          if (eventName === "ready") {
-            handleReady();
-          } else if (eventName === "request-event" && data) {
-            handleRequestEvent(data, eventId);
-          } else if (eventName === "replay-error") {
-            setNoticeMessage("실시간 복구 확인 중");
-            void syncRequests();
+          if (lastRealtimeEventIdRef.current) {
+            socketUrl.searchParams.set(
+              "cursor",
+              lastRealtimeEventIdRef.current,
+            );
           }
-        };
 
-        async function connectStream() {
-          while (!isCancelled) {
+          const socket = new WebSocket(socketUrl);
+          webSocket = socket;
+
+          socket.onopen = () => {
+            socketRetryDelayMs = 500;
+            setNoticeMessage("실시간 연결됨");
+          };
+          socket.onmessage = (message) => {
             try {
-              streamAbortController = new AbortController();
-              const headers: Record<string, string> = {
-                Accept: "application/x-ndjson",
+              const payload = JSON.parse(String(message.data)) as {
+                cursor?: string | null;
+                event?: {
+                  eventId?: string;
+                  kind?: string;
+                  replayed?: boolean;
+                  requestId?: string;
+                  status?: string;
+                };
+                type?: string;
               };
 
-              if (lastRealtimeEventIdRef.current) {
-                headers["Last-Event-ID"] = lastRealtimeEventIdRef.current;
-              }
-
-              const response = await fetch(realtimeEventsPath, {
-                cache: "no-store",
-                headers,
-                signal: streamAbortController.signal,
-              });
-
-              if (!response.ok || !response.body) {
-                throw new Error("실시간 스트림에 연결하지 못했습니다.");
-              }
-
-              const reader = response.body.getReader();
-              const decoder = new TextDecoder();
-              let buffer = "";
-
-              while (!isCancelled) {
-                const { done, value } = await reader.read();
-
-                if (done) {
-                  break;
+              if (payload.type === "ready") {
+                if (payload.cursor) {
+                  lastRealtimeEventIdRef.current = payload.cursor;
                 }
-
-                buffer += decoder.decode(value, { stream: true }).replaceAll(
-                  "\r\n",
-                  "\n",
-                );
-                const blocks = buffer.split("\n\n");
-                buffer = blocks.pop() ?? "";
-
-                for (const block of blocks) {
-                  handleStreamBlock(block);
-                }
-              }
-            } catch {
-              if (!isCancelled) {
+                handleReady();
+              } else if (payload.type === "request-event" && payload.event) {
+                handleRequestEvent(JSON.stringify(payload.event));
+              } else if (payload.type === "error") {
                 setNoticeMessage("실시간 재연결 중");
               }
-            } finally {
-              streamAbortController = null;
+            } catch {
+              // Ignore malformed socket messages and rely on cursor recovery.
+            }
+          };
+          socket.onerror = () => {
+            setNoticeMessage("실시간 재연결 중");
+          };
+          socket.onclose = () => {
+            if (webSocket === socket) {
+              webSocket = null;
             }
 
-            if (!isCancelled) {
-              await new Promise<void>((resolve) => {
-                streamRetryTimeoutId = window.setTimeout(resolve, 500);
-              });
-              streamRetryTimeoutId = null;
+            if (isCancelled) {
+              return;
             }
-          }
-        }
 
-        void connectStream();
+            setNoticeMessage("실시간 재연결 중");
+            socketRetryTimeoutId = window.setTimeout(() => {
+              socketRetryTimeoutId = null;
+              connectWebSocket();
+            }, socketRetryDelayMs);
+            socketRetryDelayMs = Math.min(socketRetryDelayMs * 2, 5000);
+          };
+        };
+
+        connectWebSocket();
       } else if ("EventSource" in window) {
         eventSource = new EventSource(realtimeEventsPath);
         const handleEventSourceRequest = (event: MessageEvent<string>) => {
@@ -540,10 +525,10 @@ export function GlobalRequestNotifier({
         if (timeoutId !== null) {
           window.clearTimeout(timeoutId);
         }
-        if (streamRetryTimeoutId !== null) {
-          window.clearTimeout(streamRetryTimeoutId);
+        if (socketRetryTimeoutId !== null) {
+          window.clearTimeout(socketRetryTimeoutId);
         }
-        streamAbortController?.abort();
+        webSocket?.close(1000, "page closed");
         eventSource?.close();
         clearNoticeRetry();
       };
