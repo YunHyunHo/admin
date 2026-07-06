@@ -7,6 +7,7 @@ export type DomainChargeMode = "API" | "MANUAL";
 export type DomainChargeIntegrationScope = {
   integrationId: string;
   masterAdminId: string;
+  masterLoginId: string;
   companyId: string;
   domainId: string;
   distributorId: string | null;
@@ -128,6 +129,7 @@ export async function resolveDomainChargeIntegration(
       select
         integration.id::text as "integrationId",
         integration.master_admin_id::text as "masterAdminId",
+        master_admin.login_id as "masterLoginId",
         dom.company_id::text as "companyId",
         dom.id::text as "domainId",
         dom.distributor_id::text as "distributorId",

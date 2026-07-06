@@ -1280,6 +1280,41 @@ export async function createIntegrationChargeRequest(
   return { requestId, status: "PENDING", duplicate: false };
 }
 
+export async function getIntegrationChargeRequestAccount(
+  requestId: string,
+  domainId: string,
+) {
+  const result = await query<{
+    bank_name: string | null;
+    account_holder: string | null;
+    account_number: string | null;
+  }>(
+    `
+      select bank_name, account_holder, account_number
+      from charge_requests
+      where id = $1::uuid
+        and domain_id = $2::uuid
+      limit 1
+    `,
+    [requestId, domainId],
+  );
+  const account = result.rows[0];
+
+  if (
+    !account?.bank_name ||
+    !account.account_holder ||
+    !account.account_number
+  ) {
+    return null;
+  }
+
+  return {
+    bankName: account.bank_name,
+    accountHolder: account.account_holder,
+    accountNumber: account.account_number,
+  };
+}
+
 export async function getIntegrationChargeDomainOptions() {
   if (!hasDatabaseUrl()) {
     return [] satisfies IntegrationChargeDomainOption[];
