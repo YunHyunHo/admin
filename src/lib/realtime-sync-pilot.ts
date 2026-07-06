@@ -8,5 +8,6 @@ export function isRealtimeSyncPilot(user: Pick<SessionUser, "loginId">) {
 export function isReducedNotificationPollingPilot(
   user: Pick<SessionUser, "loginId">,
 ) {
-  return user.loginId.trim().toLowerCase() === "maple";
+  void user;
+  return false;
 }
