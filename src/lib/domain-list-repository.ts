@@ -2,6 +2,7 @@ import { hashPassword } from "@/lib/password";
 import { decryptVisiblePassword, encryptVisiblePassword } from "@/lib/admin-accounts";
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
 import { getDomainManagementRows } from "@/lib/domain-management-repository";
+import { permanentlyDeleteDomain } from "@/lib/domain-permanent-delete";
 import {
   getMasterOwnedBankAccountCondition,
   getMasterOwnedCompanyExistsCondition,
@@ -42,21 +43,6 @@ export type DomainListRow = {
   balance: number;
   depositEnabled: boolean;
   createdAt: string;
-};
-
-type DomainCompanyAdminRow = {
-  id: string;
-  company_id: string;
-  domain_name: string | null;
-  company_name: string;
-  distributor_name: string | null;
-  top_distributor_name: string | null;
-  bank_name: string | null;
-  account_number: string | null;
-  account_holder: string | null;
-  current_balance: string | null;
-  status: "ACTIVE" | "SUSPENDED" | "DELETED";
-  created_at: Date | string;
 };
 
 type CreateDomainEntryInput = {
@@ -654,127 +640,5 @@ export async function linkDomainEntryAccount(input: {
 }
 
 export async function deleteDomainEntry(id: string, user: SessionUser) {
-  await deleteDomainEntryWithAccount(id, false, user);
-}
-
-async function deleteDomainEntryWithAccount(id: string, hardDelete: boolean, user: SessionUser) {
-  if (!isUuid(id)) {
-    throw new Error("도메인 정보를 확인해주세요.");
-  }
-
-  await withTransaction(async (client) => {
-    const bankAccountScopeSql =
-      user.role === "MASTER"
-        ? `and ${getMasterOwnedBankAccountCondition("ba", "$2")}`
-        : "";
-    const deleteBankAccountScopeSql =
-      user.role === "MASTER"
-        ? `and ${getMasterOwnedBankAccountCondition("bank_accounts", "$2")}`
-        : "";
-    const domainRow = await client.query<DomainCompanyAdminRow>(
-      `
-        select
-          dom.id::text,
-          dom.company_id::text,
-          dom.domain_name,
-          c.company_name,
-          dist.name as distributor_name,
-          parent_dist.name as top_distributor_name,
-          ba.bank_name,
-          ba.account_number,
-          ba.account_holder,
-          dom.current_balance::text as current_balance,
-          dom.status::text as status,
-          dom.created_at
-        from domains dom
-        join companies c on c.id = dom.company_id
-        left join distributors dist on dist.id = dom.distributor_id
-        left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
-        left join lateral (
-          select bank_name, account_number, account_holder
-          from bank_accounts ba
-          where ba.company_id = dom.company_id
-            ${bankAccountScopeSql}
-          order by ba.created_at desc
-          limit 1
-        ) ba on true
-        where dom.id = $1::uuid
-          and ${getMasterOwnedCompanyExistsCondition("dom.company_id", "$2")}
-        limit 1
-      `,
-      [id, user.id],
-    );
-
-    const companyId = domainRow.rows[0]?.company_id;
-    const companyName = domainRow.rows[0]?.company_name;
-
-    if (!companyId || !companyName) {
-      throw new Error("도메인 정보를 찾지 못했습니다.");
-    }
-
-    const adminResult = await client.query<{ id: string }>(
-      `
-        select a.id::text
-        from admins a
-        join admin_company_mappings acm on acm.admin_id = a.id
-        where a.role = 'DOMAIN_ADMIN'
-          and acm.company_id = $1::uuid
-          and a.created_by = $2::uuid
-        limit 1
-      `,
-      [companyId, user.id],
-    );
-
-    const adminId = adminResult.rows[0]?.id ?? null;
-
-    if (hardDelete) {
-      if (adminId) {
-        await client.query(`delete from admin_domain_mappings where admin_id = $1::uuid`, [adminId]);
-        await client.query(`delete from admin_company_mappings where admin_id = $1::uuid`, [adminId]);
-        await client.query(`delete from admins where id = $1::uuid`, [adminId]);
-      }
-
-      await client.query(
-        `
-          delete from bank_accounts
-          where company_id in (
-            select company_id
-            from domains
-            where id = $1::uuid
-          )
-            ${deleteBankAccountScopeSql}
-        `,
-        [id, user.id],
-      );
-      await client.query(`delete from domains where id = $1::uuid`, [id]);
-      await client.query(
-        `
-          delete from companies
-          where id = $1::uuid
-        `,
-        [companyId],
-      );
-      return;
-    }
-
-    if (adminId) {
-      await client.query(
-        `
-          update admins
-          set status = 'DELETED', updated_at = now()
-          where id = $1::uuid
-        `,
-        [adminId],
-      );
-    }
-
-    await client.query(
-      `
-        update domains
-        set status = 'DELETED', updated_at = now()
-        where id = $1::uuid
-      `,
-      [id],
-    );
-  });
+  await permanentlyDeleteDomain(id, user);
 }

@@ -189,7 +189,7 @@ export async function PATCH(request: Request) {
       ...(await getDomainBoardData([], user)),
       message:
         payload.action === "delete"
-          ? "도메인이 삭제되었습니다."
+          ? "도메인 계정과 연결 데이터가 완전 삭제되었습니다."
           : payload.action === "adjust-balance"
             ? "보유금이 조정되었습니다."
           : "도메인이 수정되었습니다.",
@@ -199,7 +199,7 @@ export async function PATCH(request: Request) {
   return NextResponse.json({
     message:
       payload.action === "delete"
-        ? "도메인이 삭제되었습니다."
+        ? "도메인 계정과 연결 데이터가 완전 삭제되었습니다."
         : payload.action === "adjust-balance"
           ? "보유금이 조정되었습니다."
         : "도메인이 수정되었습니다.",

@@ -272,6 +272,14 @@ export function DomainManagementBoard({
   }
 
   async function deleteDomainRow(row: DomainRow) {
+    if (
+      !window.confirm(
+        `${row.companyName} 도메인과 연결된 계정·거래 데이터를 모두 완전 삭제할까요?\n이 작업은 복구할 수 없습니다.`,
+      )
+    ) {
+      return;
+    }
+
     setDomainRows((current) => current.filter((domain) => domain.id !== row.id));
 
     const response = await fetch("/api/domains", {

@@ -370,7 +370,11 @@ export function DomainListBoard({
   }
 
   async function handleDelete(row: DomainListRow) {
-    if (!window.confirm(`${row.companyName} 도메인을 삭제할까요?`)) {
+    if (
+      !window.confirm(
+        `${row.companyName} 도메인과 연결된 계정·거래 데이터를 모두 완전 삭제할까요?\n복구할 수 없으며, 삭제 후 같은 로그인 ID로 새 계정을 만들 수 있습니다.`,
+      )
+    ) {
       return;
     }
 

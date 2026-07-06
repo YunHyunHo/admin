@@ -1,5 +1,6 @@
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
 import { formatKoreanDateTime } from "@/lib/korean-time";
+import { permanentlyDeleteDomain } from "@/lib/domain-permanent-delete";
 import {
   getMasterOwnedBankAccountCondition,
   getMasterOwnedCompanyExistsCondition,
@@ -354,13 +355,5 @@ export async function adjustDomainBalance(input: {
 }
 
 export async function deleteDomain(id: string, user: SessionUser) {
-  await query(
-    `
-      update domains dom
-      set status = 'DELETED', updated_at = now()
-      where dom.id = $1::uuid
-        and ${getMasterOwnedCompanyExistsCondition("dom.company_id", "$2")}
-    `,
-    [id, user.id],
-  );
+  await permanentlyDeleteDomain(id, user);
 }
