@@ -53,13 +53,6 @@ export async function POST(request: Request) {
     );
   }
 
-  if (integration.masterLoginId.trim().toLowerCase() !== "maple") {
-    return NextResponse.json(
-      { code: 1, message: "Pilot API is limited to the maple account" },
-      { status: 403 },
-    );
-  }
-
   const externalId = payload.externalId?.trim() ?? "";
   const userId = payload.id?.trim() ?? "";
   const depositorName = payload.bankHolderName?.trim() ?? "";
