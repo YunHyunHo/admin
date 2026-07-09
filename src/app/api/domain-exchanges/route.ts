@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser, type SessionUser } from "@/lib/auth";
 import {
   approveDomainExchange,
   cancelApprovedDomainExchange,
@@ -32,6 +32,36 @@ type CreateDomainExchangePayload = {
   domainId?: string;
 };
 
+const missingDomainExchangeScopeMessage =
+  "환전신청을 연결할 계정을 찾을 수 없습니다.";
+
+function getEmptyDomainExchangeCreateContext() {
+  return {
+    defaultDomainId: null,
+    currentBalance: 0,
+    hasConnectedDomain: false,
+  };
+}
+
+async function getOptionalDomainExchangeCreateContext(user: SessionUser) {
+  if (!canUseDistributorMenus(user) || canManageMasterResources(user)) {
+    return getEmptyDomainExchangeCreateContext();
+  }
+
+  try {
+    return await getDomainExchangeCreateContext(user);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === missingDomainExchangeScopeMessage
+    ) {
+      return getEmptyDomainExchangeCreateContext();
+    }
+
+    throw error;
+  }
+}
+
 function isUuid(value: string | undefined) {
   return Boolean(
     value?.match(
@@ -60,13 +90,7 @@ export async function GET(request: Request) {
         page: searchParams.get("page"),
         pageSize: searchParams.get("pageSize"),
       })),
-      createContext: canUseDistributorMenus(user)
-        ? await getDomainExchangeCreateContext(user)
-        : {
-            defaultDomainId: null,
-            currentBalance: 0,
-            hasConnectedDomain: false,
-          },
+      createContext: await getOptionalDomainExchangeCreateContext(user),
     });
   }
 
@@ -80,13 +104,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     rows: await getDomainExchangeRows([], user, updatedSince),
     ...(cursor ? { cursor } : {}),
-    createContext: canUseDistributorMenus(user)
-      ? await getDomainExchangeCreateContext(user)
-      : {
-          defaultDomainId: null,
-          currentBalance: 0,
-          hasConnectedDomain: false,
-        },
+    createContext: await getOptionalDomainExchangeCreateContext(user),
   });
 }
 

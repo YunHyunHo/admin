@@ -274,6 +274,7 @@ export function DomainExchangesBoard({
   const [message, setMessage] = useState("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [processingExchangeId, setProcessingExchangeId] = useState<string | null>(null);
   const [createModalMessage, setCreateModalMessage] = useState("");
   const [domainId, setDomainId] = useState(defaultDomainId ?? "");
   const [amount, setAmount] = useState("");
@@ -285,6 +286,7 @@ export function DomainExchangesBoard({
   );
   const refreshRowsPromiseRef = useRef<Promise<void> | null>(null);
   const needsRefreshRowsRef = useRef(false);
+  const processingExchangeIdRef = useRef<string | null>(null);
   const lastSyncCursorRef = useRef(initialSyncCursor);
   const pageRequestKeyRef = useRef(
     serverPagingEnabled && initialPageData
@@ -644,42 +646,58 @@ export function DomainExchangesBoard({
   }
 
   async function persistExchangePatch(id: string, action: "approve" | "reject" | "cancel") {
-    const response = await fetch("/api/domain-exchanges", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, action }),
-    });
-    const data = (await response.json()) as {
-      rows?: DomainExchangeRow[];
-      message?: string;
-    };
-
-    if (!response.ok) {
-      setMessage(data.message ?? "환전 요청 처리 중 오류가 발생했습니다.");
+    if (processingExchangeIdRef.current) {
       return;
     }
 
-    if (data.rows) {
-      if (serverPagingEnabled) {
-        await fetchPageRows(currentPage);
-      } else if (incrementalSyncEnabled) {
-        applyChangedRows(data.rows.filter((row) => row.id === id));
-      } else {
-        const nextRows = data.rows.map(normalizeExchangeRow);
-        pendingSignatureRef.current = getPendingExchangeSignature(nextRows);
-        setRows(nextRows);
+    processingExchangeIdRef.current = id;
+    setProcessingExchangeId(id);
+
+    try {
+      const response = await fetch("/api/domain-exchanges", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action }),
+      });
+      const data = (await response.json()) as {
+        rows?: DomainExchangeRow[];
+        message?: string;
+      };
+
+      if (!response.ok) {
+        setMessage(data.message ?? "환전 요청 처리 중 오류가 발생했습니다.");
+        return;
       }
-    }
 
-    window.dispatchEvent(new Event(requestNotifierRefreshEventName));
-    window.dispatchEvent(new Event(dashboardSummaryRefreshEventName));
+      if (data.rows) {
+        if (serverPagingEnabled) {
+          await fetchPageRows(currentPage);
+        } else if (incrementalSyncEnabled) {
+          applyChangedRows(data.rows.filter((row) => row.id === id));
+        } else {
+          const nextRows = data.rows.map(normalizeExchangeRow);
+          pendingSignatureRef.current = getPendingExchangeSignature(nextRows);
+          setRows(nextRows);
+        }
+      }
 
-    if (data.message) {
-      setMessage(data.message);
+      window.dispatchEvent(new Event(requestNotifierRefreshEventName));
+      window.dispatchEvent(new Event(dashboardSummaryRefreshEventName));
+
+      if (data.message) {
+        setMessage(data.message);
+      }
+    } finally {
+      processingExchangeIdRef.current = null;
+      setProcessingExchangeId(null);
     }
   }
 
   function approveRow(id: string) {
+    if (processingExchangeIdRef.current) {
+      return;
+    }
+
     if (!window.confirm("이 환전 요청을 승인할까요? 승인하면 보유금에서 요청금액이 차감됩니다.")) {
       return;
     }
@@ -688,10 +706,18 @@ export function DomainExchangesBoard({
   }
 
   function rejectRow(id: string) {
+    if (processingExchangeIdRef.current) {
+      return;
+    }
+
     void persistExchangePatch(id, "reject");
   }
 
   function cancelRow(id: string) {
+    if (processingExchangeIdRef.current) {
+      return;
+    }
+
     if (
       !window.confirm(
         "이미 승인된 환전 요청을 승인취소할까요? 차감했던 보유금이 다시 복구됩니다.",
@@ -791,17 +817,19 @@ export function DomainExchangesBoard({
                         <div className="flex flex-col items-center gap-1">
                           <button
                             type="button"
+                            disabled={processingExchangeId !== null}
                             onClick={() => approveRow(row.id)}
                             className="rounded-lg bg-cyan-400 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            승인
+                            {processingExchangeId === row.id ? "처리중" : "승인"}
                           </button>
                           <button
                             type="button"
+                            disabled={processingExchangeId !== null}
                             onClick={() => rejectRow(row.id)}
                             className="rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            거절
+                            {processingExchangeId === row.id ? "처리중" : "거절"}
                           </button>
                         </div>
                       ) : canProcessExchanges && row.status === "승인" ? (
@@ -809,10 +837,11 @@ export function DomainExchangesBoard({
                           <span className="text-white/68">{row.status}</span>
                           <button
                             type="button"
+                            disabled={processingExchangeId !== null}
                             onClick={() => cancelRow(row.id)}
                             className="rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            승인취소
+                            {processingExchangeId === row.id ? "처리중" : "승인취소"}
                           </button>
                         </div>
                       ) : (
