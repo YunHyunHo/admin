@@ -1307,7 +1307,14 @@ export function ChargeRequestsBoard({
       return;
     }
 
-    function disarmApproval() {
+    function disarmApproval(event: PointerEvent) {
+      if (
+        event.target instanceof Element &&
+        event.target.closest("[data-charge-approval-button='true']")
+      ) {
+        return;
+      }
+
       setArmedApprovalId(null);
     }
 
@@ -1489,6 +1496,7 @@ export function ChargeRequestsBoard({
                             <div className="flex gap-2">
                               <button
                                 type="button"
+                                data-charge-approval-button="true"
                                 onPointerDown={(event) => event.stopPropagation()}
                                 onClick={() => approvePendingRequest(row)}
                                 disabled={processingId === row.id}
