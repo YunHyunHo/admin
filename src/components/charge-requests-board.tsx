@@ -1302,6 +1302,22 @@ export function ChargeRequestsBoard({
     });
   }
 
+  useEffect(() => {
+    if (!armedApprovalId) {
+      return;
+    }
+
+    function disarmApproval() {
+      setArmedApprovalId(null);
+    }
+
+    document.addEventListener("pointerdown", disarmApproval);
+
+    return () => {
+      document.removeEventListener("pointerdown", disarmApproval);
+    };
+  }, [armedApprovalId]);
+
   return (
     <div className="space-y-5">
       {confirmAction ? (
@@ -1473,6 +1489,7 @@ export function ChargeRequestsBoard({
                             <div className="flex gap-2">
                               <button
                                 type="button"
+                                onPointerDown={(event) => event.stopPropagation()}
                                 onClick={() => approvePendingRequest(row)}
                                 disabled={processingId === row.id}
                                 aria-pressed={armedApprovalId === row.id}
