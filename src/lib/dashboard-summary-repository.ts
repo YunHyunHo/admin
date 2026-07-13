@@ -299,7 +299,11 @@ export async function saveDashboardPartnerSummaryOrder(
   user: SessionUser,
   orderedEntityIds: string[],
 ) {
-  if (user.role !== "MASTER" && user.role !== "ADMIN") {
+  if (
+    user.role !== "MASTER" &&
+    user.role !== "ADMIN" &&
+    user.role !== "DOMAIN_ADMIN"
+  ) {
     throw new Error("마스터 또는 어드민 계정만 업체 순번을 변경할 수 있습니다.");
   }
 
