@@ -35,9 +35,9 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
 
-  if (user.role !== "MASTER") {
+  if (user.role !== "MASTER" && user.role !== "ADMIN") {
     return NextResponse.json(
-      { message: "마스터 계정만 업체 순번을 변경할 수 있습니다." },
+      { message: "마스터 또는 어드민 계정만 업체 순번을 변경할 수 있습니다." },
       { status: 403 },
     );
   }

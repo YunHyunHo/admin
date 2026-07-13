@@ -299,8 +299,8 @@ export async function saveDashboardPartnerSummaryOrder(
   user: SessionUser,
   orderedEntityIds: string[],
 ) {
-  if (user.role !== "MASTER") {
-    throw new Error("마스터 계정만 업체 순번을 변경할 수 있습니다.");
+  if (user.role !== "MASTER" && user.role !== "ADMIN") {
+    throw new Error("마스터 또는 어드민 계정만 업체 순번을 변경할 수 있습니다.");
   }
 
   const currentItems = await getDashboardPartnerSummariesForUser(user);

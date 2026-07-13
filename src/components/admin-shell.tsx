@@ -378,7 +378,7 @@ export async function AdminShell({
 
             <div className="flex min-w-0 flex-1 flex-col">
               <GlobalDashboardSummaryPanel
-                canReorder={user.role === "MASTER"}
+                canReorder={user.role === "MASTER" || user.role === "ADMIN"}
                 stableRefreshEnabled={isRealtimeSyncPilot(user)}
               />
               <div className="flex flex-col gap-3 border-b border-cyan-300/24 px-4 py-4 text-sm text-white/68 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
