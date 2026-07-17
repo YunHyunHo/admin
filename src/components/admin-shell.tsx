@@ -9,6 +9,7 @@ import { QuickActionNav } from "@/components/quick-action-nav";
 import type { SessionUser } from "@/lib/auth";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
+  isReliableNoticeSoundEnabled,
   isRealtimeSyncPilot,
   isReducedNotificationPollingPilot,
 } from "@/lib/realtime-sync-pilot";
@@ -206,6 +207,7 @@ export async function AdminShell({
   const realtimeEventsEnabled = isRealtimeSyncPilot(user);
   const reducedNotificationPollingPilot =
     isReducedNotificationPollingPilot(user);
+  const reliableNoticeSoundEnabled = isReliableNoticeSoundEnabled(user);
   const notificationFallbackPollIntervalMs =
     reducedNotificationPollingPilot ? 30_000 : 1_000;
   const realtimeEventsPath = reducedNotificationPollingPilot
@@ -369,6 +371,8 @@ export async function AdminShell({
                       realtimeEventsPath={realtimeEventsPath}
                       eventDrivenSnapshotEnabled={reducedNotificationPollingPilot}
                       fallbackPollIntervalMs={notificationFallbackPollIntervalMs}
+                      reliableNoticeSoundEnabled={reliableNoticeSoundEnabled}
+                      noticeScopeKey={user.loginId}
                     />
                   <DashboardSummaryToggle />
                   <ThemeToggle />

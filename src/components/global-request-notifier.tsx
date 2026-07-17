@@ -5,9 +5,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 const noticeSoundPath = "/sounds/notice.mp3";
 const defaultPollIntervalMs = 1000;
 const noticeSoundReadyKey = "winpay-notice-sound-ready";
+const pendingNoticeSnapshotKey = "winpay-pending-notice-snapshot";
 const noticeRetryDelayMs = 1200;
 const maxNoticePlayAttempts = 3;
 const maxListSyncWaitMs = 2500;
+
+let reliableNoticeAudio: HTMLAudioElement | null = null;
+let reliableNoticeSoundReady = false;
 
 export type RequestNotificationSnapshot = {
   pendingIds: {
@@ -118,6 +122,8 @@ type GlobalRequestNotifierProps = {
   realtimeEventsPath?: string;
   eventDrivenSnapshotEnabled?: boolean;
   fallbackPollIntervalMs?: number;
+  reliableNoticeSoundEnabled?: boolean;
+  noticeScopeKey?: string;
 };
 
 export function GlobalRequestNotifier({
@@ -125,6 +131,8 @@ export function GlobalRequestNotifier({
   realtimeEventsPath = "/api/request-events",
   eventDrivenSnapshotEnabled = false,
   fallbackPollIntervalMs = defaultPollIntervalMs,
+  reliableNoticeSoundEnabled = false,
+  noticeScopeKey,
 }: GlobalRequestNotifierProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const knownPendingIdsRef = useRef<Set<string>>(new Set());
@@ -132,17 +140,54 @@ export function GlobalRequestNotifier({
   const isSyncingRef = useRef(false);
   const retryTimeoutRef = useRef<number | null>(null);
   const lastRealtimeEventIdRef = useRef<string | null>(null);
-  const [isSoundReady, setIsSoundReady] = useState(true);
-  const [noticeMessage, setNoticeMessage] = useState("알림 대기중");
+  const [isSoundReady, setIsSoundReady] = useState(
+    reliableNoticeSoundEnabled ? reliableNoticeSoundReady : true,
+  );
+  const [noticeMessage, setNoticeMessage] = useState(
+    reliableNoticeSoundEnabled && !reliableNoticeSoundReady
+      ? "알림음 켜기"
+      : "알림 대기중",
+  );
+
+  const pendingSnapshotStorageKey = reliableNoticeSoundEnabled
+    ? `${pendingNoticeSnapshotKey}:${noticeScopeKey ?? "default"}`
+    : null;
 
   const ensureAudio = useCallback(() => {
+    if (reliableNoticeSoundEnabled) {
+      if (!reliableNoticeAudio) {
+        reliableNoticeAudio = new Audio(noticeSoundPath);
+        reliableNoticeAudio.preload = "auto";
+      }
+
+      return reliableNoticeAudio;
+    }
+
     if (!audioRef.current) {
       audioRef.current = new Audio(noticeSoundPath);
       audioRef.current.preload = "auto";
     }
 
     return audioRef.current;
-  }, []);
+  }, [reliableNoticeSoundEnabled]);
+
+  const persistKnownPendingIds = useCallback(
+    (ids: Set<string>) => {
+      if (!pendingSnapshotStorageKey) {
+        return;
+      }
+
+      try {
+        window.sessionStorage.setItem(
+          pendingSnapshotStorageKey,
+          JSON.stringify([...ids]),
+        );
+      } catch {
+        // Session storage can be unavailable in restricted browser modes.
+      }
+    },
+    [pendingSnapshotStorageKey],
+  );
 
   const clearNoticeRetry = useCallback(() => {
     if (retryTimeoutRef.current === null) {
@@ -154,6 +199,10 @@ export function GlobalRequestNotifier({
   }, []);
 
   const markNoticeReady = useCallback((message: string) => {
+    if (reliableNoticeSoundEnabled) {
+      reliableNoticeSoundReady = true;
+    }
+
     setIsSoundReady(true);
     setNoticeMessage(message);
 
@@ -162,12 +211,16 @@ export function GlobalRequestNotifier({
     } catch {
       // Local storage can be unavailable in restricted browser modes.
     }
-  }, []);
+  }, [reliableNoticeSoundEnabled]);
 
   const markNoticeBlocked = useCallback(() => {
+    if (reliableNoticeSoundEnabled) {
+      reliableNoticeSoundReady = false;
+    }
+
     setIsSoundReady(false);
     setNoticeMessage("알림음 다시 켜기");
-  }, []);
+  }, [reliableNoticeSoundEnabled]);
 
   const playNoticeSound = useCallback(async () => {
     const audio = ensureAudio();
@@ -180,6 +233,16 @@ export function GlobalRequestNotifier({
   const playNoticeSoundWithRetry = useCallback(
     async () => {
       clearNoticeRetry();
+
+      if (reliableNoticeSoundEnabled) {
+        try {
+          await playNoticeSound();
+        } catch {
+          markNoticeBlocked();
+        }
+
+        return;
+      }
 
       for (let attempt = 1; attempt <= maxNoticePlayAttempts; attempt += 1) {
         try {
@@ -201,7 +264,12 @@ export function GlobalRequestNotifier({
         });
       }
     },
-    [clearNoticeRetry, markNoticeBlocked, playNoticeSound],
+    [
+      clearNoticeRetry,
+      markNoticeBlocked,
+      playNoticeSound,
+      reliableNoticeSoundEnabled,
+    ],
   );
 
   const activateNoticeSound = useCallback(async () => {
@@ -254,6 +322,7 @@ export function GlobalRequestNotifier({
       const listSyncPromises: Promise<unknown>[] = [];
 
       knownPendingIdsRef.current = nextPendingIds;
+      persistKnownPendingIds(nextPendingIds);
 
       window.dispatchEvent(
         new CustomEvent<RequestNotificationSyncDetail>(
@@ -307,7 +376,29 @@ export function GlobalRequestNotifier({
     } finally {
       isSyncingRef.current = false;
     }
-  }, [playNoticeSoundWithRetry]);
+  }, [persistKnownPendingIds, playNoticeSoundWithRetry]);
+
+  useEffect(() => {
+    if (!pendingSnapshotStorageKey) {
+      return;
+    }
+
+    try {
+      const storedIds = JSON.parse(
+        window.sessionStorage.getItem(pendingSnapshotStorageKey) ?? "null",
+      ) as unknown;
+
+      if (
+        Array.isArray(storedIds) &&
+        storedIds.every((value) => typeof value === "string")
+      ) {
+        knownPendingIdsRef.current = new Set(storedIds);
+        hasInitializedRef.current = true;
+      }
+    } catch {
+      // Invalid or unavailable session storage falls back to the first snapshot.
+    }
+  }, [pendingSnapshotStorageKey]);
 
   useEffect(() => {
     if (realtimeEventsEnabled && typeof window !== "undefined") {
@@ -357,6 +448,26 @@ export function GlobalRequestNotifier({
           const wasPending = pendingKey
             ? knownPendingIdsRef.current.has(pendingKey)
             : false;
+
+          if (
+            reliableNoticeSoundEnabled &&
+            !eventDrivenSnapshotEnabled &&
+            pendingKey &&
+            !isSyncingRef.current
+          ) {
+            if (detail.status === "PENDING") {
+              knownPendingIdsRef.current.add(pendingKey);
+              persistKnownPendingIds(knownPendingIdsRef.current);
+
+              if (!wasPending && !detail.replayed) {
+                setNoticeMessage("1건 신규 신청");
+                void playNoticeSoundWithRetry();
+              }
+            } else {
+              knownPendingIdsRef.current.delete(pendingKey);
+              persistKnownPendingIds(knownPendingIdsRef.current);
+            }
+          }
 
           if (eventDrivenSnapshotEnabled && pendingKey) {
             if (detail.status === "PENDING") {
@@ -568,8 +679,10 @@ export function GlobalRequestNotifier({
     ensureAudio,
     eventDrivenSnapshotEnabled,
     fallbackPollIntervalMs,
+    persistKnownPendingIds,
     realtimeEventsEnabled,
     realtimeEventsPath,
+    reliableNoticeSoundEnabled,
     playNoticeSoundWithRetry,
     syncRequests,
   ]);
@@ -594,6 +707,11 @@ export function GlobalRequestNotifier({
 
   useEffect(() => {
     ensureAudio();
+
+    if (reliableNoticeSoundEnabled) {
+      return;
+    }
+
     const timeoutId = window.setTimeout(() => {
       void unlockNoticeSound();
     }, 0);
@@ -601,9 +719,13 @@ export function GlobalRequestNotifier({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [ensureAudio, unlockNoticeSound]);
+  }, [ensureAudio, reliableNoticeSoundEnabled, unlockNoticeSound]);
 
   useEffect(() => {
+    if (reliableNoticeSoundEnabled) {
+      return;
+    }
+
     let isUnlocked = false;
 
     function handleUserGesture() {
@@ -624,7 +746,7 @@ export function GlobalRequestNotifier({
       window.removeEventListener("pointerdown", handleUserGesture);
       window.removeEventListener("keydown", handleUserGesture);
     };
-  }, [unlockNoticeSound]);
+  }, [reliableNoticeSoundEnabled, unlockNoticeSound]);
 
   return (
     <button

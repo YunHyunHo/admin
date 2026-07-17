@@ -11,3 +11,10 @@ export function isReducedNotificationPollingPilot(
   void user;
   return false;
 }
+
+export function isReliableNoticeSoundEnabled(
+  user: Pick<SessionUser, "loginId">,
+) {
+  void user;
+  return true;
+}
