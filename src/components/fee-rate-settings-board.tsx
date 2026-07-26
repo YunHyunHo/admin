@@ -326,7 +326,8 @@ export function FeeRateSettingsBoard({
             수수료 관리
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-white/52">
-            도메인 생성에서 만든 업체(도메인) 계정 기준으로 본사, 상위총판, 총판 수수료율을 각각 관리합니다.
+            도메인 생성에서 만든 업체(도메인) 계정 기준으로 본사, 상위총판,
+            총판 1단계, 총판 2단계 수수료율을 각각 관리합니다.
           </p>
         </div>
       </div>
@@ -361,8 +362,8 @@ export function FeeRateSettingsBoard({
                     "업체 총 수수료",
                     "본사",
                     "상위총판",
-                    "총판",
-                    "총판",
+                    "총판 1단계",
+                    "총판 2단계",
                     "총판 합계",
                     "수정일",
                   ].map((header, index) => (
@@ -643,8 +644,8 @@ function EditTargetModal({
       : target === "topDistributor"
         ? "상위총판 변경"
         : target === "subDistributor"
-          ? "총판 변경"
-        : "총판 변경";
+          ? "총판 2단계 변경"
+        : "총판 1단계 변경";
 
   const options = getTargetOptions(row, target, distributorOptions);
 
