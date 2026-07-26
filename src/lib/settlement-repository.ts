@@ -651,31 +651,48 @@ export async function getDomainSettlementForUser(
 
   const aggregateRows = await getCommissionAggregates(user, startDate, endDate);
   const domainSeeds = await getDomainSettlementSeeds(user);
-  const aggregateMap = new Map(
-    aggregateRows.map((row) => [
-      `${row.domain_id ?? `name:${row.domain_name ?? "-"}`}::${row.date}`,
-      row,
-    ]),
-  );
+  const aggregateMap = new Map<
+    string,
+    {
+      charge: number;
+      exchange: number;
+      company: number;
+      topDistributor: number;
+      distributor: number;
+    }
+  >();
+
+  for (const row of aggregateRows) {
+    const key = `${row.domain_id ?? `name:${row.domain_name ?? "-"}`}::${row.date}`;
+    const aggregate = aggregateMap.get(key) ?? {
+      charge: 0,
+      exchange: 0,
+      company: 0,
+      topDistributor: 0,
+      distributor: 0,
+    };
+
+    aggregate.charge += Number(row.charge_total);
+    aggregate.exchange += Number(row.exchange_total);
+    aggregate.company += Number(row.company_fee_total);
+    aggregate.topDistributor += Number(row.top_distributor_fee_total);
+    aggregate.distributor += Number(row.distributor_fee_total);
+    aggregateMap.set(key, aggregate);
+  }
   const dates = getDateRange(startDate, endDate);
   const domainName = "전체";
   const rows = domainSeeds.flatMap((seed) =>
     dates.map((date) => {
       const aggregate = aggregateMap.get(`${seed.domain_id}::${date}`);
-      const charge = Number(aggregate?.charge_total ?? 0);
-      const exchange = Number(aggregate?.exchange_total ?? 0);
-      const company = Number(aggregate?.company_fee_total ?? 0);
-      const topDistributor = Number(aggregate?.top_distributor_fee_total ?? 0);
-      const distributor = Number(aggregate?.distributor_fee_total ?? 0);
 
       return {
         date,
         domainName: seed.domain_name,
-        charge,
-        exchange,
-        company,
-        topDistributor,
-        distributor,
+        charge: aggregate?.charge ?? 0,
+        exchange: aggregate?.exchange ?? 0,
+        company: aggregate?.company ?? 0,
+        topDistributor: aggregate?.topDistributor ?? 0,
+        distributor: aggregate?.distributor ?? 0,
       };
     }),
   );
