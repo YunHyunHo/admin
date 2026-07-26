@@ -343,6 +343,7 @@ export function DomainSettlementBoard({
                           ),
                         ],
                         ["환전(도메인)", formatSettlementValue(row.exchange)],
+                        ["본사", formatSettlementValue(row.company)],
                         ["상위총판", formatSettlementValue(row.topDistributor)],
                         ["총판 1단계", formatSettlementValue(row.distributor, true)],
                         ["총판 2단계", formatSettlementValue(row.subDistributor, true)],
@@ -375,6 +376,7 @@ export function DomainSettlementBoard({
                         ),
                       ],
                       ["환전(도메인)", formatSettlementValue(group.total.exchange)],
+                      ["본사", formatSettlementValue(group.total.company)],
                       ["상위총판", formatSettlementValue(group.total.topDistributor)],
                       ["총판 1단계", formatSettlementValue(group.total.distributor)],
                       ["총판 2단계", formatSettlementValue(group.total.subDistributor)],
@@ -395,25 +397,28 @@ export function DomainSettlementBoard({
                   <table className="min-w-full table-fixed text-sm">
                     <thead>
                       <tr className="border-b border-white/40 text-white">
-                        <th className="w-[14%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
+                        <th className="w-[12%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
                           날짜
                         </th>
-                        <th className="w-[14%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
+                        <th className="w-[12%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
                           충전
                         </th>
-                        <th className="w-[14%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
+                        <th className="w-[12%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
                           수수료
                         </th>
-                        <th className="w-[14%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
+                        <th className="w-[13%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
                           환전(도메인)
                         </th>
-                        <th className="w-[14%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
+                        <th className="w-[12%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
+                          본사
+                        </th>
+                        <th className="w-[13%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
                           상위총판
                         </th>
-                        <th className="w-[15%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
+                        <th className="w-[13%] border-r border-white/40 px-3 py-1.5 text-center font-semibold">
                           총판 1단계
                         </th>
-                        <th className="w-[15%] px-3 py-1.5 text-center font-semibold">
+                        <th className="w-[13%] px-3 py-1.5 text-center font-semibold">
                           총판 2단계
                         </th>
                       </tr>
@@ -440,6 +445,9 @@ export function DomainSettlementBoard({
                           </td>
                           <td className="border-r border-white/30 px-3 py-1.5 text-right">
                             {formatSettlementValue(row.exchange)}
+                          </td>
+                          <td className="border-r border-white/30 px-3 py-1.5 text-right">
+                            {formatSettlementValue(row.company)}
                           </td>
                           <td className="border-r border-white/30 px-3 py-1.5 text-right">
                             {formatSettlementValue(row.topDistributor)}
@@ -469,6 +477,9 @@ export function DomainSettlementBoard({
                         </td>
                         <td className="border-r border-white/30 px-3 py-1.5 text-right">
                           {formatSettlementValue(group.total.exchange)}
+                        </td>
+                        <td className="border-r border-white/30 px-3 py-1.5 text-right">
+                          {formatSettlementValue(group.total.company)}
                         </td>
                         <td className="border-r border-white/30 px-3 py-1.5 text-right">
                           {formatSettlementValue(group.total.topDistributor)}
