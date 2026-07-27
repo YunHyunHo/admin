@@ -7,6 +7,7 @@ import {
   type RequestNotificationSnapshot,
 } from "@/components/global-request-notifier";
 import { ModalFeedback } from "@/components/modal-feedback";
+import { bankOptions } from "@/lib/bank-options";
 import type { AccountRow } from "@/lib/bank-accounts-types";
 import type {
   DomainListOwnerOption,
@@ -14,16 +15,6 @@ import type {
 } from "@/lib/domain-list-repository";
 
 const rowsPerPage = 10;
-const bankOptions = [
-  "국민은행",
-  "신한은행",
-  "농협은행",
-  "카카오뱅크",
-  "하나은행",
-  "전북은행",
-  "우리은행",
-  "토스뱅크",
-];
 
 type DomainListBoardProps = {
   initialRows: DomainListRow[];

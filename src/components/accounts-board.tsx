@@ -5,17 +5,7 @@ import { useState } from "react";
 import { getKoreanNowStamp } from "@/lib/korean-time";
 import type { AccountRow } from "@/lib/bank-accounts-types";
 import { ModalFeedback } from "@/components/modal-feedback";
-
-const bankOptions = [
-  "국민은행",
-  "신한은행",
-  "농협은행",
-  "카카오뱅크",
-  "하나은행",
-  "전북은행",
-  "우리은행",
-  "토스뱅크",
-];
+import { bankOptions } from "@/lib/bank-options";
 
 const fallbackAccounts: AccountRow[] = [
   {
