@@ -416,7 +416,7 @@ export async function refreshPartnerAccessToken(refreshToken: string) {
 
   await ensurePartnerRefreshTokenSchema();
 
-  return withTransaction(async (client) => {
+  const refreshed = await withTransaction(async (client) => {
     const result = await client.query<PartnerRefreshTokenRow>(
       `
         select
@@ -463,8 +463,37 @@ export async function refreshPartnerAccessToken(refreshToken: string) {
 
     return {
       token: createPartnerAccessTokenFromRow(row),
+      row,
     };
   });
+
+  if (!refreshed) {
+    return null;
+  }
+
+  const [withdrawAccount, chargeMode] = await Promise.all([
+    getDomainWithdrawAccount(refreshed.row.domain_id),
+    getDomainChargeMode(refreshed.row.domain_id),
+  ]);
+
+  return {
+    token: refreshed.token,
+    user: {
+      loginId: refreshed.row.login_id,
+      name: refreshed.row.admin_name,
+      role: "partner_admin" as const,
+      permissions: defaultPermissions,
+      menus: defaultMenus,
+    },
+    partner: {
+      id: refreshed.row.company_id,
+      name: refreshed.row.company_name,
+      domainId: refreshed.row.domain_id,
+      domain: normalizePartnerDomain(refreshed.row.domain_name ?? ""),
+      chargeMode,
+      withdrawAccount,
+    },
+  };
 }
 
 export async function revokePartnerRefreshToken(refreshToken: string) {

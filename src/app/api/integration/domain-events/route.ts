@@ -40,6 +40,12 @@ type ApprovedExchangeNotification = {
   approvedAt: string;
 };
 
+type PartnerWithdrawAccountUpdatedNotification = {
+  type: "partner-withdraw-account-updated";
+  domainId: string;
+  updatedAt: string;
+};
+
 function isUuid(value: string | null | undefined) {
   return Boolean(
     value?.match(
@@ -93,6 +99,32 @@ function parseApprovedExchangeNotification(payload: string | undefined) {
       typeof event.approvedAt === "string"
     ) {
       return event as ApprovedExchangeNotification;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function parsePartnerWithdrawAccountUpdatedNotification(
+  payload: string | undefined,
+) {
+  if (!payload) {
+    return null;
+  }
+
+  try {
+    const event = JSON.parse(
+      payload,
+    ) as Partial<PartnerWithdrawAccountUpdatedNotification>;
+
+    if (
+      event.type === "partner-withdraw-account-updated" &&
+      typeof event.domainId === "string" &&
+      typeof event.updatedAt === "string"
+    ) {
+      return event as PartnerWithdrawAccountUpdatedNotification;
     }
   } catch {
     return null;
@@ -257,6 +289,17 @@ export async function GET(request: Request) {
         );
       };
 
+      const sendWithdrawAccountUpdated = (
+        updatedAt: string,
+        dedupeKey: string,
+      ) => {
+        send(
+          "partner-withdraw-account-updated",
+          { domainId, updatedAt },
+          `partner-withdraw-account-updated:${dedupeKey}`,
+        );
+      };
+
       const emitRequestEvent = (
         kind: "charge-request" | "domain-exchange",
         row: RequestEventRow,
@@ -350,6 +393,7 @@ export async function GET(request: Request) {
 
           domainResult.rows.forEach((row) => {
             sendBalanceUpdated(row.updatedAt, `domain:${row.updatedMs}`);
+            sendWithdrawAccountUpdated(row.updatedAt, `domain:${row.updatedMs}`);
             nextCursorMs = Math.max(nextCursorMs, row.updatedMs + 1);
           });
 
@@ -369,6 +413,24 @@ export async function GET(request: Request) {
 
       const handleNotification = (notification: Notification) => {
         if (notification.channel !== domainExchangeEventsChannel) {
+          return;
+        }
+
+        const withdrawAccountEvent =
+          parsePartnerWithdrawAccountUpdatedNotification(notification.payload);
+
+        if (withdrawAccountEvent) {
+          if (withdrawAccountEvent.domainId === domainId) {
+            send(
+              "partner-withdraw-account-updated",
+              {
+                domainId: withdrawAccountEvent.domainId,
+                updatedAt: withdrawAccountEvent.updatedAt,
+              },
+              `partner-withdraw-account-updated:${withdrawAccountEvent.domainId}:${withdrawAccountEvent.updatedAt}`,
+            );
+          }
+
           return;
         }
 

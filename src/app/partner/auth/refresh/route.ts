@@ -70,6 +70,8 @@ export async function POST(request: Request) {
     NextResponse.json({
       ok: true,
       token: result.token,
+      user: result.user,
+      partner: result.partner,
     }),
     origin,
   );

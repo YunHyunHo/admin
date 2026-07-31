@@ -33,6 +33,12 @@ Content-Type: application/json
 
 API 키 원문은 로그인 응답에 포함하지 않습니다.
 `refreshToken`은 로그아웃하지 않는 동안 로그인 상태를 자동 연장할 때 사용합니다.
+토큰 갱신 응답의 `partner.withdrawAccount`에는 갱신 시점의 최신 출금계좌가 포함됩니다.
+
+마스터에서 출금계좌가 변경되면 도메인 이벤트 SSE에
+`partner-withdraw-account-updated` 이벤트가 전달됩니다. 이벤트에는 계좌번호를
+직접 포함하지 않으며, 업체 어드민은 이벤트를 받은 뒤 토큰 갱신 API로 최신
+`partner.withdrawAccount`를 조회해 세션과 화면을 갱신합니다.
 
 ## 2. 구매내역 조회
 

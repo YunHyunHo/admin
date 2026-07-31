@@ -63,6 +63,7 @@ function normalizeUrl(value: string) {
 }
 
 const HEADQUARTERS_OWNER_ID = "HEADQUARTERS";
+const domainEventsChannel = "domain_exchange_events";
 
 function isUuid(value: string | undefined) {
   return Boolean(
@@ -554,30 +555,48 @@ export async function updateDomainWithdrawAccount(input: {
     throw new Error("출금은행, 예금주, 계좌번호를 모두 입력해주세요.");
   }
 
-  const result = await query(
-    `
-      update domains dom
-      set
-        withdraw_bank_name = $2,
-        withdraw_account_holder = $3,
-        withdraw_account_number = $4,
-        updated_at = now()
-      where dom.id = $1::uuid
-        and dom.status <> 'DELETED'
-        and ${getMasterOwnedCompanyExistsCondition("dom.company_id", "$5")}
-    `,
-    [
-      input.id,
-      input.bankName.trim(),
-      input.accountHolder.trim(),
-      input.accountNumber.trim(),
-      input.user.id,
-    ],
-  );
+  await withTransaction(async (client) => {
+    const result = await client.query<{
+      domain_id: string;
+      updated_at: string;
+    }>(
+      `
+        update domains dom
+        set
+          withdraw_bank_name = $2,
+          withdraw_account_holder = $3,
+          withdraw_account_number = $4,
+          updated_at = now()
+        where dom.id = $1::uuid
+          and dom.status <> 'DELETED'
+          and ${getMasterOwnedCompanyExistsCondition("dom.company_id", "$5")}
+        returning
+          dom.id::text as domain_id,
+          to_char(dom.updated_at at time zone 'Asia/Seoul', 'YYYY-MM-DD HH24:MI:SS') as updated_at
+      `,
+      [
+        input.id,
+        input.bankName.trim(),
+        input.accountHolder.trim(),
+        input.accountNumber.trim(),
+        input.user.id,
+      ],
+    );
+    const updated = result.rows[0];
 
-  if (!result.rowCount) {
-    throw new Error("출금 계좌를 수정할 도메인을 찾지 못했습니다.");
-  }
+    if (!updated) {
+      throw new Error("출금 계좌를 수정할 도메인을 찾지 못했습니다.");
+    }
+
+    await client.query("select pg_notify($1, $2)", [
+      domainEventsChannel,
+      JSON.stringify({
+        type: "partner-withdraw-account-updated",
+        domainId: updated.domain_id,
+        updatedAt: updated.updated_at,
+      }),
+    ]);
+  });
 }
 
 export async function linkDomainEntryAccount(input: {

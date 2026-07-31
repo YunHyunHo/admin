@@ -106,9 +106,23 @@ Content-Type: application/json
 ```json
 {
   "ok": true,
-  "token": "새_access_token"
+  "token": "새_access_token",
+  "partner": {
+    "id": "업체ID",
+    "name": "업체명",
+    "domainId": "도메인ID",
+    "domain": "도메인주소",
+    "chargeMode": "API",
+    "withdrawAccount": {
+      "bankName": "국민은행",
+      "accountHolder": "홍길동",
+      "accountNumber": "123-1234-1254343"
+    }
+  }
 }
 ```
+
+`partner.withdrawAccount`는 갱신 요청 시점의 최신 도메인 출금계좌입니다.
 
 프론트 적용 기준:
 
