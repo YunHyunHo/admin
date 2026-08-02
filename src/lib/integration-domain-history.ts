@@ -124,7 +124,10 @@ function formatApiDate(value: string) {
   return value.slice(2);
 }
 
-function getPublicChargeId(requestId: string, domainAdminLoginId: string | null) {
+export function getPublicChargeId(
+  requestId: string,
+  domainAdminLoginId: string | null,
+) {
   const secret =
     process.env.PARTNER_TOKEN_SECRET?.trim() ||
     process.env.SESSION_SECRET?.trim() ||

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { Notification } from "pg";
 
 import { getPgPool, hasDatabaseUrl, query } from "@/lib/db";
+import { getPublicChargeId } from "@/lib/integration-domain-history";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +21,7 @@ type DomainLookupRow = {
 type RequestEventRow = {
   id: string;
   domainId: string;
+  domainAdminLoginId: string | null;
   amount: number;
   status: "PENDING" | "APPROVED" | "REJECTED" | "COMPLETED" | "CANCELED";
   updatedAt: string;
@@ -305,12 +307,16 @@ export async function GET(request: Request) {
         row: RequestEventRow,
       ) => {
         const event = statusEventName(kind, row.status);
-        const dedupeKey = `${event}:${row.id}:${row.status}`;
+        const eventId =
+          kind === "charge-request"
+            ? getPublicChargeId(row.id, row.domainAdminLoginId)
+            : row.id;
+        const dedupeKey = `${event}:${eventId}:${row.status}`;
 
         send(
           event,
           {
-            id: row.id,
+            id: eventId,
             domainId: row.domainId,
             amount: row.amount,
             status: row.status,
@@ -337,11 +343,22 @@ export async function GET(request: Request) {
               select
                 id::text,
                 domain_id::text as "domainId",
+                domain_admin.login_id as "domainAdminLoginId",
                 amount::float8 as amount,
                 status::text as status,
                 to_char(updated_at at time zone 'Asia/Seoul', 'YYYY-MM-DD HH24:MI:SS') as "updatedAt",
                 floor(extract(epoch from updated_at) * 1000)::float8 as "updatedMs"
               from charge_requests
+              left join lateral (
+                select a.login_id
+                from admin_domain_mappings adm
+                join admins a on a.id = adm.admin_id
+                where adm.domain_id = charge_requests.domain_id
+                  and a.role = 'DOMAIN_ADMIN'
+                  and a.status = 'ACTIVE'
+                order by a.created_at desc
+                limit 1
+              ) domain_admin on true
               where domain_id = $1::uuid
                 and updated_at >= to_timestamp($2::double precision / 1000.0)
               order by updated_at asc, created_at asc
@@ -354,6 +371,7 @@ export async function GET(request: Request) {
               select
                 id::text,
                 domain_id::text as "domainId",
+                null::text as "domainAdminLoginId",
                 amount::float8 as amount,
                 status::text as status,
                 to_char(updated_at at time zone 'Asia/Seoul', 'YYYY-MM-DD HH24:MI:SS') as "updatedAt",
