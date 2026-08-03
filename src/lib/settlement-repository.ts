@@ -28,6 +28,7 @@ type SettlementAggregateRow = {
   top_distributor_fee_total: string;
   distributor_fee_total: string;
   sub_distributor_fee_total: string;
+  third_distributor_fee_total: string;
 };
 
 type DomainSettlementSeedRow = {
@@ -58,7 +59,8 @@ const commissionSourceTypes = `
   'COMMISSION_SUB_DISTRIBUTOR',
   'COMMISSION_PARTNER_1',
   'COMMISSION_PARTNER_2',
-  'COMMISSION_PARTNER_3'
+  'COMMISSION_PARTNER_3',
+  'COMMISSION_PARTNER_4'
 `;
 
 function toMmDd(isoDate: string) {
@@ -218,7 +220,8 @@ async function getCommissionAggregates(
         coalesce(sum(company_fee_total), 0)::text as company_fee_total,
         coalesce(sum(top_distributor_fee_total), 0)::text as top_distributor_fee_total,
         coalesce(sum(distributor_fee_total), 0)::text as distributor_fee_total,
-        coalesce(sum(sub_distributor_fee_total), 0)::text as sub_distributor_fee_total
+        coalesce(sum(sub_distributor_fee_total), 0)::text as sub_distributor_fee_total,
+        coalesce(sum(third_distributor_fee_total), 0)::text as third_distributor_fee_total
       from (
         select
           (coalesce(cr.processed_at, co.created_at) at time zone '${KOREA_TIME_ZONE}')::date as date,
@@ -247,7 +250,12 @@ async function getCommissionAggregates(
             when commission_split.split_count > 0
               then commission_split.sub_distributor_fee
             else 0::numeric
-          end as sub_distributor_fee_total
+          end as sub_distributor_fee_total,
+          case
+            when commission_split.split_count > 0
+              then commission_split.third_distributor_fee
+            else 0::numeric
+          end as third_distributor_fee_total
         from commission_records co
         join charge_requests cr on cr.id = co.charge_request_id
         join companies c on c.id = co.company_id
@@ -284,7 +292,13 @@ async function getCommissionAggregates(
                 )
               ),
               0
-            ) as sub_distributor_fee
+            ) as sub_distributor_fee,
+            coalesce(
+              sum(t.amount) filter (
+                where t.source_type = 'COMMISSION_PARTNER_4'
+              ),
+              0
+            ) as third_distributor_fee
           from distributor_balance_transactions t
           where
             t.source_id = co.charge_request_id
@@ -313,7 +327,8 @@ async function getCommissionAggregates(
           0::numeric as company_fee_total,
           0::numeric as top_distributor_fee_total,
           0::numeric as distributor_fee_total,
-          0::numeric as sub_distributor_fee_total
+          0::numeric as sub_distributor_fee_total,
+          0::numeric as third_distributor_fee_total
         from exchange_requests er
         join companies c on c.id = er.company_id
         join domains d on d.id = er.domain_id
@@ -497,7 +512,8 @@ export async function getSettlementProfitForUser(
     const distributorFeeTotal =
       Number(row.top_distributor_fee_total) +
       Number(row.distributor_fee_total) +
-      Number(row.sub_distributor_fee_total);
+      Number(row.sub_distributor_fee_total) +
+      Number(row.third_distributor_fee_total);
     const feeTotal = companyFeeTotal + distributorFeeTotal;
 
     return {
@@ -611,12 +627,14 @@ export async function getSettlementProfitForUser(
         feeTotal: Number(row.company_fee_total) +
           Number(row.top_distributor_fee_total) +
           Number(row.distributor_fee_total) +
-          Number(row.sub_distributor_fee_total),
+          Number(row.sub_distributor_fee_total) +
+          Number(row.third_distributor_fee_total),
         companyFeeTotal,
         distributorFeeTotal:
           Number(row.top_distributor_fee_total) +
           Number(row.distributor_fee_total) +
-          Number(row.sub_distributor_fee_total),
+          Number(row.sub_distributor_fee_total) +
+          Number(row.third_distributor_fee_total),
       });
       continue;
     }
@@ -715,6 +733,7 @@ export async function getDomainSettlementForUser(
       topDistributor: number;
       distributor: number;
       subDistributor: number;
+      thirdDistributor: number;
     }
   >();
 
@@ -727,6 +746,7 @@ export async function getDomainSettlementForUser(
       topDistributor: 0,
       distributor: 0,
       subDistributor: 0,
+      thirdDistributor: 0,
     };
 
     aggregate.charge += Number(row.charge_total);
@@ -735,6 +755,7 @@ export async function getDomainSettlementForUser(
     aggregate.topDistributor += Number(row.top_distributor_fee_total);
     aggregate.distributor += Number(row.distributor_fee_total);
     aggregate.subDistributor += Number(row.sub_distributor_fee_total);
+    aggregate.thirdDistributor += Number(row.third_distributor_fee_total);
     aggregateMap.set(key, aggregate);
   }
   const dates = getDateRange(startDate, endDate);
@@ -752,6 +773,7 @@ export async function getDomainSettlementForUser(
         topDistributor: aggregate?.topDistributor ?? 0,
         distributor: aggregate?.distributor ?? 0,
         subDistributor: aggregate?.subDistributor ?? 0,
+        thirdDistributor: aggregate?.thirdDistributor ?? 0,
       };
     }),
   );
@@ -767,6 +789,7 @@ export async function getDomainSettlementForUser(
         topDistributor: sum.topDistributor + row.topDistributor,
         distributor: sum.distributor + row.distributor,
         subDistributor: sum.subDistributor + row.subDistributor,
+        thirdDistributor: sum.thirdDistributor + row.thirdDistributor,
       }),
       {
         charge: 0,
@@ -775,6 +798,7 @@ export async function getDomainSettlementForUser(
         topDistributor: 0,
         distributor: 0,
         subDistributor: 0,
+        thirdDistributor: 0,
       },
     ),
   };

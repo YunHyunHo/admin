@@ -47,27 +47,36 @@ export async function POST(request: Request) {
     topDistributorRate?: number | string;
     distributorRate?: number | string;
     subDistributorRate?: number | string;
+    thirdDistributorRate?: number | string;
   };
   const companyRate = Number(body.companyRate);
   const topDistributorRate = Number(body.topDistributorRate);
   const distributorRate = Number(body.distributorRate);
   const subDistributorRate = Number(body.subDistributorRate ?? 0);
+  const thirdDistributorRate = Number(body.thirdDistributorRate ?? 0);
   const totalRate =
-    companyRate + topDistributorRate + distributorRate + subDistributorRate;
+    companyRate +
+    topDistributorRate +
+    distributorRate +
+    subDistributorRate +
+    thirdDistributorRate;
 
   if (
     !Number.isFinite(companyRate) ||
     !Number.isFinite(topDistributorRate) ||
     !Number.isFinite(distributorRate) ||
     !Number.isFinite(subDistributorRate) ||
+    !Number.isFinite(thirdDistributorRate) ||
     companyRate < 0 ||
     topDistributorRate < 0 ||
     distributorRate < 0 ||
     subDistributorRate < 0 ||
+    thirdDistributorRate < 0 ||
     companyRate > 100 ||
     topDistributorRate > 100 ||
     distributorRate > 100 ||
-    subDistributorRate > 100
+    subDistributorRate > 100 ||
+    thirdDistributorRate > 100
   ) {
     return NextResponse.json(
       { message: "수수료 요율 값을 확인해주세요." },
@@ -84,6 +93,7 @@ export async function POST(request: Request) {
       topDistributorRate,
       distributorRate,
       subDistributorRate,
+      thirdDistributorRate,
     });
 
     return NextResponse.json({
@@ -127,7 +137,7 @@ export async function PATCH(request: Request) {
   const body = (await request.json()) as {
     domainId?: string;
     distributorId?: string;
-    target?: "topDistributor" | "distributor" | "subDistributor";
+    target?: "topDistributor" | "distributor" | "subDistributor" | "thirdDistributor";
   };
 
   try {

@@ -37,13 +37,38 @@ export async function ensureFeeRateSchema(client?: Pick<PoolClient, "query">) {
     create table if not exists fee_rate_partners (
       id uuid primary key default gen_random_uuid(),
       fee_rate_id uuid not null references fee_rates(id) on delete cascade,
-      position integer not null check (position between 1 and 3),
+      position integer not null check (position between 1 and 4),
       distributor_id uuid not null references distributors(id),
       rate numeric(8, 4) not null default 0 check (rate >= 0),
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now(),
       unique (fee_rate_id, position)
     )
+  `);
+  await runner.query(`
+    do $$
+    begin
+      if exists (
+        select 1
+        from pg_constraint
+        where conname = 'fee_rate_partners_position_check'
+          and conrelid = 'fee_rate_partners'::regclass
+      ) then
+        alter table fee_rate_partners
+        drop constraint fee_rate_partners_position_check;
+      end if;
+
+      if not exists (
+        select 1
+        from pg_constraint
+        where conname = 'fee_rate_partners_position_v2_check'
+          and conrelid = 'fee_rate_partners'::regclass
+      ) then
+        alter table fee_rate_partners
+        add constraint fee_rate_partners_position_v2_check
+        check (position between 1 and 4);
+      end if;
+    end $$;
   `);
   await runner.query(`
     create index if not exists idx_fee_rate_partners_fee_rate_position

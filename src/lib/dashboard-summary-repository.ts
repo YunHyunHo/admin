@@ -27,6 +27,8 @@ type FeeRateRow = {
   distributor_rate: string;
   agency_rate: string;
   sub_distributor_rate: string;
+  partner_count: string;
+  partner_rate_total: string;
 };
 
 type DashboardPartnerSummaryRow = {
@@ -140,10 +142,19 @@ export async function getDashboardSummaryForUser(user: SessionUser) {
           fee.company_rate::text,
           fee.distributor_rate::text,
           fee.agency_rate::text,
-          coalesce(fee.sub_distributor_rate, 0)::text as sub_distributor_rate
+          coalesce(fee.sub_distributor_rate, 0)::text as sub_distributor_rate,
+          partner_rates.partner_count::text,
+          partner_rates.partner_rate_total::text
         from fee_rates fee
         left join distributors dist on dist.id = fee.distributor_id
         left join admins dist_admin on dist_admin.id = dist.admin_id
+        left join lateral (
+          select
+            count(*)::int as partner_count,
+            coalesce(sum(partner.rate), 0) as partner_rate_total
+          from fee_rate_partners partner
+          where partner.fee_rate_id = fee.id
+        ) partner_rates on true
         where fee.starts_at <= now()
           and (fee.ends_at is null or fee.ends_at > now())
           ${feeRateScopeSql}
@@ -156,9 +167,11 @@ export async function getDashboardSummaryForUser(user: SessionUser) {
   const row = summaryResult.rows[0];
   const feeRate = feeRateResult.rows[0]
     ? Number(feeRateResult.rows[0].company_rate) +
-      Number(feeRateResult.rows[0].distributor_rate) +
-      Number(feeRateResult.rows[0].agency_rate) +
-      Number(feeRateResult.rows[0].sub_distributor_rate)
+      (Number(feeRateResult.rows[0].partner_count) > 0
+        ? Number(feeRateResult.rows[0].partner_rate_total)
+        : Number(feeRateResult.rows[0].distributor_rate) +
+          Number(feeRateResult.rows[0].agency_rate) +
+          Number(feeRateResult.rows[0].sub_distributor_rate))
     : 0.4;
 
   return {

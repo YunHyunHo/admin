@@ -198,6 +198,7 @@ export function getDomainSettlement(
       topDistributor: 0,
       distributor: 0,
       subDistributor: 0,
+      thirdDistributor: 0,
     };
   });
 
@@ -212,6 +213,7 @@ export function getDomainSettlement(
         topDistributor: sum.topDistributor + row.topDistributor,
         distributor: sum.distributor + row.distributor,
         subDistributor: sum.subDistributor + row.subDistributor,
+        thirdDistributor: sum.thirdDistributor + row.thirdDistributor,
       }),
       {
         charge: 0,
@@ -220,6 +222,7 @@ export function getDomainSettlement(
         topDistributor: 0,
         distributor: 0,
         subDistributor: 0,
+        thirdDistributor: 0,
       },
     ),
   };

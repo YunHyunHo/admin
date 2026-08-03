@@ -42,7 +42,8 @@ const commissionSourceTypes = `
   'COMMISSION_SUB_DISTRIBUTOR',
   'COMMISSION_PARTNER_1',
   'COMMISSION_PARTNER_2',
-  'COMMISSION_PARTNER_3'
+  'COMMISSION_PARTNER_3',
+  'COMMISSION_PARTNER_4'
 `;
 
 async function getFeeRecordScope(user: SessionUser): Promise<ScopedClause> {

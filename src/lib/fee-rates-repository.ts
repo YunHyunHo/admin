@@ -16,6 +16,7 @@ export type FeeRateSettingsRow = {
   distributorId?: string;
   topDistributorId?: string;
   subDistributorId?: string;
+  thirdDistributorId?: string;
   vendorName: string;
   domainName: string;
   totalRate: number;
@@ -27,6 +28,8 @@ export type FeeRateSettingsRow = {
   distributorRate: number;
   subDistributor: string;
   subDistributorRate: number;
+  thirdDistributor: string;
+  thirdDistributorRate: number;
   updatedAt: string;
 };
 
@@ -38,7 +41,7 @@ export type FeeRateDistributorOption = {
 };
 
 type FeePartner = {
-  position: 1 | 2 | 3;
+  position: 1 | 2 | 3 | 4;
   distributorId: string | null;
   rate: number;
 };
@@ -53,14 +56,18 @@ type TransactionClient = {
 };
 
 function getTargetPosition(
-  target?: "topDistributor" | "distributor" | "subDistributor",
-): 1 | 2 | 3 {
+  target?: "topDistributor" | "distributor" | "subDistributor" | "thirdDistributor",
+): 1 | 2 | 3 | 4 {
   if (target === "distributor") {
     return 2;
   }
 
   if (target === "subDistributor") {
     return 3;
+  }
+
+  if (target === "thirdDistributor") {
+    return 4;
   }
 
   return 1;
@@ -75,6 +82,7 @@ type FeeRateDbRow = {
   partner1_id: string | null;
   partner2_id: string | null;
   partner3_id: string | null;
+  partner4_id: string | null;
   distributor_name: string | null;
   child_distributor_names: string | null;
   top_distributor_name: string | null;
@@ -82,6 +90,7 @@ type FeeRateDbRow = {
   partner1_name: string | null;
   partner2_name: string | null;
   partner3_name: string | null;
+  partner4_name: string | null;
   domain_name: string | null;
   company_name: string | null;
   vendor_name: string | null;
@@ -92,6 +101,7 @@ type FeeRateDbRow = {
   partner1_rate: string | null;
   partner2_rate: string | null;
   partner3_rate: string | null;
+  partner4_rate: string | null;
   updated_at: Date | string;
 };
 
@@ -109,19 +119,21 @@ function getTotalRate(
     | "partner1_rate"
     | "partner2_rate"
     | "partner3_rate"
+    | "partner4_rate"
   >,
 ) {
   return (
     Number(row.company_rate) +
     Number(row.partner1_rate ?? row.distributor_rate) +
     Number(row.partner2_rate ?? row.agency_rate) +
-    Number(row.partner3_rate ?? row.sub_distributor_rate)
+    Number(row.partner3_rate ?? row.sub_distributor_rate) +
+    Number(row.partner4_rate ?? 0)
   );
 }
 
 function toSettingsRow(row: FeeRateDbRow): FeeRateSettingsRow {
   const hasPartnerRows = Boolean(
-    row.partner1_id || row.partner2_id || row.partner3_id,
+    row.partner1_id || row.partner2_id || row.partner3_id || row.partner4_id,
   );
 
   return {
@@ -136,6 +148,7 @@ function toSettingsRow(row: FeeRateDbRow): FeeRateSettingsRow {
     subDistributorId: hasPartnerRows
       ? (row.partner3_id ?? undefined)
       : (row.sub_distributor_id ?? undefined),
+    thirdDistributorId: row.partner4_id ?? undefined,
     vendorName: row.vendor_name ?? row.company_name ?? "-",
     domainName: row.domain_name ?? "-",
     totalRate: Number(getTotalRate(row).toFixed(2)),
@@ -153,6 +166,8 @@ function toSettingsRow(row: FeeRateDbRow): FeeRateSettingsRow {
       ? (row.partner3_name ?? "-")
       : (row.sub_distributor_name ?? "-"),
     subDistributorRate: Number(row.partner3_rate ?? row.sub_distributor_rate),
+    thirdDistributor: row.partner4_name ?? "-",
+    thirdDistributorRate: Number(row.partner4_rate ?? 0),
     updatedAt: formatStamp(row.updated_at),
   };
 }
@@ -183,6 +198,8 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
           distributorRate: 0,
           subDistributor: "-",
           subDistributorRate: 0,
+          thirdDistributor: "-",
+          thirdDistributorRate: 0,
           updatedAt: "local",
         },
       ],
@@ -209,6 +226,7 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
         partner_rows.partner1_id,
         partner_rows.partner2_id,
         partner_rows.partner3_id,
+        partner_rows.partner4_id,
         case
           when dist.id is null then '-'
           when parent_dist.id is null then null
@@ -219,6 +237,7 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
         partner_rows.partner1_name,
         partner_rows.partner2_name,
         partner_rows.partner3_name,
+        partner_rows.partner4_name,
         case
           when dist.id is null then '-'
           when parent_dist.id is null then dist.name
@@ -244,6 +263,7 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
         partner_rows.partner1_rate,
         partner_rows.partner2_rate,
         partner_rows.partner3_rate,
+        partner_rows.partner4_rate,
         coalesce(fr.updated_at, dom.updated_at, dist.updated_at) as updated_at
       from domains dom
       join companies c on c.id = dom.company_id
@@ -285,12 +305,15 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
           max(case when fp.position = 1 then fp.distributor_id::text end) as partner1_id,
           max(case when fp.position = 2 then fp.distributor_id::text end) as partner2_id,
           max(case when fp.position = 3 then fp.distributor_id::text end) as partner3_id,
+          max(case when fp.position = 4 then fp.distributor_id::text end) as partner4_id,
           max(case when fp.position = 1 then partner_dist.name end) as partner1_name,
           max(case when fp.position = 2 then partner_dist.name end) as partner2_name,
           max(case when fp.position = 3 then partner_dist.name end) as partner3_name,
+          max(case when fp.position = 4 then partner_dist.name end) as partner4_name,
           max(case when fp.position = 1 then fp.rate::text end) as partner1_rate,
           max(case when fp.position = 2 then fp.rate::text end) as partner2_rate,
-          max(case when fp.position = 3 then fp.rate::text end) as partner3_rate
+          max(case when fp.position = 3 then fp.rate::text end) as partner3_rate,
+          max(case when fp.position = 4 then fp.rate::text end) as partner4_rate
         from fee_rate_partners fp
         join distributors partner_dist on partner_dist.id = fp.distributor_id
         where fp.fee_rate_id = fr.id
@@ -364,7 +387,7 @@ async function getCurrentFeePartners(
     );
 
     if (partnerResult.rows.length) {
-      return ([1, 2, 3] as const).map((position) => {
+      return ([1, 2, 3, 4] as const).map((position) => {
         const row = partnerResult.rows.find(
           (candidate) => candidate.position === position,
         );
@@ -393,6 +416,11 @@ async function getCurrentFeePartners(
       position: 3,
       distributorId: legacy.subDistributorId,
       rate: legacy.subDistributorRate,
+    },
+    {
+      position: 4,
+      distributorId: null,
+      rate: 0,
     },
   ] satisfies FeePartner[];
 }
@@ -460,7 +488,7 @@ async function getScopedDistributorRelation(
 async function applyPartnerSelection(
   client: TransactionClient,
   partners: FeePartner[],
-  targetPosition: 1 | 2 | 3,
+  targetPosition: 1 | 2 | 3 | 4,
   selectedDistributorId: string | null,
   user: SessionUser,
 ) {
@@ -505,7 +533,7 @@ export async function updateFeeRateDomainDistributor(input: {
   user: SessionUser;
   domainId?: string;
   distributorId?: string | null;
-  target?: "topDistributor" | "distributor" | "subDistributor";
+  target?: "topDistributor" | "distributor" | "subDistributor" | "thirdDistributor";
 }) {
   if (!hasDatabaseUrl()) {
     return;
@@ -646,6 +674,7 @@ export async function saveFeeRateSettings(input: {
   topDistributorRate: number;
   distributorRate: number;
   subDistributorRate: number;
+  thirdDistributorRate: number;
 }) {
   if (!hasDatabaseUrl()) {
     return;
@@ -744,7 +773,11 @@ export async function saveFeeRateSettings(input: {
         return { ...partner, rate: input.distributorRate };
       }
 
-      return { ...partner, rate: input.subDistributorRate };
+      if (partner.position === 3) {
+        return { ...partner, rate: input.subDistributorRate };
+      }
+
+      return { ...partner, rate: input.thirdDistributorRate };
     });
 
     const insertedFee = await client.query<{ id: string }>(

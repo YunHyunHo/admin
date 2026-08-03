@@ -1540,6 +1540,7 @@ export async function processDbChargeRequest(input: {
             "COMMISSION_PARTNER_1",
             "COMMISSION_PARTNER_2",
             "COMMISSION_PARTNER_3",
+            "COMMISSION_PARTNER_4",
           ]);
           const originalByDistributor = new Map<string, number>();
           const currentByDistributor = new Map<string, number>();
@@ -1864,6 +1865,7 @@ export async function processDbChargeRequest(input: {
               "COMMISSION_PARTNER_1",
               "COMMISSION_PARTNER_2",
               "COMMISSION_PARTNER_3",
+              "COMMISSION_PARTNER_4",
             ].includes(transaction.source_type) && Number(transaction.amount) > 0,
         );
 
@@ -1903,6 +1905,7 @@ export async function processDbChargeRequest(input: {
             "COMMISSION_PARTNER_1",
             "COMMISSION_PARTNER_2",
             "COMMISSION_PARTNER_3",
+            "COMMISSION_PARTNER_4",
           ].includes(transaction.source_type) && Number(transaction.amount) > 0,
       );
 

@@ -122,6 +122,17 @@ create table fee_rates (
   check (sub_distributor_rate >= 0)
 );
 
+create table fee_rate_partners (
+  id uuid primary key default gen_random_uuid(),
+  fee_rate_id uuid not null references fee_rates(id) on delete cascade,
+  position integer not null check (position between 1 and 4),
+  distributor_id uuid not null references distributors(id),
+  rate numeric(8, 4) not null default 0 check (rate >= 0),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (fee_rate_id, position)
+);
+
 create table bank_accounts (
   id uuid primary key default gen_random_uuid(),
   company_id uuid references companies(id),

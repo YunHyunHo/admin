@@ -11,6 +11,7 @@ type FeeRateRow = {
   distributorId?: string;
   topDistributorId?: string;
   subDistributorId?: string;
+  thirdDistributorId?: string;
   vendorName: string;
   domainName: string;
   totalRate: number;
@@ -22,6 +23,8 @@ type FeeRateRow = {
   distributorRate: number;
   subDistributor: string;
   subDistributorRate: number;
+  thirdDistributor: string;
+  thirdDistributorRate: number;
   updatedAt: string;
 };
 
@@ -44,11 +47,17 @@ const rateKeys = [
   "topDistributorRate",
   "distributorRate",
   "subDistributorRate",
+  "thirdDistributorRate",
 ] as const;
 
 type RateKey = (typeof rateKeys)[number];
 type DraftRates = Pick<FeeRateRow, RateKey>;
-type EditTarget = "company" | "topDistributor" | "distributor" | "subDistributor";
+type EditTarget =
+  | "company"
+  | "topDistributor"
+  | "distributor"
+  | "subDistributor"
+  | "thirdDistributor";
 
 type EditModalState = {
   rowId: string;
@@ -77,6 +86,7 @@ function getDraftRates(row: FeeRateRow): DraftRates {
     topDistributorRate: row.topDistributorRate,
     distributorRate: row.distributorRate,
     subDistributorRate: row.subDistributorRate,
+    thirdDistributorRate: row.thirdDistributorRate,
   };
 }
 
@@ -122,6 +132,7 @@ export function FeeRateSettingsBoard({
         row.topDistributor,
         row.distributor,
         row.subDistributor,
+        row.thirdDistributor,
       ]
         .join(" ")
         .toLowerCase()
@@ -152,11 +163,13 @@ export function FeeRateSettingsBoard({
         ? "HEADQUARTERS"
         : target === "topDistributor"
           ? (row.topDistributorId ?? "")
-          : target === "subDistributor"
-            ? (row.subDistributorId ?? "")
-            : row.distributorId && row.distributorId !== row.topDistributorId
-              ? row.distributorId
-              : "";
+          : target === "thirdDistributor"
+            ? (row.thirdDistributorId ?? "")
+            : target === "subDistributor"
+              ? (row.subDistributorId ?? "")
+              : row.distributorId && row.distributorId !== row.topDistributorId
+                ? row.distributorId
+                : "";
 
     setEditModal({ rowId: row.id, target });
     setModalSelection(selected === "-" ? "" : selected);
@@ -251,6 +264,10 @@ export function FeeRateSettingsBoard({
         key === undefined || key === "subDistributorRate"
           ? draft.subDistributorRate
           : row.subDistributorRate,
+      thirdDistributorRate:
+        key === undefined || key === "thirdDistributorRate"
+          ? draft.thirdDistributorRate
+          : row.thirdDistributorRate,
     };
 
     setSavingId(row.id);
@@ -268,6 +285,7 @@ export function FeeRateSettingsBoard({
           topDistributorRate: nextDraft.topDistributorRate,
           distributorRate: nextDraft.distributorRate,
           subDistributorRate: nextDraft.subDistributorRate,
+          thirdDistributorRate: nextDraft.thirdDistributorRate,
         }),
       });
       const data = (await response.json()) as {
@@ -296,7 +314,8 @@ export function FeeRateSettingsBoard({
                       nextDraft.companyRate +
                       nextDraft.topDistributorRate +
                       nextDraft.distributorRate +
-                      nextDraft.subDistributorRate
+                      nextDraft.subDistributorRate +
+                      nextDraft.thirdDistributorRate
                     ).toFixed(2),
                   ),
                   updatedAt: getNowStamp(),
@@ -327,7 +346,7 @@ export function FeeRateSettingsBoard({
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-white/52">
             도메인 생성에서 만든 업체(도메인) 계정 기준으로 본사, 상위총판,
-            총판 1단계, 총판 2단계 수수료율을 각각 관리합니다.
+            총판 1단계, 총판 2단계, 총판 3단계 수수료율을 각각 관리합니다.
           </p>
         </div>
       </div>
@@ -354,7 +373,7 @@ export function FeeRateSettingsBoard({
           </label>
 
           <div className="overflow-x-auto rounded-[26px] border border-white/8 bg-black/18">
-            <table className="w-full min-w-[1600px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[1800px] border-collapse text-left text-sm">
               <thead className="bg-black/52 text-white/72">
                 <tr>
                   {[
@@ -364,6 +383,7 @@ export function FeeRateSettingsBoard({
                     "상위총판",
                     "총판 1단계",
                     "총판 2단계",
+                    "총판 3단계",
                     "총판 합계",
                     "수정일",
                   ].map((header, index) => (
@@ -396,7 +416,8 @@ export function FeeRateSettingsBoard({
                           draft.companyRate +
                           draft.topDistributorRate +
                           draft.distributorRate +
-                          draft.subDistributorRate
+                          draft.subDistributorRate +
+                          draft.thirdDistributorRate
                         ).toFixed(2)}
                         %
                       </td>
@@ -516,10 +537,43 @@ export function FeeRateSettingsBoard({
                         )}
                       </td>
                       <td className="px-4 py-4 text-center font-semibold text-white">
+                        {row.thirdDistributor === "-" ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <span>-</span>
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(row, "thirdDistributor")}
+                              className="rounded-xl bg-white/14 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
+                            >
+                              수정
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center gap-2">
+                            <span>{row.thirdDistributor}</span>
+                            <RateInput
+                              value={draft.thirdDistributorRate}
+                              disabled={!canManageFeeRates}
+                              onChange={(value) =>
+                                updateDraftRate(row.id, "thirdDistributorRate", value)
+                              }
+                            />
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(row, "thirdDistributor")}
+                              className="rounded-xl bg-white/14 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
+                            >
+                              수정
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-4 text-center font-semibold text-white">
                         {(
                           draft.topDistributorRate +
                           draft.distributorRate +
-                          draft.subDistributorRate
+                          draft.subDistributorRate +
+                          draft.thirdDistributorRate
                         ).toFixed(2)}
                         %
                       </td>
@@ -645,7 +699,9 @@ function EditTargetModal({
         ? "상위총판 변경"
         : target === "subDistributor"
           ? "총판 2단계 변경"
-        : "총판 1단계 변경";
+          : target === "thirdDistributor"
+            ? "총판 3단계 변경"
+            : "총판 1단계 변경";
 
   const options = getTargetOptions(row, target, distributorOptions);
 
