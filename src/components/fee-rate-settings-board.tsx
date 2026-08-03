@@ -373,7 +373,17 @@ export function FeeRateSettingsBoard({
           </label>
 
           <div className="overflow-x-auto rounded-[26px] border border-white/8 bg-black/18">
-            <table className="w-full min-w-[1800px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[1595px] table-fixed border-collapse text-left text-sm">
+              <colgroup>
+                <col className="w-[135px]" />
+                <col className="w-[100px]" />
+                {Array.from({ length: 5 }, (_, index) => (
+                  <col key={`fee-column-${index}`} className="w-[205px]" />
+                ))}
+                <col className="w-[100px]" />
+                <col className="w-[145px]" />
+                <col className="w-[90px]" />
+              </colgroup>
               <thead className="bg-black/52 text-white/72">
                 <tr>
                   {[
@@ -389,12 +399,12 @@ export function FeeRateSettingsBoard({
                   ].map((header, index) => (
                     <th
                       key={`${header}-${index}`}
-                      className="border-b border-white/8 px-4 py-4 text-center font-semibold"
+                      className="whitespace-nowrap border-b border-white/8 px-3 py-4 text-center font-semibold"
                     >
                       {header}
                     </th>
                   ))}
-                  <th className="sticky right-0 border-b border-l border-white/8 bg-black/90 px-4 py-4 text-center font-semibold backdrop-blur">
+                  <th className="sticky right-0 border-b border-l border-white/8 bg-black/90 px-2 py-4 text-center font-semibold backdrop-blur">
                     비율수정
                   </th>
                 </tr>
@@ -408,10 +418,12 @@ export function FeeRateSettingsBoard({
                       key={row.id}
                       className="border-b border-white/8 text-white/76 last:border-b-0 hover:bg-white/[0.025]"
                     >
-                      <td className="px-4 py-4 text-center font-semibold text-white">
-                        {row.vendorName}
+                      <td className="px-3 py-4 text-center font-semibold text-white">
+                        <span className="block truncate" title={row.vendorName}>
+                          {row.vendorName}
+                        </span>
                       </td>
-                      <td className="px-4 py-4 text-center font-semibold text-white">
+                      <td className="whitespace-nowrap px-3 py-4 text-center font-semibold text-white">
                         {(
                           draft.companyRate +
                           draft.topDistributorRate +
@@ -421,9 +433,11 @@ export function FeeRateSettingsBoard({
                         ).toFixed(2)}
                         %
                       </td>
-                      <td className="px-4 py-4 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <span className="text-white">{row.companyName}</span>
+                      <td className="px-2 py-4 text-center">
+                        <div className="flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap">
+                          <span className="max-w-[72px] truncate text-white" title={row.companyName}>
+                            {row.companyName}
+                          </span>
                           <RateInput
                             value={draft.companyRate}
                             disabled={!canManageFeeRates}
@@ -434,27 +448,29 @@ export function FeeRateSettingsBoard({
                           <button
                             type="button"
                             onClick={() => openEditModal(row, "company")}
-                            className="rounded-xl bg-white/14 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
+                            className="shrink-0 whitespace-nowrap rounded-xl bg-white/14 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
                           >
                             수정
                           </button>
                         </div>
                       </td>
-                      <td className="px-4 py-4 text-center font-semibold text-white">
+                      <td className="px-2 py-4 text-center font-semibold text-white">
                         {row.topDistributor === "-" ? (
-                          <div className="flex items-center justify-center gap-2">
+                          <div className="flex items-center justify-center gap-1.5 whitespace-nowrap">
                             <span>-</span>
                             <button
                               type="button"
                               onClick={() => openEditModal(row, "topDistributor")}
-                              className="rounded-xl bg-white/14 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
+                              className="shrink-0 whitespace-nowrap rounded-xl bg-white/14 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
                             >
                               수정
                             </button>
                           </div>
                         ) : (
-                          <div className="flex items-center justify-center gap-2">
-                            <span>{row.topDistributor}</span>
+                          <div className="flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap">
+                            <span className="max-w-[72px] truncate" title={row.topDistributor}>
+                              {row.topDistributor}
+                            </span>
                             <RateInput
                               value={draft.topDistributorRate}
                               disabled={!canManageFeeRates}
@@ -465,28 +481,30 @@ export function FeeRateSettingsBoard({
                             <button
                               type="button"
                               onClick={() => openEditModal(row, "topDistributor")}
-                              className="rounded-xl bg-white/14 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
+                              className="shrink-0 whitespace-nowrap rounded-xl bg-white/14 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
                             >
                               수정
                             </button>
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-4 text-center font-semibold text-white">
+                      <td className="px-2 py-4 text-center font-semibold text-white">
                         {row.distributor === "-" ? (
-                          <div className="flex items-center justify-center gap-2">
+                          <div className="flex items-center justify-center gap-1.5 whitespace-nowrap">
                             <span>-</span>
                             <button
                               type="button"
                               onClick={() => openEditModal(row, "distributor")}
-                              className="rounded-xl bg-white/14 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
+                              className="shrink-0 whitespace-nowrap rounded-xl bg-white/14 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
                             >
                               수정
                             </button>
                           </div>
                         ) : (
-                          <div className="flex items-center justify-center gap-2">
-                            <span>{row.distributor}</span>
+                          <div className="flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap">
+                            <span className="max-w-[72px] truncate" title={row.distributor}>
+                              {row.distributor}
+                            </span>
                             <RateInput
                               value={draft.distributorRate}
                               disabled={!canManageFeeRates}
@@ -497,28 +515,30 @@ export function FeeRateSettingsBoard({
                             <button
                               type="button"
                               onClick={() => openEditModal(row, "distributor")}
-                              className="rounded-xl bg-white/14 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
+                              className="shrink-0 whitespace-nowrap rounded-xl bg-white/14 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
                             >
                               수정
                             </button>
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-4 text-center font-semibold text-white">
+                      <td className="px-2 py-4 text-center font-semibold text-white">
                         {row.subDistributor === "-" ? (
-                          <div className="flex items-center justify-center gap-2">
+                          <div className="flex items-center justify-center gap-1.5 whitespace-nowrap">
                             <span>-</span>
                             <button
                               type="button"
                               onClick={() => openEditModal(row, "subDistributor")}
-                              className="rounded-xl bg-white/14 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
+                              className="shrink-0 whitespace-nowrap rounded-xl bg-white/14 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
                             >
                               수정
                             </button>
                           </div>
                         ) : (
-                          <div className="flex items-center justify-center gap-2">
-                            <span>{row.subDistributor}</span>
+                          <div className="flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap">
+                            <span className="max-w-[72px] truncate" title={row.subDistributor}>
+                              {row.subDistributor}
+                            </span>
                             <RateInput
                               value={draft.subDistributorRate}
                               disabled={!canManageFeeRates}
@@ -529,28 +549,30 @@ export function FeeRateSettingsBoard({
                             <button
                               type="button"
                               onClick={() => openEditModal(row, "subDistributor")}
-                              className="rounded-xl bg-white/14 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
+                              className="shrink-0 whitespace-nowrap rounded-xl bg-white/14 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
                             >
                               수정
                             </button>
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-4 text-center font-semibold text-white">
+                      <td className="px-2 py-4 text-center font-semibold text-white">
                         {row.thirdDistributor === "-" ? (
-                          <div className="flex items-center justify-center gap-2">
+                          <div className="flex items-center justify-center gap-1.5 whitespace-nowrap">
                             <span>-</span>
                             <button
                               type="button"
                               onClick={() => openEditModal(row, "thirdDistributor")}
-                              className="rounded-xl bg-white/14 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
+                              className="shrink-0 whitespace-nowrap rounded-xl bg-white/14 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
                             >
                               수정
                             </button>
                           </div>
                         ) : (
-                          <div className="flex items-center justify-center gap-2">
-                            <span>{row.thirdDistributor}</span>
+                          <div className="flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap">
+                            <span className="max-w-[72px] truncate" title={row.thirdDistributor}>
+                              {row.thirdDistributor}
+                            </span>
                             <RateInput
                               value={draft.thirdDistributorRate}
                               disabled={!canManageFeeRates}
@@ -561,14 +583,14 @@ export function FeeRateSettingsBoard({
                             <button
                               type="button"
                               onClick={() => openEditModal(row, "thirdDistributor")}
-                              className="rounded-xl bg-white/14 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
+                              className="shrink-0 whitespace-nowrap rounded-xl bg-white/14 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-white/20"
                             >
                               수정
                             </button>
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-4 text-center font-semibold text-white">
+                      <td className="whitespace-nowrap px-2 py-4 text-center font-semibold text-white">
                         {(
                           draft.topDistributorRate +
                           draft.distributorRate +
@@ -577,10 +599,10 @@ export function FeeRateSettingsBoard({
                         ).toFixed(2)}
                         %
                       </td>
-                      <td className="px-4 py-4 text-center text-white/52">
+                      <td className="whitespace-nowrap px-2 py-4 text-center text-white/52">
                         {row.updatedAt}
                       </td>
-                      <td className="sticky right-0 border-l border-white/8 bg-[rgba(12,16,24,0.96)] px-4 py-4 text-center">
+                      <td className="sticky right-0 border-l border-white/8 bg-[rgba(12,16,24,0.98)] px-2 py-4 text-center">
                         <button
                           type="button"
                           onClick={() => void saveRate(row)}
@@ -589,7 +611,7 @@ export function FeeRateSettingsBoard({
                             !hasDraftChanges(row, draft) ||
                             savingId === row.id
                           }
-                          className="rounded-xl bg-fuchsia-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-fuchsia-400 disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/34"
+                          className="whitespace-nowrap rounded-xl bg-fuchsia-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-fuchsia-400 disabled:cursor-not-allowed disabled:bg-white/12 disabled:text-white/34"
                         >
                           {savingId === row.id ? "저장 중" : "수정"}
                         </button>
@@ -651,7 +673,7 @@ function RateInput({
   disabled?: boolean;
 }) {
   return (
-    <div className="inline-flex items-center gap-2">
+    <div className="inline-flex shrink-0 items-center gap-1">
       <input
         type="number"
         min="0"
@@ -660,7 +682,7 @@ function RateInput({
         value={value}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
-        className="h-9 w-20 rounded-xl border border-white/10 bg-black/18 px-3 text-center text-sm font-semibold text-white outline-none focus:border-cyan-300/40 disabled:cursor-not-allowed disabled:text-white/40"
+        className="h-9 w-16 rounded-xl border border-white/10 bg-black/18 px-2 text-center text-sm font-semibold text-white outline-none focus:border-cyan-300/40 disabled:cursor-not-allowed disabled:text-white/40"
       />
       <span className="font-semibold text-white/64">%</span>
     </div>
