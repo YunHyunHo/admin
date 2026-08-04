@@ -6,6 +6,8 @@ import { getPartnerAccess } from "@/lib/partner-auth";
 
 export const runtime = "nodejs";
 
+const transactionUnit = 100;
+
 type IntegrationDomainExchangePayload = {
   externalId?: string;
   domainId?: string;
@@ -80,9 +82,17 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!userId || !Number.isFinite(amount) || amount <= 0) {
+  if (
+    !userId ||
+    !Number.isInteger(amount) ||
+    amount < transactionUnit ||
+    amount % transactionUnit !== 0
+  ) {
     return NextResponse.json(
-      { ok: false, message: "신청자와 환전금액을 확인해주세요." },
+      {
+        ok: false,
+        message: "신청자와 100원 이상, 100원 단위의 환전금액을 확인해주세요.",
+      },
       { status: 400 },
     );
   }

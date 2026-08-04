@@ -577,8 +577,12 @@ export function DomainExchangesBoard({
 
     const numericAmount = Number(amount.replaceAll(",", ""));
 
-    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-      setCreateModalMessage("환전금액을 확인해주세요.");
+    if (
+      !Number.isInteger(numericAmount) ||
+      numericAmount < 100 ||
+      numericAmount % 100 !== 0
+    ) {
+      setCreateModalMessage("100원 이상, 100원 단위의 환전금액을 확인해주세요.");
       return;
     }
 

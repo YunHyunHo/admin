@@ -28,7 +28,7 @@ X-API-Key: 발급받은_API_KEY
 | --- | --- | ---: | --- |
 | `externalId` | UUID string | 필수 | 외부 사이트가 신청마다 자동 생성하는 중복방지 ID |
 | `depositorName` | string | 필수 | 실제 입금자명. 구매내역의 `구매자`로 표시 |
-| `amount` | integer | 필수 | 충전금액. 최소 `10,000`원, 최대 제한 없음 |
+| `amount` | integer | 필수 | 충전금액. 최소 `100`원이며 `100`원 단위, 최대 제한 없음 |
 | `bankName` | string | 선택 | Mancoin `result.bank_name`. 계좌정보를 보낼 때 세 필드를 모두 전송 |
 | `accountHolder` | string | 선택 | Mancoin `result.bank_holder` |
 | `accountNumber` | string | 선택 | Mancoin `result.bank_account` |
