@@ -28,7 +28,7 @@ Content-Type: application/json
 | `externalId` | string | 선택 | 외부 사이트에서 관리하는 고유 요청 ID |
 | `domainName` | string | 필수 | 관리자에 등록된 도메인명 |
 | `depositorName` | string | 필수 | 입금자명 |
-| `amount` | integer | 필수 | 신청금액. 최소 100원이며 100원 단위 |
+| `amount` | integer | 필수 | 신청금액. 최소 1원 |
 | `bankName` | string | 선택 | 입금은행명 |
 | `accountNumber` | string | 선택 | 입금계좌번호 |
 

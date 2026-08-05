@@ -79,7 +79,7 @@ type HistoryFilters = {
 
 const rowsPerPage = 10;
 const pagesPerGroup = 10;
-const minimumChargeAmount = 100;
+const minimumChargeAmount = 1;
 const serverHistoryFallbackRefreshMs = 10000;
 const chargeNoticeSoundPath = "/sounds/notice.mp3";
 const dashboardSummaryRefreshEvent = "dashboard-summary-refresh";
@@ -1100,11 +1100,10 @@ export function ChargeRequestsBoard({
     if (
       !depositorName ||
       !Number.isInteger(amount) ||
-      amount < minimumChargeAmount ||
-      amount % minimumChargeAmount !== 0
+      amount < minimumChargeAmount
     ) {
       setCreateModalMessage(
-        "입금자명과 100원 이상, 100원 단위의 신청금액을 확인해주세요.",
+        "입금자명과 1원 이상의 정수 신청금액을 확인해주세요.",
       );
       return;
     }

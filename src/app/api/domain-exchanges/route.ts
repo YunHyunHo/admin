@@ -34,7 +34,7 @@ type CreateDomainExchangePayload = {
 
 const missingDomainExchangeScopeMessage =
   "환전신청을 연결할 계정을 찾을 수 없습니다.";
-const transactionUnit = 100;
+const transactionUnit = 1;
 
 function getEmptyDomainExchangeCreateContext() {
   return {
@@ -142,11 +142,10 @@ export async function POST(request: Request) {
 
   if (
     !Number.isInteger(amount) ||
-    amount < transactionUnit ||
-    amount % transactionUnit !== 0
+    amount < transactionUnit
   ) {
     return NextResponse.json(
-      { message: "100원 이상, 100원 단위의 환전금액을 확인해주세요." },
+      { message: "1원 이상의 정수 환전금액을 확인해주세요." },
       { status: 400 },
     );
   }

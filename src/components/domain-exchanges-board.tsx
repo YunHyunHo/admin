@@ -579,10 +579,9 @@ export function DomainExchangesBoard({
 
     if (
       !Number.isInteger(numericAmount) ||
-      numericAmount < 100 ||
-      numericAmount % 100 !== 0
+      numericAmount < 1
     ) {
-      setCreateModalMessage("100원 이상, 100원 단위의 환전금액을 확인해주세요.");
+      setCreateModalMessage("1원 이상의 정수 환전금액을 확인해주세요.");
       return;
     }
 

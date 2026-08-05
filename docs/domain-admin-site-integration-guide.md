@@ -77,7 +77,7 @@ Content-Type: application/json
 | `domainId` | 권장 | 마스터 관리자에 등록된 도메인 UUID |
 | `domainName` | 조건부 | `domainId`가 없을 때 사용하는 도메인/업체명 |
 | `depositorName` | 필수 | 입금자명 |
-| `amount` | 필수 | 충전 신청 금액. 100원 이상, 100원 단위의 정수로 전달 |
+| `amount` | 필수 | 충전 신청 금액. 1원 이상의 정수로 전달 |
 | `bankName` | 선택 | 입금은행 |
 | `accountNumber` | 선택 | 입금계좌번호 |
 
@@ -153,7 +153,7 @@ Content-Type: application/json
 | `domainId` | 권장 | 마스터 관리자에 등록된 도메인 UUID |
 | `domainName` | 조건부 | `domainId`가 없을 때 사용하는 도메인/업체명 |
 | `userId` | 필수 | 도메인 관리자 또는 요청 사용자 ID |
-| `amount` | 필수 | 출금/환전 신청 금액. 100원 이상, 100원 단위의 정수로 전달 |
+| `amount` | 필수 | 출금/환전 신청 금액. 1원 이상의 정수로 전달 |
 | `bankName` | 필수 | 출금은행 |
 | `accountHolder` | 필수 | 예금주 |
 | `accountNumber` | 필수 | 계좌번호 |
@@ -212,7 +212,7 @@ POST https://laylow.me/api/integration/charge-requests
 - 요청 헤더에 `X-API-Key` 포함
 - 서버에서 API Key와 `domainId` 매칭 검증
 - `externalId` 중복 요청 차단
-- 요청 금액은 100원 이상, 100원 단위의 정수 원화만 허용
+- 요청 금액은 1원 이상의 정수 원화만 허용
 
 권장 헤더 예시:
 

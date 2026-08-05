@@ -24,7 +24,7 @@ import { notifyChargeDecision } from "@/lib/telegram-notifications";
 import { isRealtimeSyncPilot } from "@/lib/realtime-sync-pilot";
 
 const allowedStatuses: ProcessedRequest["status"][] = ["승인", "승인거절"];
-const minimumChargeAmount = 100;
+const minimumChargeAmount = 1;
 
 export const runtime = "nodejs";
 
@@ -134,11 +134,10 @@ export async function POST(request: Request) {
     if (
       !userId ||
       !Number.isInteger(amount) ||
-      amount < minimumChargeAmount ||
-      amount % minimumChargeAmount !== 0
+      amount < minimumChargeAmount
     ) {
       return NextResponse.json(
-        { message: "입금자명과 100원 이상, 100원 단위의 신청금액을 확인해주세요." },
+        { message: "입금자명과 1원 이상의 정수 신청금액을 확인해주세요." },
         { status: 400 },
       );
     }
