@@ -211,6 +211,7 @@ export const fallbackDomainExchanges: DomainExchangeRow[] = [
 const serverPagingFallbackRefreshMs = 10000;
 
 const rowsPerPage = 10;
+const visiblePageCount = 11;
 const dashboardSummaryRefreshEventName = "dashboard-summary-refresh";
 
 type DomainExchangesBoardProps = {
@@ -298,6 +299,14 @@ export function DomainExchangesBoard({
     Math.ceil((serverPagingEnabled ? totalRows : rows.length) / rowsPerPage),
   );
   const currentPage = Math.min(page, pageCount);
+  const visiblePageStart = Math.min(
+    Math.max(1, currentPage - Math.floor(visiblePageCount / 2)),
+    Math.max(1, pageCount - visiblePageCount + 1),
+  );
+  const visiblePageNumbers = Array.from(
+    { length: Math.min(visiblePageCount, pageCount) },
+    (_, index) => visiblePageStart + index,
+  );
   const pageRows = useMemo(
     () =>
       serverPagingEnabled
@@ -882,24 +891,21 @@ export function DomainExchangesBoard({
               ‹
             </button>
 
-            {Array.from({ length: Math.min(pageCount, 11) }, (_, index) => {
-              const pageNumber = index + 1;
-
-              return (
-                <button
-                  key={pageNumber}
-                  type="button"
-                  onClick={() => setPage(pageNumber)}
-                  className={`h-10 min-w-10 rounded-xl px-3 font-semibold ${
-                    currentPage === pageNumber
-                      ? "bg-white text-slate-950"
-                      : "bg-black text-white"
-                  }`}
-                >
-                  {pageNumber}
-                </button>
-              );
-            })}
+            {visiblePageNumbers.map((pageNumber) => (
+              <button
+                key={pageNumber}
+                type="button"
+                onClick={() => setPage(pageNumber)}
+                aria-current={currentPage === pageNumber ? "page" : undefined}
+                className={`h-10 min-w-10 rounded-xl px-3 font-semibold ${
+                  currentPage === pageNumber
+                    ? "bg-white text-slate-950"
+                    : "bg-black text-white"
+                }`}
+              >
+                {pageNumber}
+              </button>
+            ))}
 
             <button
               type="button"
