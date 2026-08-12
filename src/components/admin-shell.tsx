@@ -11,6 +11,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import {
   getNotificationFallbackPollIntervalMs,
   isReliableNoticeSoundEnabled,
+  isReliableRequestEventRecoveryEnabled,
   isRealtimeSyncPilot,
   isReducedNotificationPollingPilot,
 } from "@/lib/realtime-sync-pilot";
@@ -209,6 +210,8 @@ export async function AdminShell({
   const reducedNotificationPollingPilot =
     isReducedNotificationPollingPilot(user);
   const reliableNoticeSoundEnabled = isReliableNoticeSoundEnabled(user);
+  const reliableRequestEventRecoveryEnabled =
+    isReliableRequestEventRecoveryEnabled(user);
   const notificationFallbackPollIntervalMs =
     getNotificationFallbackPollIntervalMs(user);
   const realtimeEventsPath = reducedNotificationPollingPilot
@@ -373,6 +376,9 @@ export async function AdminShell({
                       eventDrivenSnapshotEnabled={reducedNotificationPollingPilot}
                       fallbackPollIntervalMs={notificationFallbackPollIntervalMs}
                       reliableNoticeSoundEnabled={reliableNoticeSoundEnabled}
+                      reliableRequestEventRecoveryEnabled={
+                        reliableRequestEventRecoveryEnabled
+                      }
                       noticeScopeKey={user.loginId}
                     />
                   <DashboardSummaryToggle />

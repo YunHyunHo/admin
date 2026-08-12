@@ -23,6 +23,12 @@ export function isReliableNoticeSoundEnabled(
   return true;
 }
 
+export function isReliableRequestEventRecoveryEnabled(
+  user: Pick<SessionUser, "loginId">,
+) {
+  return user.loginId.trim().toLowerCase() === "maple";
+}
+
 export function getNotificationFallbackPollIntervalMs(
   user: Pick<SessionUser, "loginId">,
 ) {

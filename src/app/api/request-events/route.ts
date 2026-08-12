@@ -15,7 +15,10 @@ import { canUserAccessChargeRequest } from "@/lib/charge-requests-repository";
 import { getPgPool, hasDatabaseUrl } from "@/lib/db";
 import { canUserAccessDistributorWithdrawal } from "@/lib/distributor-withdrawals-repository";
 import { canUserAccessDomainExchange } from "@/lib/domain-exchanges-repository";
-import { isReducedNotificationPollingPilot } from "@/lib/realtime-sync-pilot";
+import {
+  isReducedNotificationPollingPilot,
+  isReliableRequestEventRecoveryEnabled,
+} from "@/lib/realtime-sync-pilot";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -73,7 +76,9 @@ export async function GET(request: Request) {
 
   await ensureAdminRequestEventsSchema();
 
-  const replayEnabled = isReducedNotificationPollingPilot(user);
+  const replayEnabled =
+    isReducedNotificationPollingPilot(user) ||
+    isReliableRequestEventRecoveryEnabled(user);
   const reconnectCursor = replayEnabled
     ? normalizeEventId(request.headers.get("last-event-id"))
     : null;

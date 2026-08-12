@@ -123,6 +123,7 @@ type GlobalRequestNotifierProps = {
   eventDrivenSnapshotEnabled?: boolean;
   fallbackPollIntervalMs?: number;
   reliableNoticeSoundEnabled?: boolean;
+  reliableRequestEventRecoveryEnabled?: boolean;
   noticeScopeKey?: string;
 };
 
@@ -132,6 +133,7 @@ export function GlobalRequestNotifier({
   eventDrivenSnapshotEnabled = false,
   fallbackPollIntervalMs = defaultPollIntervalMs,
   reliableNoticeSoundEnabled = false,
+  reliableRequestEventRecoveryEnabled = false,
   noticeScopeKey,
 }: GlobalRequestNotifierProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -601,11 +603,18 @@ export function GlobalRequestNotifier({
         connectWebSocket();
       } else if ("EventSource" in window) {
         eventSource = new EventSource(realtimeEventsPath);
+        const handleEventSourceReady = (event: MessageEvent<string>) => {
+          if (event.lastEventId) {
+            lastRealtimeEventIdRef.current = event.lastEventId;
+          }
+
+          handleReady();
+        };
         const handleEventSourceRequest = (event: MessageEvent<string>) => {
           handleRequestEvent(event.data, event.lastEventId);
         };
 
-        eventSource.addEventListener("ready", handleReady);
+        eventSource.addEventListener("ready", handleEventSourceReady);
         eventSource.addEventListener("request-event", handleEventSourceRequest);
         eventSource.addEventListener("replay-error", () => {
           setNoticeMessage("실시간 복구 확인 중");
@@ -613,6 +622,10 @@ export function GlobalRequestNotifier({
         });
         eventSource.onerror = () => {
           setNoticeMessage("실시간 재연결 중");
+
+          if (reliableRequestEventRecoveryEnabled) {
+            void syncRequests();
+          }
         };
       }
 
@@ -682,6 +695,7 @@ export function GlobalRequestNotifier({
     persistKnownPendingIds,
     realtimeEventsEnabled,
     realtimeEventsPath,
+    reliableRequestEventRecoveryEnabled,
     reliableNoticeSoundEnabled,
     playNoticeSoundWithRetry,
     syncRequests,
