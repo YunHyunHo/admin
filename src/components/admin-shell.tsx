@@ -9,6 +9,7 @@ import { QuickActionNav } from "@/components/quick-action-nav";
 import type { SessionUser } from "@/lib/auth";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
+  getNotificationFallbackPollIntervalMs,
   isReliableNoticeSoundEnabled,
   isRealtimeSyncPilot,
   isReducedNotificationPollingPilot,
@@ -209,7 +210,7 @@ export async function AdminShell({
     isReducedNotificationPollingPilot(user);
   const reliableNoticeSoundEnabled = isReliableNoticeSoundEnabled(user);
   const notificationFallbackPollIntervalMs =
-    reducedNotificationPollingPilot ? 30_000 : 1_000;
+    getNotificationFallbackPollIntervalMs(user);
   const realtimeEventsPath = reducedNotificationPollingPilot
     ? "/api/live-sync"
     : "/api/request-events";
