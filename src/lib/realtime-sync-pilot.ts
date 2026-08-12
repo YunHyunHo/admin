@@ -2,8 +2,7 @@ import type { SessionUser } from "@/lib/auth";
 
 const defaultNotificationFallbackPollIntervalMs = 1_000;
 const reducedNotificationFallbackPollIntervalMs = 30_000;
-const defaultRequestBoardFallbackRefreshIntervalMs = 10_000;
-const mapleRequestBoardFallbackRefreshIntervalMs = 60_000;
+const requestBoardFallbackRefreshIntervalMs = 60_000;
 
 function isMaplePilotUser(user: Pick<SessionUser, "loginId">) {
   return user.loginId.trim().toLowerCase() === "maple";
@@ -37,15 +36,15 @@ export function isReliableRequestEventRecoveryEnabled(
 export function isLightweightRequestNotificationPilot(
   user: Pick<SessionUser, "loginId">,
 ) {
-  return isMaplePilotUser(user);
+  void user;
+  return true;
 }
 
 export function getRequestBoardFallbackRefreshIntervalMs(
   user: Pick<SessionUser, "loginId">,
 ) {
-  return isMaplePilotUser(user)
-    ? mapleRequestBoardFallbackRefreshIntervalMs
-    : defaultRequestBoardFallbackRefreshIntervalMs;
+  void user;
+  return requestBoardFallbackRefreshIntervalMs;
 }
 
 export function getNotificationFallbackPollIntervalMs(
