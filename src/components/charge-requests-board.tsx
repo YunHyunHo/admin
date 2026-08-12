@@ -118,7 +118,7 @@ function HistorySearch({
   onReset: () => void;
 }) {
   return (
-    <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-white/8 bg-white/[0.025] p-4 lg:flex-row lg:items-end">
+    <div className="flex min-w-0 flex-1 flex-col gap-3 lg:flex-row lg:items-end">
       <label className="block">
         <span className="mb-2 block text-xs font-medium text-white/45">시작일</span>
         <input
@@ -176,39 +176,36 @@ function HistorySearch({
   );
 }
 
-function getCurrentTimeLabel() {
-  return new Intl.DateTimeFormat("ko-KR", {
-    timeZone: "Asia/Seoul",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(new Date());
-}
-
 function SectionCard({
   title,
   count,
+  headerContent,
   children,
 }: {
   title: string;
   count: number;
+  headerContent?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section className="rounded-[28px] border border-cyan-300/30 bg-[linear-gradient(180deg,_rgba(14,18,26,0.94)_0%,_rgba(10,12,18,0.98)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.34)] ring-1 ring-cyan-400/12">
-      <div className="flex items-center justify-between border-b border-cyan-300/24 px-5 py-4 sm:px-6">
-        <div>
-          <p className="text-xs uppercase tracking-[0.22em] text-cyan-300/55">
-            Table View
-          </p>
-          <h3 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">
-            {title}
-          </h3>
+      <div className="flex flex-col gap-4 border-b border-cyan-300/24 px-5 py-4 xl:flex-row xl:items-end sm:px-6">
+        <div className="flex shrink-0 items-end gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.22em] text-cyan-300/55">
+              Table View
+            </p>
+            <h3 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">
+              {title}
+            </h3>
+          </div>
+          <div className="mb-0.5 rounded-full border border-cyan-300/24 bg-white/[0.03] px-3 py-1 text-sm text-white/72">
+            {count}건
+          </div>
         </div>
-        <div className="rounded-full border border-cyan-300/24 bg-white/[0.03] px-3 py-1 text-sm text-white/72">
-          {count}건
-        </div>
+        {headerContent ? (
+          <div className="min-w-0 flex-1 xl:ml-auto">{headerContent}</div>
+        ) : null}
       </div>
       <div className="p-5 sm:p-6">{children}</div>
     </section>
@@ -337,7 +334,6 @@ export function ChargeRequestsBoard({
       ? "연결된 충전신청 데이터를 표시합니다."
       : "로컬 테스트 데이터로 충전신청을 표시합니다.",
   );
-  const [lastSyncedAt, setLastSyncedAt] = useState("");
   const [isSoundReady, setIsSoundReady] = useState(true);
   const [soundMessage, setSoundMessage] = useState("");
   const [confirmAction, setConfirmAction] = useState<ChargeConfirmAction | null>(
@@ -788,11 +784,8 @@ export function ChargeRequestsBoard({
           return;
         }
 
-        setLastSyncedAt(getCurrentTimeLabel());
       } catch {
-        if (!isCancelled) {
-          setLastSyncedAt("자동 갱신 실패");
-        }
+        // Keep the current rows and retry on the next synchronization cycle.
       } finally {
         if (!isCancelled) {
           timeoutId = window.setTimeout(() => {
@@ -1381,22 +1374,8 @@ export function ChargeRequestsBoard({
           <SectionCard
             title="충전신청"
             count={serverHistoryEnabled ? pendingTotal : filteredPendingRequests.length}
-          >
-            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div className="text-sm text-white/52">
-                {message}
-                {isDatabaseBacked ? (
-                  <span className="ml-2 inline-flex rounded-full border border-cyan-300/15 bg-cyan-400/8 px-2.5 py-1 text-xs font-medium text-cyan-100/72">
-                    자동 갱신 중{lastSyncedAt ? ` · ${lastSyncedAt}` : ""}
-                  </span>
-                ) : null}
-                {soundMessage ? (
-                  <span className="ml-2 inline-flex rounded-full border border-amber-300/15 bg-amber-400/8 px-2.5 py-1 text-xs font-medium text-amber-100/78">
-                    {soundMessage}
-                  </span>
-                ) : null}
-              </div>
-              <div className="flex flex-wrap gap-3">
+            headerContent={
+              <div className="flex flex-wrap justify-end gap-3">
                 <input
                   value={searchKeyword}
                   onChange={(event) => {
@@ -1457,7 +1436,11 @@ export function ChargeRequestsBoard({
                   </button>
                 ) : null}
               </div>
-            </div>
+            }
+          >
+            <p className="sr-only" aria-live="polite">
+              {[message, soundMessage].filter(Boolean).join(" ")}
+            </p>
 
             <Table>
               <table className="min-w-full text-left text-sm">
@@ -1575,18 +1558,20 @@ export function ChargeRequestsBoard({
             <SectionCard
               title="승인내역"
               count={serverHistoryEnabled ? approvedHistoryTotal : filteredApprovedRequests.length}
+              headerContent={
+                <HistorySearch
+                  filters={approvedFilters}
+                  onChange={(filters) => {
+                    setApprovedFilters(filters);
+                    setApprovedPage(1);
+                  }}
+                  onReset={() => {
+                    setApprovedFilters({ ...emptyHistoryFilters });
+                    setApprovedPage(1);
+                  }}
+                />
+              }
             >
-              <HistorySearch
-                filters={approvedFilters}
-                onChange={(filters) => {
-                  setApprovedFilters(filters);
-                  setApprovedPage(1);
-                }}
-                onReset={() => {
-                  setApprovedFilters({ ...emptyHistoryFilters });
-                  setApprovedPage(1);
-                }}
-              />
               <Table>
                 <table className="min-w-full text-left text-sm">
                   <thead className="bg-black/30 text-white/58">
@@ -1670,18 +1655,20 @@ export function ChargeRequestsBoard({
             <SectionCard
               title="승인거절내역"
               count={serverHistoryEnabled ? rejectedHistoryTotal : filteredRejectedRequests.length}
+              headerContent={
+                <HistorySearch
+                  filters={rejectedFilters}
+                  onChange={(filters) => {
+                    setRejectedFilters(filters);
+                    setRejectedPage(1);
+                  }}
+                  onReset={() => {
+                    setRejectedFilters({ ...emptyHistoryFilters });
+                    setRejectedPage(1);
+                  }}
+                />
+              }
             >
-              <HistorySearch
-                filters={rejectedFilters}
-                onChange={(filters) => {
-                  setRejectedFilters(filters);
-                  setRejectedPage(1);
-                }}
-                onReset={() => {
-                  setRejectedFilters({ ...emptyHistoryFilters });
-                  setRejectedPage(1);
-                }}
-              />
               <Table>
                 <table className="min-w-full text-left text-sm">
                   <thead className="bg-black/30 text-white/58">
