@@ -14,7 +14,10 @@ import {
 } from "@/lib/domain-exchanges-repository";
 import { isPerformancePilotUser } from "@/lib/performance-pilot";
 import { canManageMasterResources } from "@/lib/permissions";
-import { isRealtimeSyncPilot } from "@/lib/realtime-sync-pilot";
+import {
+  getRequestBoardFallbackRefreshIntervalMs,
+  isRealtimeSyncPilot,
+} from "@/lib/realtime-sync-pilot";
 import { getServerSyncCursor } from "@/lib/db";
 
 
@@ -63,6 +66,7 @@ export default async function DomainExchangesPage() {
         incrementalSyncEnabled={incrementalSyncEnabled}
         initialSyncCursor={initialSyncCursor}
         serverPagingEnabled={serverPagingEnabled}
+        fallbackRefreshIntervalMs={getRequestBoardFallbackRefreshIntervalMs(user)}
         initialPageData={Array.isArray(exchangeData) ? undefined : exchangeData}
       />
     </AdminShell>

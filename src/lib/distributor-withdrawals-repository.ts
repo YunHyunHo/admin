@@ -16,7 +16,7 @@ function shiftSqlParams(sql: string, offset: number) {
   return sql.replace(/\$(\d+)/g, (_, indexText) => `$${Number(indexText) + offset}`);
 }
 
-async function getWithdrawalScope(
+export async function getWithdrawalScope(
   user: Pick<SessionUser, "id" | "role">,
   distributorAlias = "d",
   distributorAdminAlias = "dist_admin",

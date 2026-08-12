@@ -228,6 +228,7 @@ type DomainExchangesBoardProps = {
   incrementalSyncEnabled?: boolean;
   initialSyncCursor?: string;
   serverPagingEnabled?: boolean;
+  fallbackRefreshIntervalMs?: number;
   initialPageData?: {
     rows: DomainExchangeRow[];
     total: number;
@@ -266,6 +267,7 @@ export function DomainExchangesBoard({
   incrementalSyncEnabled = false,
   initialSyncCursor = "",
   serverPagingEnabled = false,
+  fallbackRefreshIntervalMs = serverPagingFallbackRefreshMs,
   initialPageData,
 }: DomainExchangesBoardProps) {
   const [rows, setRows] = useState(initialRows.map(normalizeExchangeRow));
@@ -531,7 +533,7 @@ export function DomainExchangesBoard({
         if (!isCancelled) {
           timeoutId = window.setTimeout(() => {
             void runFallbackRefresh();
-          }, serverPagingFallbackRefreshMs);
+          }, fallbackRefreshIntervalMs);
         }
       }
     }
@@ -544,7 +546,7 @@ export function DomainExchangesBoard({
         window.clearTimeout(timeoutId);
       }
     };
-  }, [refreshRows, serverPagingEnabled]);
+  }, [fallbackRefreshIntervalMs, refreshRows, serverPagingEnabled]);
 
   useEffect(() => {
     function handleNotificationSync(event: Event) {

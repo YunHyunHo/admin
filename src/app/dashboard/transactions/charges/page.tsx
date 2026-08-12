@@ -12,7 +12,10 @@ import { getServerSyncCursor, hasDatabaseUrl } from "@/lib/db";
 import { getDomainExchangeOptions } from "@/lib/domain-exchanges-repository";
 import { isPerformancePilotUser } from "@/lib/performance-pilot";
 import { canProcessRequests } from "@/lib/permissions";
-import { isRealtimeSyncPilot } from "@/lib/realtime-sync-pilot";
+import {
+  getRequestBoardFallbackRefreshIntervalMs,
+  isRealtimeSyncPilot,
+} from "@/lib/realtime-sync-pilot";
 
 type ChargeHistoryPage = {
   items: Awaited<ReturnType<typeof getChargeRequestHistoryPageForUser>>["items"];
@@ -95,6 +98,7 @@ export default async function ChargesPage() {
         incrementalSyncEnabled={incrementalSyncEnabled}
         initialSyncCursor={initialSyncCursor}
         serverHistoryEnabled={serverHistoryEnabled}
+        fallbackRefreshIntervalMs={getRequestBoardFallbackRefreshIntervalMs(user)}
         initialApprovedHistoryPage={
           hasPilotHistoryPages(companyRequests)
             ? companyRequests.approvedPage

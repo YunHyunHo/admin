@@ -25,6 +25,7 @@ type ChargeRequestsBoardProps = {
   incrementalSyncEnabled?: boolean;
   initialSyncCursor?: string;
   serverHistoryEnabled?: boolean;
+  fallbackRefreshIntervalMs?: number;
   initialPendingPage?: ChargePendingPageResponse;
   initialApprovedHistoryPage?: ChargeHistoryPageResponse;
   initialRejectedHistoryPage?: ChargeHistoryPageResponse;
@@ -290,6 +291,7 @@ export function ChargeRequestsBoard({
   incrementalSyncEnabled = false,
   initialSyncCursor = "",
   serverHistoryEnabled = false,
+  fallbackRefreshIntervalMs = serverHistoryFallbackRefreshMs,
   initialPendingPage,
   initialApprovedHistoryPage,
   initialRejectedHistoryPage,
@@ -843,7 +845,7 @@ export function ChargeRequestsBoard({
         if (!isCancelled) {
           timeoutId = window.setTimeout(() => {
             void runFallbackRefresh();
-          }, serverHistoryFallbackRefreshMs);
+          }, fallbackRefreshIntervalMs);
         }
       }
     }
@@ -856,7 +858,7 @@ export function ChargeRequestsBoard({
         window.clearTimeout(timeoutId);
       }
     };
-  }, [refreshRequestsForNotification, serverHistoryEnabled]);
+  }, [fallbackRefreshIntervalMs, refreshRequestsForNotification, serverHistoryEnabled]);
 
   useEffect(() => {
     if (!serverHistoryEnabled) {

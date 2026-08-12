@@ -247,6 +247,7 @@ export function DistributorWithdrawalHistoryBoard({
   canProcessWithdrawals = false,
   availableBalance = 0,
   serverPagingEnabled = false,
+  fallbackRefreshIntervalMs = serverPagingFallbackRefreshMs,
   initialPageData,
 }: {
   initialRows?: WithdrawalRow[];
@@ -254,6 +255,7 @@ export function DistributorWithdrawalHistoryBoard({
   canProcessWithdrawals?: boolean;
   availableBalance?: number;
   serverPagingEnabled?: boolean;
+  fallbackRefreshIntervalMs?: number;
   initialPageData?: {
     rows: WithdrawalRow[];
     total: number;
@@ -484,7 +486,7 @@ export function DistributorWithdrawalHistoryBoard({
         if (!isCancelled) {
           timeoutId = window.setTimeout(() => {
             void runFallbackRefresh();
-          }, serverPagingFallbackRefreshMs);
+          }, fallbackRefreshIntervalMs);
         }
       }
     }
@@ -497,7 +499,7 @@ export function DistributorWithdrawalHistoryBoard({
         window.clearTimeout(timeoutId);
       }
     };
-  }, [refreshRows, serverPagingEnabled]);
+  }, [fallbackRefreshIntervalMs, refreshRows, serverPagingEnabled]);
 
   async function createWithdrawal() {
     if (isSubmitting) {

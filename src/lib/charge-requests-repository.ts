@@ -416,7 +416,7 @@ async function getManagedCompanyIds(userId: string) {
   return result.rows.map((row) => row.company_id);
 }
 
-async function getChargeRequestScope(
+export async function getChargeRequestScope(
   user: SessionUser,
   aliases: {
     charge?: string;
