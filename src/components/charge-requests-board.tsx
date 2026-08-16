@@ -8,12 +8,14 @@ import {
   type RequestNotificationSyncDetail,
 } from "@/components/global-request-notifier";
 import { ModalFeedback } from "@/components/modal-feedback";
+import { NotificationVolumeControl } from "@/components/notification-volume-control";
 import {
   parseKoreanWon,
   type PendingRequest,
   type ProcessedRequest,
 } from "@/lib/charge-utils";
 import type { DomainExchangeOption } from "@/lib/domain-exchanges-types";
+import { useNotificationSoundVolume } from "@/lib/notification-sound-volume";
 
 type ChargeRequestsBoardProps = {
   initialPendingRequests: PendingRequest[];
@@ -341,6 +343,8 @@ export function ChargeRequestsBoard({
   );
   const [historyRefreshVersion, setHistoryRefreshVersion] = useState(0);
   const noticeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const { volume: notificationSoundVolume } = useNotificationSoundVolume();
+  const notificationSoundVolumeRef = useRef(notificationSoundVolume);
   const knownPendingIdsRef = useRef(
     new Set(initialPendingRequests.map((request) => request.id)),
   );
@@ -394,11 +398,20 @@ export function ChargeRequestsBoard({
       noticeAudioRef.current.preload = "auto";
     }
 
+    noticeAudioRef.current.volume = notificationSoundVolumeRef.current;
     noticeAudioRef.current.currentTime = 0;
     await noticeAudioRef.current.play();
     setIsSoundReady(true);
     setSoundMessage("");
   }, []);
+
+  useEffect(() => {
+    notificationSoundVolumeRef.current = notificationSoundVolume;
+
+    if (noticeAudioRef.current) {
+      noticeAudioRef.current.volume = notificationSoundVolume;
+    }
+  }, [notificationSoundVolume]);
 
   const applyPendingPageData = useCallback(
     (
@@ -772,6 +785,8 @@ export function ChargeRequestsBoard({
       noticeAudioRef.current = new Audio(chargeNoticeSoundPath);
       noticeAudioRef.current.preload = "auto";
     }
+
+    noticeAudioRef.current.volume = notificationSoundVolumeRef.current;
 
     let isCancelled = false;
     let timeoutId: number | null = null;
@@ -1413,17 +1428,20 @@ export function ChargeRequestsBoard({
                   새로고침
                 </button>
                 {isDatabaseBacked ? (
-                  <button
-                    type="button"
-                    onClick={activateNoticeSound}
-                    className={`rounded-2xl border px-4 py-2 text-sm font-semibold ${
-                      isSoundReady
-                        ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-100"
-                        : "border-amber-300/20 bg-amber-400/10 text-amber-100"
-                    }`}
-                  >
-                    {isSoundReady ? "알림음 켜짐" : "알림음 다시 켜기"}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={activateNoticeSound}
+                      className={`rounded-2xl border px-4 py-2 text-sm font-semibold ${
+                        isSoundReady
+                          ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-100"
+                          : "border-amber-300/20 bg-amber-400/10 text-amber-100"
+                      }`}
+                    >
+                      {isSoundReady ? "알림음 켜짐" : "알림음 다시 켜기"}
+                    </button>
+                    <NotificationVolumeControl />
+                  </>
                 ) : null}
                 {!isDatabaseBacked ? (
                   <button

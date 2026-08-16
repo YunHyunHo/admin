@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { NotificationVolumeControl } from "@/components/notification-volume-control";
+import { useNotificationSoundVolume } from "@/lib/notification-sound-volume";
 
 const noticeSoundPath = "/sounds/notice.mp3";
 const defaultPollIntervalMs = 1000;
@@ -137,6 +139,8 @@ export function GlobalRequestNotifier({
   noticeScopeKey,
 }: GlobalRequestNotifierProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const { volume: notificationSoundVolume } = useNotificationSoundVolume();
+  const notificationSoundVolumeRef = useRef(notificationSoundVolume);
   const knownPendingIdsRef = useRef<Set<string>>(new Set());
   const hasInitializedRef = useRef(false);
   const isSyncingRef = useRef(false);
@@ -162,6 +166,8 @@ export function GlobalRequestNotifier({
         reliableNoticeAudio.preload = "auto";
       }
 
+      reliableNoticeAudio.volume = notificationSoundVolumeRef.current;
+
       return reliableNoticeAudio;
     }
 
@@ -170,8 +176,22 @@ export function GlobalRequestNotifier({
       audioRef.current.preload = "auto";
     }
 
+    audioRef.current.volume = notificationSoundVolumeRef.current;
+
     return audioRef.current;
   }, [reliableNoticeSoundEnabled]);
+
+  useEffect(() => {
+    notificationSoundVolumeRef.current = notificationSoundVolume;
+
+    if (reliableNoticeAudio) {
+      reliableNoticeAudio.volume = notificationSoundVolume;
+    }
+
+    if (audioRef.current) {
+      audioRef.current.volume = notificationSoundVolume;
+    }
+  }, [notificationSoundVolume]);
 
   const persistKnownPendingIds = useCallback(
     (ids: Set<string>) => {
@@ -763,17 +783,20 @@ export function GlobalRequestNotifier({
   }, [reliableNoticeSoundEnabled, unlockNoticeSound]);
 
   return (
-    <button
-      type="button"
-      onClick={activateNoticeSound}
-      className={`hidden h-10 items-center rounded-2xl border px-3 text-xs font-semibold transition sm:inline-flex ${
-        isSoundReady
-          ? "border-cyan-300/24 bg-cyan-400/12 text-cyan-50 hover:bg-cyan-400/18"
-          : "border-amber-300/24 bg-amber-400/12 text-amber-100 hover:bg-amber-400/18"
-      }`}
-      title="충전신청, 도메인환전, 총판환전 신규 신청 알림음"
-    >
-      {noticeMessage}
-    </button>
+    <div className="hidden items-center gap-2 sm:flex">
+      <button
+        type="button"
+        onClick={activateNoticeSound}
+        className={`h-10 items-center rounded-2xl border px-3 text-xs font-semibold transition sm:inline-flex ${
+          isSoundReady
+            ? "border-cyan-300/24 bg-cyan-400/12 text-cyan-50 hover:bg-cyan-400/18"
+            : "border-amber-300/24 bg-amber-400/12 text-amber-100 hover:bg-amber-400/18"
+        }`}
+        title="충전신청, 도메인환전, 총판환전 신규 신청 알림음"
+      >
+        {noticeMessage}
+      </button>
+      <NotificationVolumeControl compact />
+    </div>
   );
 }
