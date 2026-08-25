@@ -7,15 +7,24 @@ import { getPendingDomainExchangeIds } from "@/lib/domain-exchanges-repository";
 import { hasDatabaseUrl } from "@/lib/db";
 import { isLightweightRequestNotificationPilot } from "@/lib/realtime-sync-pilot";
 import { getPendingRequestIds } from "@/lib/request-notifications-repository";
+import {
+  getAdminRequestUsageIdentity,
+  recordRequestUsage,
+} from "@/lib/request-usage-metrics";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: Request) {
   const user = await getSessionUser();
 
   if (!user) {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
+
+  recordRequestUsage({
+    request,
+    identity: getAdminRequestUsageIdentity(user),
+  });
 
   const pendingIds =
     hasDatabaseUrl() && isLightweightRequestNotificationPilot(user)

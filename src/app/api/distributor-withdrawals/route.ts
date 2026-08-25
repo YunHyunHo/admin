@@ -11,6 +11,10 @@ import {
   rejectDistributorWithdrawal,
 } from "@/lib/distributor-withdrawals-repository";
 import { canManageMasterResources, canUseDistributorMenus } from "@/lib/permissions";
+import {
+  getAdminRequestUsageIdentity,
+  recordRequestUsage,
+} from "@/lib/request-usage-metrics";
 
 export const runtime = "nodejs";
 
@@ -44,6 +48,11 @@ export async function GET(request: Request) {
   if (!user) {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
+
+  recordRequestUsage({
+    request,
+    identity: getAdminRequestUsageIdentity(user),
+  });
 
   const searchParams = new URL(request.url).searchParams;
   const mode = searchParams.get("mode");

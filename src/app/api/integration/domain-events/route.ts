@@ -3,6 +3,10 @@ import type { Notification } from "pg";
 
 import { getPgPool, hasDatabaseUrl, query } from "@/lib/db";
 import { getPublicChargeId } from "@/lib/integration-domain-history";
+import {
+  getDomainRequestUsageIdentity,
+  recordRequestUsage,
+} from "@/lib/request-usage-metrics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +20,10 @@ const liveCursorSkewMs = 30000;
 
 type DomainLookupRow = {
   id: string;
+  companyId: string;
+  companyName: string;
+  adminId: string | null;
+  loginId: string | null;
 };
 
 type RequestEventRow = {
@@ -150,9 +158,24 @@ async function resolveDomainId(request: Request) {
 
   const result = await query<DomainLookupRow>(
     `
-      select dom.id::text as id
+      select
+        dom.id::text as id,
+        dom.company_id::text as "companyId",
+        c.company_name as "companyName",
+        domain_admin.admin_id as "adminId",
+        domain_admin.login_id as "loginId"
       from domains dom
       join companies c on c.id = dom.company_id
+      left join lateral (
+        select a.id::text as admin_id, a.login_id
+        from admin_domain_mappings adm
+        join admins a on a.id = adm.admin_id
+        where adm.domain_id = dom.id
+          and a.role = 'DOMAIN_ADMIN'
+          and a.status = 'ACTIVE'
+        order by a.created_at desc
+        limit 1
+      ) domain_admin on true
       where dom.status <> 'DELETED'
         and (
           ($1::uuid is not null and dom.id = $1::uuid)
@@ -166,7 +189,7 @@ async function resolveDomainId(request: Request) {
     `,
     [domainId || null, domainName],
   );
-  const resolved = result.rows[0]?.id;
+  const resolved = result.rows[0];
 
   if (!resolved) {
     throw new Error("도메인 정보를 찾을 수 없습니다.");
@@ -193,10 +216,10 @@ export async function GET(request: Request) {
     );
   }
 
-  let domainId: string;
+  let domain: DomainLookupRow;
 
   try {
-    domainId = await resolveDomainId(request);
+    domain = await resolveDomainId(request);
   } catch (error) {
     return NextResponse.json(
       {
@@ -209,6 +232,19 @@ export async function GET(request: Request) {
       { status: 400, headers: sseHeaders() },
     );
   }
+
+  const domainId = domain.id;
+
+  recordRequestUsage({
+    request,
+    identity: getDomainRequestUsageIdentity({
+      domainId,
+      adminId: domain.adminId,
+      loginId: domain.loginId,
+      companyId: domain.companyId,
+      companyName: domain.companyName,
+    }),
+  });
 
   const client = await getPgPool().connect();
 

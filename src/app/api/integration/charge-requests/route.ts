@@ -10,6 +10,11 @@ import {
 } from "@/lib/domain-charge-integration";
 import { getIntegrationChargeHistory } from "@/lib/integration-domain-history";
 import { getPartnerAccess } from "@/lib/partner-auth";
+import {
+  getDomainRequestUsageIdentity,
+  getPartnerRequestUsageIdentity,
+  recordRequestUsage,
+} from "@/lib/request-usage-metrics";
 
 export const runtime = "nodejs";
 
@@ -44,6 +49,16 @@ export async function GET(request: Request) {
       { status: 401 },
     );
   }
+
+  recordRequestUsage({
+    request,
+    identity: partnerAccess.access
+      ? getPartnerRequestUsageIdentity(partnerAccess.access)
+      : getDomainRequestUsageIdentity({
+          domainId: searchParams.get("domainId"),
+          domainName: searchParams.get("domainName"),
+        }),
+  });
 
   const domainId =
     partnerAccess.access?.domainId ?? searchParams.get("domainId");
@@ -143,6 +158,22 @@ export async function POST(request: Request) {
     accountNumber,
   ].filter(Boolean).length;
   const hasProvidedAccount = providedAccountFieldCount === 3;
+
+  if (integration || partnerAccess.access || domainId || domainName) {
+    recordRequestUsage({
+      request,
+      identity: integration
+        ? getDomainRequestUsageIdentity({
+            domainId: integration.domainId,
+            domainName: domainName ?? integration.domainAdminLoginId,
+            loginId: integration.domainAdminLoginId,
+            companyId: integration.companyId,
+          })
+        : partnerAccess.access
+          ? getPartnerRequestUsageIdentity(partnerAccess.access)
+          : getDomainRequestUsageIdentity({ domainId, domainName }),
+    });
+  }
 
   if (apiKey && !integration) {
     return NextResponse.json(

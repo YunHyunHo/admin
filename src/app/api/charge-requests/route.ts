@@ -22,6 +22,10 @@ import type { ProcessedRequest } from "@/lib/charge-utils";
 import { canProcessRequests } from "@/lib/permissions";
 import { notifyChargeDecision } from "@/lib/telegram-notifications";
 import { isRealtimeSyncPilot } from "@/lib/realtime-sync-pilot";
+import {
+  getAdminRequestUsageIdentity,
+  recordRequestUsage,
+} from "@/lib/request-usage-metrics";
 
 const allowedStatuses: ProcessedRequest["status"][] = ["승인", "승인거절"];
 const minimumChargeAmount = 1;
@@ -34,6 +38,11 @@ export async function GET(request: Request) {
   if (!user) {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
+
+  recordRequestUsage({
+    request,
+    identity: getAdminRequestUsageIdentity(user),
+  });
 
   const searchParams = new URL(request.url).searchParams;
   const since = searchParams.get("since");
@@ -91,6 +100,11 @@ export async function POST(request: Request) {
   if (!user) {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
+
+  recordRequestUsage({
+    request,
+    identity: getAdminRequestUsageIdentity(user),
+  });
 
   const body = (await request.json()) as {
     action?: string;

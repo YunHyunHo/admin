@@ -19,6 +19,10 @@ import {
   isReducedNotificationPollingPilot,
   isReliableRequestEventRecoveryEnabled,
 } from "@/lib/realtime-sync-pilot";
+import {
+  getAdminRequestUsageIdentity,
+  recordRequestUsage,
+} from "@/lib/request-usage-metrics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -66,6 +70,11 @@ export async function GET(request: Request) {
   if (!user) {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
+
+  recordRequestUsage({
+    request,
+    identity: getAdminRequestUsageIdentity(user),
+  });
 
   if (!hasDatabaseUrl()) {
     return NextResponse.json(

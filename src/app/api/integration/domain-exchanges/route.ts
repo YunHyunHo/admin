@@ -3,6 +3,11 @@ import { NextResponse } from "next/server";
 import { createIntegrationDomainExchange } from "@/lib/domain-exchanges-repository";
 import { getIntegrationDomainExchangeHistory } from "@/lib/integration-domain-history";
 import { getPartnerAccess } from "@/lib/partner-auth";
+import {
+  getDomainRequestUsageIdentity,
+  getPartnerRequestUsageIdentity,
+  recordRequestUsage,
+} from "@/lib/request-usage-metrics";
 
 export const runtime = "nodejs";
 
@@ -29,6 +34,16 @@ export async function GET(request: Request) {
       { status: 401 },
     );
   }
+
+  recordRequestUsage({
+    request,
+    identity: partnerAccess.access
+      ? getPartnerRequestUsageIdentity(partnerAccess.access)
+      : getDomainRequestUsageIdentity({
+          domainId: searchParams.get("domainId"),
+          domainName: searchParams.get("domainName"),
+        }),
+  });
 
   try {
     return NextResponse.json(
@@ -74,6 +89,13 @@ export async function POST(request: Request) {
   const bankName = payload.bankName?.trim() ?? "";
   const accountHolder = payload.accountHolder?.trim() ?? "";
   const accountNumber = payload.accountNumber?.trim() ?? "";
+
+  recordRequestUsage({
+    request,
+    identity: partnerAccess.access
+      ? getPartnerRequestUsageIdentity(partnerAccess.access)
+      : getDomainRequestUsageIdentity({ domainId, domainName }),
+  });
 
   if (!domainId && !domainName) {
     return NextResponse.json(

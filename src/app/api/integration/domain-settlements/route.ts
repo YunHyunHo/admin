@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 
 import { getIntegrationDomainSettlementHistory } from "@/lib/integration-domain-history";
 import { getPartnerAccess } from "@/lib/partner-auth";
+import {
+  getDomainRequestUsageIdentity,
+  getPartnerRequestUsageIdentity,
+  recordRequestUsage,
+} from "@/lib/request-usage-metrics";
 
 export const runtime = "nodejs";
 
@@ -15,6 +20,16 @@ export async function GET(request: Request) {
       { status: 401 },
     );
   }
+
+  recordRequestUsage({
+    request,
+    identity: partnerAccess.access
+      ? getPartnerRequestUsageIdentity(partnerAccess.access)
+      : getDomainRequestUsageIdentity({
+          domainId: searchParams.get("domainId"),
+          domainName: searchParams.get("domainName"),
+        }),
+  });
 
   try {
     return NextResponse.json(
