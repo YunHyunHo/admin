@@ -123,6 +123,7 @@ type GlobalRequestNotifierProps = {
   realtimeEventsEnabled?: boolean;
   realtimeEventsPath?: string;
   eventDrivenSnapshotEnabled?: boolean;
+  webSocketTransportEnabled?: boolean;
   fallbackPollIntervalMs?: number;
   reliableNoticeSoundEnabled?: boolean;
   reliableRequestEventRecoveryEnabled?: boolean;
@@ -133,6 +134,7 @@ export function GlobalRequestNotifier({
   realtimeEventsEnabled = false,
   realtimeEventsPath = "/api/request-events",
   eventDrivenSnapshotEnabled = false,
+  webSocketTransportEnabled = false,
   fallbackPollIntervalMs = defaultPollIntervalMs,
   reliableNoticeSoundEnabled = false,
   reliableRequestEventRecoveryEnabled = false,
@@ -546,7 +548,7 @@ export function GlobalRequestNotifier({
         }
       };
 
-      if (eventDrivenSnapshotEnabled) {
+      if (eventDrivenSnapshotEnabled && webSocketTransportEnabled) {
         const connectWebSocket = () => {
           if (isCancelled) {
             return;
@@ -717,6 +719,7 @@ export function GlobalRequestNotifier({
     realtimeEventsPath,
     reliableRequestEventRecoveryEnabled,
     reliableNoticeSoundEnabled,
+    webSocketTransportEnabled,
     playNoticeSoundWithRetry,
     syncRequests,
   ]);

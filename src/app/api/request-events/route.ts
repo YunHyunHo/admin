@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { Notification } from "pg";
 
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser, type SessionUser } from "@/lib/auth";
 import {
   adminRequestEventsChannel,
   ensureAdminRequestEventsSchema,
@@ -17,8 +17,14 @@ import { canUserAccessDistributorWithdrawal } from "@/lib/distributor-withdrawal
 import { canUserAccessDomainExchange } from "@/lib/domain-exchanges-repository";
 import {
   isReducedNotificationPollingPilot,
+  isMapleImmediateRealtimePilot,
   isReliableRequestEventRecoveryEnabled,
 } from "@/lib/realtime-sync-pilot";
+import {
+  adminRequestEventsRedisStream,
+  createAdminRequestEventsRedis,
+  hasAdminRequestEventsRedis,
+} from "@/lib/admin-request-events-redis";
 import {
   getAdminRequestUsageIdentity,
   recordRequestUsage,
@@ -64,6 +70,151 @@ async function canUserAccessEvent(user: Awaited<ReturnType<typeof getSessionUser
   return canUserAccessDistributorWithdrawal(user, event.requestId);
 }
 
+async function createMapleRedisEventStream(
+  request: Request,
+  user: SessionUser,
+) {
+  const redis = createAdminRequestEventsRedis({ blocking: true });
+
+  try {
+    await redis.connect();
+  } catch {
+    redis.disconnect();
+    return null;
+  }
+
+  const reconnectCursor = normalizeEventId(
+    request.headers.get("last-event-id"),
+  );
+  const latestRedisEntries = await redis.xrevrange(
+    adminRequestEventsRedisStream,
+    "+",
+    "-",
+    "COUNT",
+    1,
+  );
+  const initialRedisCursor = latestRedisEntries[0]?.[0] ?? "$";
+  const initialEventCursor = reconnectCursor ?? await getLatestAdminRequestEventId();
+  const encoder = new TextEncoder();
+  let isClosed = false;
+
+  const close = () => {
+    if (isClosed) {
+      return;
+    }
+
+    isClosed = true;
+    redis.disconnect();
+  };
+
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const send = (event: string, data: unknown, id?: string) => {
+        if (!isClosed) {
+          controller.enqueue(encoder.encode(encodeSse(event, data, id)));
+        }
+      };
+      let lastDeliveredEventId = initialEventCursor;
+
+      const deliver = async (
+        event: StoredAdminRequestEvent,
+        replayed = false,
+      ) => {
+        if (
+          lastDeliveredEventId &&
+          BigInt(event.eventId) <= BigInt(lastDeliveredEventId)
+        ) {
+          return;
+        }
+
+        if (await canUserAccessEvent(user, event)) {
+          send("request-event", { ...event, replayed }, event.eventId);
+        }
+
+        lastDeliveredEventId = event.eventId;
+      };
+
+      request.signal.addEventListener("abort", close, { once: true });
+      controller.enqueue(encoder.encode("retry: 3000\n"));
+
+      void (async () => {
+        try {
+          if (reconnectCursor) {
+            let cursor = reconnectCursor;
+
+            while (!isClosed) {
+              const missedEvents = await getAdminRequestEventsAfter(cursor);
+
+              for (const event of missedEvents) {
+                await deliver(event, true);
+                cursor = event.eventId;
+              }
+
+              if (missedEvents.length < 500) {
+                break;
+              }
+            }
+          }
+
+          send(
+            "ready",
+            {
+              ok: true,
+              source: "redis",
+              replayed: Boolean(reconnectCursor),
+              cursor: lastDeliveredEventId,
+            },
+            lastDeliveredEventId,
+          );
+
+          let redisCursor = initialRedisCursor;
+
+          while (!isClosed) {
+            const streams = await redis.xread(
+              "BLOCK",
+              10000,
+              "STREAMS",
+              adminRequestEventsRedisStream,
+              redisCursor,
+            );
+
+            if (!streams) {
+              controller.enqueue(encoder.encode(": keep-alive\n\n"));
+              continue;
+            }
+
+            for (const [, entries] of streams) {
+              for (const [streamId, fields] of entries) {
+                redisCursor = streamId;
+                const eventIndex = fields.indexOf("event");
+                const event = parseAdminRequestEvent(
+                  eventIndex >= 0 ? fields[eventIndex + 1] : undefined,
+                );
+
+                if (event?.eventId) {
+                  await deliver(event as StoredAdminRequestEvent);
+                }
+              }
+            }
+          }
+        } catch {
+          if (!isClosed) {
+            send("replay-error", {
+              message: "Maple 실시간 이벤트 연결이 끊겼습니다.",
+            });
+            close();
+          }
+        }
+      })();
+    },
+    cancel() {
+      close();
+    },
+  });
+
+  return new Response(stream, { headers: sseHeaders() });
+}
+
 export async function GET(request: Request) {
   const user = await getSessionUser();
 
@@ -84,6 +235,17 @@ export async function GET(request: Request) {
   }
 
   await ensureAdminRequestEventsSchema();
+
+  if (
+    isMapleImmediateRealtimePilot(user) &&
+    hasAdminRequestEventsRedis()
+  ) {
+    const mapleStream = await createMapleRedisEventStream(request, user);
+
+    if (mapleStream) {
+      return mapleStream;
+    }
+  }
 
   const replayEnabled =
     isReducedNotificationPollingPilot(user) ||

@@ -10,6 +10,7 @@ import type { SessionUser } from "@/lib/auth";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
   getNotificationFallbackPollIntervalMs,
+  isMapleImmediateRealtimePilot,
   isReliableNoticeSoundEnabled,
   isReliableRequestEventRecoveryEnabled,
   isRealtimeSyncPilot,
@@ -207,13 +208,16 @@ export async function AdminShell({
     .filter((group) => group.items.length > 0);
   const visibleQuickActions = isSettlementOnlyUser ? [] : quickActions;
   const realtimeEventsEnabled = isRealtimeSyncPilot(user);
+  const mapleImmediateRealtimePilot = isMapleImmediateRealtimePilot(user);
   const reducedNotificationPollingPilot =
     isReducedNotificationPollingPilot(user);
   const reliableNoticeSoundEnabled = isReliableNoticeSoundEnabled(user);
   const reliableRequestEventRecoveryEnabled =
     isReliableRequestEventRecoveryEnabled(user);
   const notificationFallbackPollIntervalMs =
-    getNotificationFallbackPollIntervalMs(user);
+    mapleImmediateRealtimePilot
+      ? 30_000
+      : getNotificationFallbackPollIntervalMs(user);
   const realtimeEventsPath = reducedNotificationPollingPilot
     ? "/api/live-sync"
     : "/api/request-events";
@@ -373,7 +377,14 @@ export async function AdminShell({
                     <GlobalRequestNotifier
                       realtimeEventsEnabled={realtimeEventsEnabled}
                       realtimeEventsPath={realtimeEventsPath}
-                      eventDrivenSnapshotEnabled={reducedNotificationPollingPilot}
+                      eventDrivenSnapshotEnabled={
+                        mapleImmediateRealtimePilot ||
+                        reducedNotificationPollingPilot
+                      }
+                      webSocketTransportEnabled={
+                        reducedNotificationPollingPilot &&
+                        !mapleImmediateRealtimePilot
+                      }
                       fallbackPollIntervalMs={notificationFallbackPollIntervalMs}
                       reliableNoticeSoundEnabled={reliableNoticeSoundEnabled}
                       reliableRequestEventRecoveryEnabled={
