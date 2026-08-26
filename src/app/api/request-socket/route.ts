@@ -19,7 +19,10 @@ import { canUserAccessChargeRequest } from "@/lib/charge-requests-repository";
 import { hasDatabaseUrl } from "@/lib/db";
 import { canUserAccessDistributorWithdrawal } from "@/lib/distributor-withdrawals-repository";
 import { canUserAccessDomainExchange } from "@/lib/domain-exchanges-repository";
-import { isReducedNotificationPollingPilot } from "@/lib/realtime-sync-pilot";
+import {
+  isMapleWebSocketPilot,
+  isReducedNotificationPollingPilot,
+} from "@/lib/realtime-sync-pilot";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,7 +83,10 @@ export async function GET(request: Request) {
     return Response.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
 
-  if (!isReducedNotificationPollingPilot(user)) {
+  if (
+    !isMapleWebSocketPilot(user) &&
+    !isReducedNotificationPollingPilot(user)
+  ) {
     return Response.json(
       { message: "웹소켓 테스트 대상 계정이 아닙니다." },
       { status: 403 },

@@ -124,6 +124,7 @@ type GlobalRequestNotifierProps = {
   realtimeEventsPath?: string;
   eventDrivenSnapshotEnabled?: boolean;
   webSocketTransportEnabled?: boolean;
+  periodicFallbackSyncEnabled?: boolean;
   fallbackPollIntervalMs?: number;
   reliableNoticeSoundEnabled?: boolean;
   reliableRequestEventRecoveryEnabled?: boolean;
@@ -135,6 +136,7 @@ export function GlobalRequestNotifier({
   realtimeEventsPath = "/api/request-events",
   eventDrivenSnapshotEnabled = false,
   webSocketTransportEnabled = false,
+  periodicFallbackSyncEnabled = true,
   fallbackPollIntervalMs = defaultPollIntervalMs,
   reliableNoticeSoundEnabled = false,
   reliableRequestEventRecoveryEnabled = false,
@@ -665,7 +667,13 @@ export function GlobalRequestNotifier({
         }
       }
 
-      void runFallbackSync();
+      if (periodicFallbackSyncEnabled) {
+        void runFallbackSync();
+      } else {
+        // WebSocket-only pilots use one initial snapshot. After that, a
+        // snapshot is requested only when the socket reconnects and is ready.
+        void syncRequests();
+      }
 
       return () => {
         isCancelled = true;
@@ -714,6 +722,7 @@ export function GlobalRequestNotifier({
     ensureAudio,
     eventDrivenSnapshotEnabled,
     fallbackPollIntervalMs,
+    periodicFallbackSyncEnabled,
     persistKnownPendingIds,
     realtimeEventsEnabled,
     realtimeEventsPath,

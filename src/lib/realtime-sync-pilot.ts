@@ -14,6 +14,12 @@ export function isMapleImmediateRealtimePilot(
   return isMaplePilotUser(user);
 }
 
+export function isMapleWebSocketPilot(
+  user: Pick<SessionUser, "loginId">,
+) {
+  return isMaplePilotUser(user);
+}
+
 export function isRealtimeSyncPilot(user: Pick<SessionUser, "loginId">) {
   void user;
   return true;

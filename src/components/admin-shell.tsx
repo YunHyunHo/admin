@@ -11,6 +11,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import {
   getNotificationFallbackPollIntervalMs,
   isMapleImmediateRealtimePilot,
+  isMapleWebSocketPilot,
   isReliableNoticeSoundEnabled,
   isReliableRequestEventRecoveryEnabled,
   isRealtimeSyncPilot,
@@ -209,6 +210,7 @@ export async function AdminShell({
   const visibleQuickActions = isSettlementOnlyUser ? [] : quickActions;
   const realtimeEventsEnabled = isRealtimeSyncPilot(user);
   const mapleImmediateRealtimePilot = isMapleImmediateRealtimePilot(user);
+  const mapleWebSocketPilot = isMapleWebSocketPilot(user);
   const reducedNotificationPollingPilot =
     isReducedNotificationPollingPilot(user);
   const reliableNoticeSoundEnabled = isReliableNoticeSoundEnabled(user);
@@ -382,9 +384,11 @@ export async function AdminShell({
                         reducedNotificationPollingPilot
                       }
                       webSocketTransportEnabled={
-                        reducedNotificationPollingPilot &&
-                        !mapleImmediateRealtimePilot
+                        mapleWebSocketPilot ||
+                        (reducedNotificationPollingPilot &&
+                          !mapleImmediateRealtimePilot)
                       }
+                      periodicFallbackSyncEnabled={!mapleWebSocketPilot}
                       fallbackPollIntervalMs={notificationFallbackPollIntervalMs}
                       reliableNoticeSoundEnabled={reliableNoticeSoundEnabled}
                       reliableRequestEventRecoveryEnabled={
