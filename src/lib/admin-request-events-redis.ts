@@ -3,6 +3,7 @@ import Redis from "ioredis";
 import type { StoredAdminRequestEvent } from "@/lib/admin-request-events";
 
 export const adminRequestEventsRedisStream = "admin:request-events:v1";
+export const adminRequestEventsRedisChannel = "admin:request-events:pubsub:v1";
 
 function getRedisUrl() {
   return process.env.REDIS_URL?.trim() ?? "";
@@ -39,15 +40,21 @@ export async function appendAdminRequestEventToRedis(
 
   try {
     await redis.connect();
-    await redis.xadd(
-      adminRequestEventsRedisStream,
-      "MAXLEN",
-      "~",
-      10000,
-      "*",
-      "event",
-      JSON.stringify(event),
-    );
+    const payload = JSON.stringify(event);
+
+    await redis
+      .multi()
+      .xadd(
+        adminRequestEventsRedisStream,
+        "MAXLEN",
+        "~",
+        10000,
+        "*",
+        "event",
+        payload,
+      )
+      .publish(adminRequestEventsRedisChannel, payload)
+      .exec();
   } finally {
     redis.disconnect();
   }

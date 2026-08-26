@@ -10,7 +10,7 @@ import {
   type AdminRequestEvent,
 } from "@/lib/admin-request-events";
 import {
-  adminRequestEventsRedisStream,
+  adminRequestEventsRedisChannel,
   createAdminRequestEventsRedis,
   hasAdminRequestEventsRedis,
 } from "@/lib/admin-request-events-redis";
@@ -180,45 +180,34 @@ export async function GET(request: Request) {
         loginId: user.loginId,
       });
 
-      void (async () => {
-        let redisCursor = "$";
-
-        while (!closed) {
-          const streams = await redis.xread(
-            "BLOCK",
-            0,
-            "STREAMS",
-            adminRequestEventsRedisStream,
-            redisCursor,
-          );
-
-          for (const [, entries] of streams ?? []) {
-            for (const [streamId, fields] of entries) {
-              redisCursor = streamId;
-              const eventIndex = fields.indexOf("event");
-              const event = parseAdminRequestEvent(
-                eventIndex >= 0 ? fields[eventIndex + 1] : undefined,
-              );
-
-              if (event) {
-                if (replaying) {
-                  bufferedEvents.push(event);
-                } else {
-                  enqueueEvent(event);
-                }
-              }
-            }
-          }
+      redis.on("message", (channel, payload) => {
+        if (channel !== adminRequestEventsRedisChannel || closed) {
+          return;
         }
-      })().catch(() => {
+
+        const event = parseAdminRequestEvent(payload);
+
+        if (!event) {
+          return;
+        }
+
+        if (replaying) {
+          bufferedEvents.push(event);
+        } else {
+          enqueueEvent(event);
+        }
+      });
+      redis.on("error", () => {
         if (!closed) {
-          console.error("[request-socket] Redis read failed", {
+          console.error("[request-socket] Redis subscription failed", {
             loginId: user.loginId,
           });
           sendJson(ws, { type: "error", message: "Redis 실시간 연결이 끊겼습니다." });
           ws.close(1011, "redis realtime connection failed");
         }
       });
+
+      await redis.subscribe(adminRequestEventsRedisChannel);
 
       if (reconnectCursor) {
         let cursor = reconnectCursor;
