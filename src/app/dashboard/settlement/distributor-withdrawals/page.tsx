@@ -13,7 +13,10 @@ import {
 } from "@/lib/distributor-withdrawals-repository";
 import { isPerformancePilotUser } from "@/lib/performance-pilot";
 import { canManageMasterResources } from "@/lib/permissions";
-import { getRequestBoardFallbackRefreshIntervalMs } from "@/lib/realtime-sync-pilot";
+import {
+  getRequestBoardFallbackRefreshIntervalMs,
+  isMapleWebSocketPilot,
+} from "@/lib/realtime-sync-pilot";
 
 
 export default async function DistributorWithdrawalsPage() {
@@ -46,6 +49,7 @@ export default async function DistributorWithdrawalsPage() {
         availableBalance={availableBalance}
         serverPagingEnabled={serverPagingEnabled}
         fallbackRefreshIntervalMs={getRequestBoardFallbackRefreshIntervalMs(user)}
+        fallbackRefreshEnabled={!isMapleWebSocketPilot(user)}
         initialPageData={Array.isArray(withdrawalData) ? undefined : withdrawalData}
       />
     </AdminShell>

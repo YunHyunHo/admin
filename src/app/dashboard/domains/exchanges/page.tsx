@@ -16,6 +16,7 @@ import { isPerformancePilotUser } from "@/lib/performance-pilot";
 import { canManageMasterResources } from "@/lib/permissions";
 import {
   getRequestBoardFallbackRefreshIntervalMs,
+  isMapleWebSocketPilot,
   isRealtimeSyncPilot,
 } from "@/lib/realtime-sync-pilot";
 import { getServerSyncCursor } from "@/lib/db";
@@ -67,6 +68,7 @@ export default async function DomainExchangesPage() {
         initialSyncCursor={initialSyncCursor}
         serverPagingEnabled={serverPagingEnabled}
         fallbackRefreshIntervalMs={getRequestBoardFallbackRefreshIntervalMs(user)}
+        fallbackRefreshEnabled={!isMapleWebSocketPilot(user)}
         initialPageData={Array.isArray(exchangeData) ? undefined : exchangeData}
       />
     </AdminShell>

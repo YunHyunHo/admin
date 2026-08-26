@@ -6,6 +6,9 @@ import { useNotificationSoundVolume } from "@/lib/notification-sound-volume";
 
 const noticeSoundPath = "/sounds/notice.mp3";
 const defaultPollIntervalMs = 1000;
+const defaultDisconnectedFallbackPollIntervalMs = 10_000;
+const webSocketReadyTimeoutMs = 8_000;
+const webSocketRecycleIntervalMs = 12 * 60_000;
 const noticeSoundReadyKey = "winpay-notice-sound-ready";
 const pendingNoticeSnapshotKey = "winpay-pending-notice-snapshot";
 const noticeRetryDelayMs = 1200;
@@ -125,6 +128,7 @@ type GlobalRequestNotifierProps = {
   eventDrivenSnapshotEnabled?: boolean;
   webSocketTransportEnabled?: boolean;
   periodicFallbackSyncEnabled?: boolean;
+  disconnectedFallbackPollIntervalMs?: number;
   fallbackPollIntervalMs?: number;
   reliableNoticeSoundEnabled?: boolean;
   reliableRequestEventRecoveryEnabled?: boolean;
@@ -137,6 +141,7 @@ export function GlobalRequestNotifier({
   eventDrivenSnapshotEnabled = false,
   webSocketTransportEnabled = false,
   periodicFallbackSyncEnabled = true,
+  disconnectedFallbackPollIntervalMs = defaultDisconnectedFallbackPollIntervalMs,
   fallbackPollIntervalMs = defaultPollIntervalMs,
   reliableNoticeSoundEnabled = false,
   reliableRequestEventRecoveryEnabled = false,
@@ -431,9 +436,39 @@ export function GlobalRequestNotifier({
       let isCancelled = false;
       let timeoutId: number | null = null;
       let socketRetryTimeoutId: number | null = null;
+      let socketReadyTimeoutId: number | null = null;
+      let socketRecycleTimeoutId: number | null = null;
+      let disconnectedFallbackTimeoutId: number | null = null;
       let socketRetryDelayMs = 500;
+      let isSocketReady = false;
       let webSocket: WebSocket | null = null;
       let eventSource: EventSource | null = null;
+
+      const clearSocketTimer = (timerId: number | null) => {
+        if (timerId !== null) {
+          window.clearTimeout(timerId);
+        }
+      };
+
+      const scheduleDisconnectedFallbackSync = () => {
+        clearSocketTimer(disconnectedFallbackTimeoutId);
+        disconnectedFallbackTimeoutId = null;
+
+        if (
+          isCancelled ||
+          isSocketReady ||
+          periodicFallbackSyncEnabled ||
+          !webSocketTransportEnabled
+        ) {
+          return;
+        }
+
+        disconnectedFallbackTimeoutId = window.setTimeout(async () => {
+          disconnectedFallbackTimeoutId = null;
+          await syncRequests();
+          scheduleDisconnectedFallbackSync();
+        }, disconnectedFallbackPollIntervalMs);
+      };
 
       const handleReady = () => {
         void syncRequests();
@@ -556,6 +591,12 @@ export function GlobalRequestNotifier({
             return;
           }
 
+          if (webSocket) {
+            webSocket.onclose = null;
+            webSocket.close(1000, "replaced connection");
+            webSocket = null;
+          }
+
           const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
           const socketUrl = new URL("/api/request-socket", window.location.href);
           socketUrl.protocol = protocol;
@@ -572,7 +613,22 @@ export function GlobalRequestNotifier({
 
           socket.onopen = () => {
             socketRetryDelayMs = 500;
+            isSocketReady = false;
             setNoticeMessage("실시간 연결 준비중");
+
+            clearSocketTimer(socketReadyTimeoutId);
+            socketReadyTimeoutId = window.setTimeout(() => {
+              if (webSocket === socket && !isSocketReady) {
+                socket.close(1013, "ready timeout");
+              }
+            }, webSocketReadyTimeoutMs);
+
+            clearSocketTimer(socketRecycleTimeoutId);
+            socketRecycleTimeoutId = window.setTimeout(() => {
+              if (webSocket === socket) {
+                socket.close(1000, "scheduled reconnect");
+              }
+            }, webSocketRecycleIntervalMs);
           };
           socket.onmessage = (message) => {
             try {
@@ -589,6 +645,11 @@ export function GlobalRequestNotifier({
               };
 
               if (payload.type === "ready") {
+                clearSocketTimer(socketReadyTimeoutId);
+                socketReadyTimeoutId = null;
+                clearSocketTimer(disconnectedFallbackTimeoutId);
+                disconnectedFallbackTimeoutId = null;
+                isSocketReady = true;
                 if (payload.cursor) {
                   lastRealtimeEventIdRef.current = payload.cursor;
                 }
@@ -604,6 +665,7 @@ export function GlobalRequestNotifier({
             }
           };
           socket.onerror = () => {
+            isSocketReady = false;
             setNoticeMessage("실시간 재연결 중");
           };
           socket.onclose = () => {
@@ -615,7 +677,13 @@ export function GlobalRequestNotifier({
               return;
             }
 
+            clearSocketTimer(socketReadyTimeoutId);
+            socketReadyTimeoutId = null;
+            clearSocketTimer(socketRecycleTimeoutId);
+            socketRecycleTimeoutId = null;
+            isSocketReady = false;
             setNoticeMessage("실시간 재연결 중");
+            scheduleDisconnectedFallbackSync();
             socketRetryTimeoutId = window.setTimeout(() => {
               socketRetryTimeoutId = null;
               connectWebSocket();
@@ -671,8 +739,9 @@ export function GlobalRequestNotifier({
         void runFallbackSync();
       } else {
         // WebSocket-only pilots use one initial snapshot. After that, a
-        // snapshot is requested only when the socket reconnects and is ready.
-        void syncRequests();
+        // snapshot is requested on reconnect, or every 10 seconds only while
+        // the socket is unavailable.
+        void syncRequests().finally(scheduleDisconnectedFallbackSync);
       }
 
       return () => {
@@ -683,6 +752,9 @@ export function GlobalRequestNotifier({
         if (socketRetryTimeoutId !== null) {
           window.clearTimeout(socketRetryTimeoutId);
         }
+        clearSocketTimer(socketReadyTimeoutId);
+        clearSocketTimer(socketRecycleTimeoutId);
+        clearSocketTimer(disconnectedFallbackTimeoutId);
         webSocket?.close(1000, "page closed");
         eventSource?.close();
         clearNoticeRetry();
@@ -723,6 +795,7 @@ export function GlobalRequestNotifier({
     eventDrivenSnapshotEnabled,
     fallbackPollIntervalMs,
     periodicFallbackSyncEnabled,
+    disconnectedFallbackPollIntervalMs,
     persistKnownPendingIds,
     realtimeEventsEnabled,
     realtimeEventsPath,

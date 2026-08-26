@@ -4,7 +4,6 @@ import {
 } from "@vercel/functions";
 import {
   ensureAdminRequestEventsSchema,
-  getAdminRequestEventsAfter,
   getLatestAdminRequestEventId,
   parseAdminRequestEvent,
   type AdminRequestEvent,
@@ -26,10 +25,10 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 300;
+export const maxDuration = 800;
 
-const replayPageSize = 500;
 const heartbeatIntervalMs = 20000;
+const cursorLookupTimeoutMs = 5000;
 
 function normalizeEventId(value: string | null) {
   const normalized = value?.trim() ?? "";
@@ -64,6 +63,15 @@ function sendJson(ws: WebSocket, payload: unknown) {
   if (ws.readyState === 1) {
     ws.send(JSON.stringify(payload));
   }
+}
+
+async function getConnectionCursor(fallbackCursor: string | null) {
+  return Promise.race([
+    getLatestAdminRequestEventId(),
+    new Promise<string>((resolve) => {
+      setTimeout(() => resolve(fallbackCursor ?? "0"), cursorLookupTimeoutMs);
+    }),
+  ]);
 }
 
 export async function GET(request: Request) {
@@ -209,24 +217,10 @@ export async function GET(request: Request) {
 
       await redis.subscribe(adminRequestEventsRedisChannel);
 
-      if (reconnectCursor) {
-        let cursor = reconnectCursor;
-
-        while (!closed) {
-          const missedEvents = await getAdminRequestEventsAfter(cursor);
-
-          for (const event of missedEvents) {
-            enqueueEvent(event, true);
-            cursor = event.eventId;
-          }
-
-          if (missedEvents.length < replayPageSize) {
-            break;
-          }
-        }
-      } else {
-        lastDeliveredEventId = await getLatestAdminRequestEventId();
-      }
+      // Reconnect recovery is done with one authoritative pending snapshot on
+      // the client. Avoid replaying every historical event (and one access DB
+      // query per event) before the socket can become ready.
+      lastDeliveredEventId = await getConnectionCursor(reconnectCursor);
 
       const eventsReceivedDuringReplay = bufferedEvents.sort((left, right) => {
         if (!left.eventId || !right.eventId) {
@@ -242,16 +236,19 @@ export async function GET(request: Request) {
       bufferedEvents = [];
       replaying = false;
 
-      for (const event of eventsReceivedDuringReplay) {
-        enqueueEvent(event);
-      }
-
-      await deliveryQueue;
       sendJson(ws, {
         type: "ready",
         cursor: lastDeliveredEventId,
         replayed: Boolean(reconnectCursor),
       });
+      console.info("[request-socket] Ready", {
+        loginId: user.loginId,
+        cursor: lastDeliveredEventId,
+      });
+
+      for (const event of eventsReceivedDuringReplay) {
+        enqueueEvent(event);
+      }
 
       heartbeatId = setInterval(() => {
         if (ws.readyState === 1) {
