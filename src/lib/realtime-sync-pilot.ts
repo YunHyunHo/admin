@@ -17,6 +17,13 @@ export function isMapleImmediateRealtimePilot(
 export function isMapleWebSocketPilot(
   user: Pick<SessionUser, "loginId">,
 ) {
+  void user;
+  return false;
+}
+
+export function isMapleSseNoPollingPilot(
+  user: Pick<SessionUser, "loginId">,
+) {
   return isMaplePilotUser(user);
 }
 

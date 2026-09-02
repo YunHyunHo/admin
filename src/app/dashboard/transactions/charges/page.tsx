@@ -14,7 +14,7 @@ import { isPerformancePilotUser } from "@/lib/performance-pilot";
 import { canProcessRequests } from "@/lib/permissions";
 import {
   getRequestBoardFallbackRefreshIntervalMs,
-  isMapleWebSocketPilot,
+  isMapleSseNoPollingPilot,
   isRealtimeSyncPilot,
 } from "@/lib/realtime-sync-pilot";
 
@@ -100,7 +100,7 @@ export default async function ChargesPage() {
         initialSyncCursor={initialSyncCursor}
         serverHistoryEnabled={serverHistoryEnabled}
         fallbackRefreshIntervalMs={getRequestBoardFallbackRefreshIntervalMs(user)}
-        fallbackRefreshEnabled={!isMapleWebSocketPilot(user)}
+        fallbackRefreshEnabled={!isMapleSseNoPollingPilot(user)}
         initialApprovedHistoryPage={
           hasPilotHistoryPages(companyRequests)
             ? companyRequests.approvedPage

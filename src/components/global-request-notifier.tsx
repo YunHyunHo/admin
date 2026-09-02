@@ -457,8 +457,7 @@ export function GlobalRequestNotifier({
         if (
           isCancelled ||
           isSocketReady ||
-          periodicFallbackSyncEnabled ||
-          !webSocketTransportEnabled
+          periodicFallbackSyncEnabled
         ) {
           return;
         }
@@ -696,6 +695,10 @@ export function GlobalRequestNotifier({
       } else if ("EventSource" in window) {
         eventSource = new EventSource(realtimeEventsPath);
         const handleEventSourceReady = (event: MessageEvent<string>) => {
+          isSocketReady = true;
+          clearSocketTimer(disconnectedFallbackTimeoutId);
+          disconnectedFallbackTimeoutId = null;
+
           if (event.lastEventId) {
             lastRealtimeEventIdRef.current = event.lastEventId;
           }
@@ -713,11 +716,14 @@ export function GlobalRequestNotifier({
           void syncRequests();
         });
         eventSource.onerror = () => {
+          isSocketReady = false;
           setNoticeMessage("실시간 재연결 중");
 
           if (reliableRequestEventRecoveryEnabled) {
             void syncRequests();
           }
+
+          scheduleDisconnectedFallbackSync();
         };
       }
 
@@ -738,9 +744,8 @@ export function GlobalRequestNotifier({
       if (periodicFallbackSyncEnabled) {
         void runFallbackSync();
       } else {
-        // WebSocket-only pilots use one initial snapshot. After that, a
-        // snapshot is requested on reconnect, or every 10 seconds only while
-        // the socket is unavailable.
+        // Event-driven pilots use one initial authoritative snapshot. After
+        // that, polling runs only while SSE/WebSocket is unavailable.
         void syncRequests().finally(scheduleDisconnectedFallbackSync);
       }
 

@@ -18,6 +18,7 @@ import { canUserAccessDomainExchange } from "@/lib/domain-exchanges-repository";
 import {
   isReducedNotificationPollingPilot,
   isMapleImmediateRealtimePilot,
+  isMapleSseNoPollingPilot,
   isReliableRequestEventRecoveryEnabled,
 } from "@/lib/realtime-sync-pilot";
 import {
@@ -238,6 +239,7 @@ export async function GET(request: Request) {
 
   if (
     isMapleImmediateRealtimePilot(user) &&
+    !isMapleSseNoPollingPilot(user) &&
     hasAdminRequestEventsRedis()
   ) {
     const mapleStream = await createMapleRedisEventStream(request, user);
