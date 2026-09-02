@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import type { Notification } from "pg";
 
 import { getSessionUser, type SessionUser } from "@/lib/auth";
@@ -228,6 +229,29 @@ export async function GET(request: Request) {
     identity: getAdminRequestUsageIdentity(user),
   });
 
+  const maplePreviewDebug =
+    isMapleSseNoPollingPilot(user) && process.env.VERCEL_ENV === "preview";
+  const connectionId = maplePreviewDebug ? randomUUID() : null;
+  const debugLog = (stage: string, detail: Record<string, unknown> = {}) => {
+    if (!maplePreviewDebug) {
+      return;
+    }
+
+    console.info("[maple-sse-debug]", {
+      stage,
+      connectionId,
+      loginId: user.loginId,
+      role: user.role,
+      ...detail,
+    });
+  };
+
+  debugLog("connection-authenticated", {
+    host: request.headers.get("host"),
+    origin: request.headers.get("origin"),
+    hasCookie: Boolean(request.headers.get("cookie")),
+  });
+
   if (!hasDatabaseUrl()) {
     return NextResponse.json(
       { message: "DB 연결 환경에서만 실시간 이벤트를 사용할 수 있습니다." },
@@ -260,6 +284,7 @@ export async function GET(request: Request) {
 
   try {
     await client.query(`listen ${adminRequestEventsChannel}`);
+    debugLog("listen-ready", { channel: adminRequestEventsChannel });
   } catch (error) {
     client.release();
 
@@ -285,6 +310,7 @@ export async function GET(request: Request) {
     }
 
     isClosed = true;
+    debugLog("connection-close");
 
     if (heartbeatId) {
       clearInterval(heartbeatId);
@@ -336,8 +362,27 @@ export async function GET(request: Request) {
               return;
             }
 
-            if (await canUserAccessEvent(user, event)) {
+            const canAccess = await canUserAccessEvent(user, event);
+            debugLog("permission-checked", {
+              eventId: event.eventId,
+              kind: event.kind,
+              requestId: event.requestId,
+              canAccess,
+              replayed,
+            });
+
+            if (canAccess) {
+              debugLog("event-write-start", {
+                eventId: event.eventId,
+                kind: event.kind,
+                requestId: event.requestId,
+              });
               send("request-event", { ...event, replayed }, event.eventId);
+              debugLog("event-write-complete", {
+                eventId: event.eventId,
+                kind: event.kind,
+                requestId: event.requestId,
+              });
             }
 
             if (event.eventId) {
@@ -355,8 +400,15 @@ export async function GET(request: Request) {
         const event = parseAdminRequestEvent(notification.payload);
 
         if (!event) {
+          debugLog("notification-invalid");
           return;
         }
+
+        debugLog("notification-received", {
+          eventId: event.eventId,
+          kind: event.kind,
+          requestId: event.requestId,
+        });
 
         if (isReplaying && event.eventId) {
           queuedNotifications.push(event as StoredAdminRequestEvent);
@@ -422,6 +474,10 @@ export async function GET(request: Request) {
             replayed: Boolean(reconnectCursor),
             cursor: lastDeliveredEventId,
           }, lastDeliveredEventId ?? undefined);
+          debugLog("ready-write-complete", {
+            cursor: lastDeliveredEventId,
+            replayed: Boolean(reconnectCursor),
+          });
         }
       })();
     },

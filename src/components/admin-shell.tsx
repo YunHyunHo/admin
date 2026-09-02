@@ -398,6 +398,10 @@ export async function AdminShell({
                       reliableRequestEventRecoveryEnabled={
                         reliableRequestEventRecoveryEnabled
                       }
+                      debugRealtimeEvents={
+                        mapleSseNoPollingPilot &&
+                        process.env.VERCEL_ENV === "preview"
+                      }
                       noticeScopeKey={user.loginId}
                     />
                   <DashboardSummaryToggle />

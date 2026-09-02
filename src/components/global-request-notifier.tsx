@@ -132,6 +132,7 @@ type GlobalRequestNotifierProps = {
   fallbackPollIntervalMs?: number;
   reliableNoticeSoundEnabled?: boolean;
   reliableRequestEventRecoveryEnabled?: boolean;
+  debugRealtimeEvents?: boolean;
   noticeScopeKey?: string;
 };
 
@@ -145,6 +146,7 @@ export function GlobalRequestNotifier({
   fallbackPollIntervalMs = defaultPollIntervalMs,
   reliableNoticeSoundEnabled = false,
   reliableRequestEventRecoveryEnabled = false,
+  debugRealtimeEvents = false,
   noticeScopeKey,
 }: GlobalRequestNotifierProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -163,6 +165,7 @@ export function GlobalRequestNotifier({
       ? "알림음 켜기"
       : "알림 대기중",
   );
+  const [realtimeDebugStage, setRealtimeDebugStage] = useState("idle");
 
   const pendingSnapshotStorageKey = reliableNoticeSoundEnabled
     ? `${pendingNoticeSnapshotKey}:${noticeScopeKey ?? "default"}`
@@ -483,6 +486,16 @@ export function GlobalRequestNotifier({
           };
           const eventId = detail.eventId ?? lastEventId;
 
+          if (debugRealtimeEvents) {
+            console.info("[maple-sse-debug] browser-event-received", {
+              eventId,
+              kind: detail.kind,
+              requestId: detail.requestId,
+              status: detail.status,
+            });
+            setRealtimeDebugStage(`received:${eventId || "unknown"}`);
+          }
+
           if (
             eventId &&
             lastRealtimeEventIdRef.current &&
@@ -575,6 +588,15 @@ export function GlobalRequestNotifier({
               detail,
             }),
           );
+
+          if (debugRealtimeEvents) {
+            console.info("[maple-sse-debug] browser-ui-events-dispatched", {
+              eventId,
+              kind: detail.kind,
+              requestId: detail.requestId,
+            });
+            setRealtimeDebugStage(`ui-updated:${eventId || "unknown"}`);
+          }
         } catch {
           // Ignore malformed realtime payloads and rely on the next refresh.
         }
@@ -693,6 +715,12 @@ export function GlobalRequestNotifier({
 
         connectWebSocket();
       } else if ("EventSource" in window) {
+        if (debugRealtimeEvents) {
+          console.info("[maple-sse-debug] browser-event-source-connecting", {
+            path: realtimeEventsPath,
+          });
+        }
+
         eventSource = new EventSource(realtimeEventsPath);
         const handleEventSourceReady = (event: MessageEvent<string>) => {
           isSocketReady = true;
@@ -701,6 +729,13 @@ export function GlobalRequestNotifier({
 
           if (event.lastEventId) {
             lastRealtimeEventIdRef.current = event.lastEventId;
+          }
+
+          if (debugRealtimeEvents) {
+            console.info("[maple-sse-debug] browser-event-source-ready", {
+              lastEventId: event.lastEventId,
+            });
+            setRealtimeDebugStage(`ready:${event.lastEventId || "none"}`);
           }
 
           handleReady();
@@ -718,6 +753,11 @@ export function GlobalRequestNotifier({
         eventSource.onerror = () => {
           isSocketReady = false;
           setNoticeMessage("실시간 재연결 중");
+
+          if (debugRealtimeEvents) {
+            console.info("[maple-sse-debug] browser-event-source-error");
+            setRealtimeDebugStage("error");
+          }
 
           if (reliableRequestEventRecoveryEnabled) {
             void syncRequests();
@@ -806,10 +846,17 @@ export function GlobalRequestNotifier({
     realtimeEventsPath,
     reliableRequestEventRecoveryEnabled,
     reliableNoticeSoundEnabled,
+    debugRealtimeEvents,
     webSocketTransportEnabled,
     playNoticeSoundWithRetry,
     syncRequests,
   ]);
+
+  const realtimeDebugOutput = debugRealtimeEvents ? (
+    <output className="sr-only" aria-label="Maple 실시간 진단 상태">
+      {realtimeDebugStage}
+    </output>
+  ) : null;
 
   useEffect(() => {
     function handleRefreshRequest() {
@@ -874,6 +921,7 @@ export function GlobalRequestNotifier({
 
   return (
     <div className="hidden items-center gap-2 sm:flex">
+      {realtimeDebugOutput}
       <button
         type="button"
         onClick={activateNoticeSound}
