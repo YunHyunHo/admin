@@ -5,7 +5,7 @@ import {
   type PendingRequest,
   type ProcessedRequest,
 } from "@/lib/charge-utils";
-import { publishAdminRequestEventWithQuery } from "@/lib/admin-request-events";
+import { publishAdminRequestEvent } from "@/lib/admin-request-events";
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
 import { ensureDomainChargeIntegrationSchema } from "@/lib/domain-charge-integration";
 import { ensureFeeRateSchema } from "@/lib/fee-rate-schema";
@@ -1097,70 +1097,72 @@ async function insertChargeRequest(input: CreateChargeRequestInput & {
   const accountNumber = inputAccountNumber ?? linkedAccount?.account_number ?? null;
   const accountHolder = inputAccountHolder ?? linkedAccount?.account_holder ?? null;
 
-  const result = await query<{ id: string }>(
-    `
-      insert into charge_requests (
-        external_id,
-        company_id,
-        domain_id,
-        distributor_id,
-        user_uid,
-        bank_name,
-        account_number,
-        account_holder,
-        depositor,
-        amount,
-        status,
-        requested_at,
-        raw_payload
-      )
-      values (
-        $1,
-        $2::uuid,
-        $3::uuid,
-        $4::uuid,
-        $5,
-        $6,
-        $7,
-        $8,
-        $9,
-        $10,
-        'PENDING',
-        now(),
-        $11::jsonb
-      )
-      returning id::text
-    `,
-    [
-      input.externalId ?? null,
-      input.companyId,
-      input.domainId,
-      input.distributorId,
-      input.userId,
-      bankName,
-      accountNumber,
-      accountHolder,
-      input.depositor ?? null,
-      input.amount,
-      JSON.stringify(input.rawPayload ?? input),
-    ],
-  );
+  return withTransaction(async (client) => {
+    const result = await client.query<{ id: string }>(
+      `
+        insert into charge_requests (
+          external_id,
+          company_id,
+          domain_id,
+          distributor_id,
+          user_uid,
+          bank_name,
+          account_number,
+          account_holder,
+          depositor,
+          amount,
+          status,
+          requested_at,
+          raw_payload
+        )
+        values (
+          $1,
+          $2::uuid,
+          $3::uuid,
+          $4::uuid,
+          $5,
+          $6,
+          $7,
+          $8,
+          $9,
+          $10,
+          'PENDING',
+          now(),
+          $11::jsonb
+        )
+        returning id::text
+      `,
+      [
+        input.externalId ?? null,
+        input.companyId,
+        input.domainId,
+        input.distributorId,
+        input.userId,
+        bankName,
+        accountNumber,
+        accountHolder,
+        input.depositor ?? null,
+        input.amount,
+        JSON.stringify(input.rawPayload ?? input),
+      ],
+    );
 
-  const requestId = result.rows[0]?.id;
+    const requestId = result.rows[0]?.id;
 
-  if (requestId) {
-    await publishAdminRequestEventWithQuery({
-      kind: "charge",
-      requestId,
-      companyId: input.companyId,
-      domainId: input.domainId,
-      distributorId: input.distributorId,
-      status: "PENDING",
-      occurredAt: new Date().toISOString(),
-    });
-  }
+    if (requestId) {
+      await publishAdminRequestEvent(client, {
+        kind: "charge",
+        requestId,
+        companyId: input.companyId,
+        domainId: input.domainId,
+        distributorId: input.distributorId,
+        status: "PENDING",
+        occurredAt: new Date().toISOString(),
+      });
+    }
 
-  return requestId;
+    return requestId;
+  });
 }
 
 export async function createDbChargeRequest(input: CreateChargeRequestInput & { user: SessionUser }) {

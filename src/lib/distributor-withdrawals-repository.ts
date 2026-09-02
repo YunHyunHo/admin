@@ -426,58 +426,60 @@ export async function createDistributorWithdrawal(input: CreateDistributorWithdr
     throw new Error("보유액보다 큰 금액은 신청할 수 없습니다.");
   }
 
-  const result = await query<{ id: string }>(
-    `
-      insert into distributor_withdrawals (
-        distributor_id,
-        request_amount,
-        before_balance,
-        after_balance,
-        bank_name,
-        account_number,
-        account_holder,
-        status,
-        requested_at
-      )
-      values (
-        $1::uuid,
-        $2,
-        $3,
-        $4,
-        $5,
-        $6,
-        $7,
-        'PENDING',
-        now()
-      )
-      returning id::text
-    `,
-    [
-      distributorScope.distributor_id,
-      input.amount,
-      beforeBalance,
-      afterBalance,
-      input.bankName,
-      input.accountNumber,
-      input.accountHolder,
-    ],
-  );
+  return withTransaction(async (client) => {
+    const result = await client.query<{ id: string }>(
+      `
+        insert into distributor_withdrawals (
+          distributor_id,
+          request_amount,
+          before_balance,
+          after_balance,
+          bank_name,
+          account_number,
+          account_holder,
+          status,
+          requested_at
+        )
+        values (
+          $1::uuid,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          'PENDING',
+          now()
+        )
+        returning id::text
+      `,
+      [
+        distributorScope.distributor_id,
+        input.amount,
+        beforeBalance,
+        afterBalance,
+        input.bankName,
+        input.accountNumber,
+        input.accountHolder,
+      ],
+    );
 
-  const requestId = result.rows[0]?.id;
+    const requestId = result.rows[0]?.id;
 
-  if (requestId) {
-    await publishAdminRequestEventWithQuery({
-      kind: "distributor_withdrawal",
-      requestId,
-      companyId: distributorScope.company_id,
-      domainId: null,
-      distributorId: distributorScope.distributor_id,
-      status: "PENDING",
-      occurredAt: new Date().toISOString(),
-    });
-  }
+    if (requestId) {
+      await publishAdminRequestEvent(client, {
+        kind: "distributor_withdrawal",
+        requestId,
+        companyId: distributorScope.company_id,
+        domainId: null,
+        distributorId: distributorScope.distributor_id,
+        status: "PENDING",
+        occurredAt: new Date().toISOString(),
+      });
+    }
 
-  return requestId;
+    return requestId;
+  });
 }
 
 export async function approveDistributorWithdrawal(id: string, processedBy: SessionUser) {

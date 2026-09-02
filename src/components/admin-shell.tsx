@@ -17,6 +17,7 @@ import {
   isRealtimeSyncPilot,
   isReducedNotificationPollingPilot,
 } from "@/lib/realtime-sync-pilot";
+import { isMapleRealtimeGatewayConfigured } from "@/lib/realtime-server-config";
 
 const sideMenuGroups = [
   {
@@ -211,6 +212,8 @@ export async function AdminShell({
   const realtimeEventsEnabled = isRealtimeSyncPilot(user);
   const mapleImmediateRealtimePilot = isMapleImmediateRealtimePilot(user);
   const mapleWebSocketPilot = isMapleWebSocketPilot(user);
+  const mapleRealtimeGatewayConfigured =
+    isMapleRealtimeGatewayConfigured(user.loginId);
   const reducedNotificationPollingPilot =
     isReducedNotificationPollingPilot(user);
   const reliableNoticeSoundEnabled = isReliableNoticeSoundEnabled(user);
@@ -388,6 +391,7 @@ export async function AdminShell({
                         (reducedNotificationPollingPilot &&
                           !mapleImmediateRealtimePilot)
                       }
+                      realtimeGatewayEnabled={mapleRealtimeGatewayConfigured}
                       periodicFallbackSyncEnabled={!mapleWebSocketPilot}
                       fallbackPollIntervalMs={notificationFallbackPollIntervalMs}
                       reliableNoticeSoundEnabled={reliableNoticeSoundEnabled}

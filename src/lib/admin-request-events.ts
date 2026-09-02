@@ -5,6 +5,7 @@ import {
   runAfterTransactionCommit,
   withTransaction,
 } from "@/lib/db";
+import { scheduleRealtimeServerNotification } from "@/lib/realtime-server-notify";
 
 export const adminRequestEventsChannel = "admin_request_events";
 
@@ -93,6 +94,8 @@ async function persistAndPublishAdminRequestEvent(
   ]);
 
   runAfterTransactionCommit(executor, async () => {
+    scheduleRealtimeServerNotification(storedEvent.eventId);
+
     try {
       await appendAdminRequestEventToRedis(storedEvent);
     } catch (error) {

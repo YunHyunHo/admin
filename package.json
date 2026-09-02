@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "realtime:start": "node realtime-server/server.mjs",
     "lint": "eslint",
     "db:init": "node scripts/db-init.mjs",
     "db:migrate": "node scripts/db-migrate.mjs",
