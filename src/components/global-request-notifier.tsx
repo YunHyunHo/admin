@@ -14,6 +14,8 @@ const pendingNoticeSnapshotKey = "winpay-pending-notice-snapshot";
 const noticeRetryDelayMs = 1200;
 const maxNoticePlayAttempts = 3;
 const maxListSyncWaitMs = 2500;
+const realtimeClientInstanceKey = "winpay-realtime-client-instance";
+const realtimeCursorKey = "winpay-realtime-cursor";
 
 let reliableNoticeAudio: HTMLAudioElement | null = null;
 let reliableNoticeSoundReady = false;
@@ -127,6 +129,7 @@ type GlobalRequestNotifierProps = {
   realtimeEventsPath?: string;
   eventDrivenSnapshotEnabled?: boolean;
   webSocketTransportEnabled?: boolean;
+  externalWebSocketTransportEnabled?: boolean;
   periodicFallbackSyncEnabled?: boolean;
   disconnectedFallbackPollIntervalMs?: number;
   fallbackPollIntervalMs?: number;
@@ -141,6 +144,7 @@ export function GlobalRequestNotifier({
   realtimeEventsPath = "/api/request-events",
   eventDrivenSnapshotEnabled = false,
   webSocketTransportEnabled = false,
+  externalWebSocketTransportEnabled = false,
   periodicFallbackSyncEnabled = true,
   disconnectedFallbackPollIntervalMs = defaultDisconnectedFallbackPollIntervalMs,
   fallbackPollIntervalMs = defaultPollIntervalMs,
@@ -446,6 +450,33 @@ export function GlobalRequestNotifier({
       let isSocketReady = false;
       let webSocket: WebSocket | null = null;
       let eventSource: EventSource | null = null;
+      const scopedRealtimeCursorKey = `${realtimeCursorKey}:${noticeScopeKey ?? "default"}`;
+      let clientInstanceId = "";
+
+      try {
+        clientInstanceId =
+          window.sessionStorage.getItem(realtimeClientInstanceKey) ||
+          window.crypto.randomUUID();
+        window.sessionStorage.setItem(realtimeClientInstanceKey, clientInstanceId);
+        lastRealtimeEventIdRef.current =
+          window.sessionStorage.getItem(scopedRealtimeCursorKey);
+      } catch {
+        clientInstanceId = window.crypto.randomUUID();
+      }
+
+      const persistRealtimeCursor = (eventId: string | null | undefined) => {
+        if (!eventId) {
+          return;
+        }
+
+        lastRealtimeEventIdRef.current = eventId;
+
+        try {
+          window.sessionStorage.setItem(scopedRealtimeCursorKey, eventId);
+        } catch {
+          // Session storage can be unavailable in restricted browser modes.
+        }
+      };
 
       const clearSocketTimer = (timerId: number | null) => {
         if (timerId !== null) {
@@ -505,7 +536,7 @@ export function GlobalRequestNotifier({
           }
 
           if (eventId) {
-            lastRealtimeEventIdRef.current = eventId;
+            persistRealtimeCursor(eventId);
           }
 
           const prefix =
@@ -607,7 +638,7 @@ export function GlobalRequestNotifier({
       };
 
       if (eventDrivenSnapshotEnabled && webSocketTransportEnabled) {
-        const connectWebSocket = () => {
+        const connectWebSocket = async () => {
           if (isCancelled) {
             return;
           }
@@ -618,11 +649,43 @@ export function GlobalRequestNotifier({
             webSocket = null;
           }
 
-          const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-          const socketUrl = new URL("/api/request-socket", window.location.href);
-          socketUrl.protocol = protocol;
+          let socketUrl: URL;
+          let authToken: string | null = null;
 
-          if (lastRealtimeEventIdRef.current) {
+          if (externalWebSocketTransportEnabled) {
+            try {
+              const tokenResponse = await fetch(
+                `/api/realtime-token?clientInstanceId=${encodeURIComponent(clientInstanceId)}`,
+                { cache: "no-store" },
+              );
+              const tokenPayload = (await tokenResponse.json().catch(() => null)) as {
+                token?: string;
+                webSocketUrl?: string;
+              } | null;
+
+              if (!tokenResponse.ok || !tokenPayload?.token || !tokenPayload.webSocketUrl) {
+                throw new Error("Realtime token unavailable");
+              }
+
+              socketUrl = new URL(tokenPayload.webSocketUrl);
+              authToken = tokenPayload.token;
+            } catch {
+              setNoticeMessage("실시간 재연결 중");
+              scheduleDisconnectedFallbackSync();
+              socketRetryTimeoutId = window.setTimeout(() => {
+                socketRetryTimeoutId = null;
+                void connectWebSocket();
+              }, socketRetryDelayMs);
+              socketRetryDelayMs = Math.min(socketRetryDelayMs * 2, 5000);
+              return;
+            }
+          } else {
+            const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+            socketUrl = new URL("/api/request-socket", window.location.href);
+            socketUrl.protocol = protocol;
+          }
+
+          if (!externalWebSocketTransportEnabled && lastRealtimeEventIdRef.current) {
             socketUrl.searchParams.set(
               "cursor",
               lastRealtimeEventIdRef.current,
@@ -636,6 +699,15 @@ export function GlobalRequestNotifier({
             socketRetryDelayMs = 500;
             isSocketReady = false;
             setNoticeMessage("실시간 연결 준비중");
+
+            if (authToken) {
+              socket.send(JSON.stringify({
+                type: "auth",
+                token: authToken,
+                clientInstanceId,
+                lastProcessedEventId: lastRealtimeEventIdRef.current,
+              }));
+            }
 
             clearSocketTimer(socketReadyTimeoutId);
             socketReadyTimeoutId = window.setTimeout(() => {
@@ -672,12 +744,21 @@ export function GlobalRequestNotifier({
                 disconnectedFallbackTimeoutId = null;
                 isSocketReady = true;
                 if (payload.cursor) {
-                  lastRealtimeEventIdRef.current = payload.cursor;
+                  persistRealtimeCursor(payload.cursor);
                 }
                 setNoticeMessage("실시간 연결됨");
                 handleReady();
               } else if (payload.type === "request-event" && payload.event) {
                 handleRequestEvent(JSON.stringify(payload.event));
+                if (payload.event.eventId && socket.readyState === WebSocket.OPEN) {
+                  socket.send(JSON.stringify({
+                    type: "ack",
+                    eventId: payload.event.eventId,
+                  }));
+                }
+              } else if (payload.type === "resync-required") {
+                persistRealtimeCursor(payload.cursor);
+                void syncRequests();
               } else if (payload.type === "error") {
                 setNoticeMessage("실시간 재연결 중");
               }
@@ -707,13 +788,13 @@ export function GlobalRequestNotifier({
             scheduleDisconnectedFallbackSync();
             socketRetryTimeoutId = window.setTimeout(() => {
               socketRetryTimeoutId = null;
-              connectWebSocket();
+              void connectWebSocket();
             }, socketRetryDelayMs);
             socketRetryDelayMs = Math.min(socketRetryDelayMs * 2, 5000);
           };
         };
 
-        connectWebSocket();
+        void connectWebSocket();
       } else if ("EventSource" in window) {
         if (debugRealtimeEvents) {
           console.info("[maple-sse-debug] browser-event-source-connecting", {
@@ -848,6 +929,8 @@ export function GlobalRequestNotifier({
     reliableNoticeSoundEnabled,
     debugRealtimeEvents,
     webSocketTransportEnabled,
+    externalWebSocketTransportEnabled,
+    noticeScopeKey,
     playNoticeSoundWithRetry,
     syncRequests,
   ]);

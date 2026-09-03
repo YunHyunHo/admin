@@ -5,6 +5,7 @@ import {
   runAfterTransactionCommit,
   withTransaction,
 } from "@/lib/db";
+import { scheduleMapleRealtimeDelivery } from "@/lib/realtime-staging";
 
 export const adminRequestEventsChannel = "admin_request_events";
 
@@ -93,6 +94,8 @@ async function persistAndPublishAdminRequestEvent(
   ]);
 
   runAfterTransactionCommit(executor, async () => {
+    scheduleMapleRealtimeDelivery(storedEvent);
+
     try {
       await appendAdminRequestEventToRedis(storedEvent);
     } catch (error) {

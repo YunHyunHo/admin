@@ -1,4 +1,5 @@
 import type { SessionUser } from "@/lib/auth";
+import { isMapleRealtimeStagingUser } from "@/lib/realtime-staging";
 
 const defaultNotificationFallbackPollIntervalMs = 1_000;
 const reducedNotificationFallbackPollIntervalMs = 30_000;
@@ -17,8 +18,7 @@ export function isMapleImmediateRealtimePilot(
 export function isMapleWebSocketPilot(
   user: Pick<SessionUser, "loginId">,
 ) {
-  void user;
-  return false;
+  return isMapleRealtimeStagingUser(user);
 }
 
 export function isMapleSseNoPollingPilot(

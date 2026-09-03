@@ -390,6 +390,7 @@ export async function AdminShell({
                         (reducedNotificationPollingPilot &&
                           !mapleImmediateRealtimePilot)
                       }
+                      externalWebSocketTransportEnabled={mapleWebSocketPilot}
                       periodicFallbackSyncEnabled={
                         !mapleWebSocketPilot && !mapleSseNoPollingPilot
                       }
