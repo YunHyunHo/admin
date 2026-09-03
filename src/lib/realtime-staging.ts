@@ -7,6 +7,7 @@ import type { StoredAdminRequestEvent } from "@/lib/admin-request-events";
 const realtimeAudience = "winpay-realtime-staging";
 const deliveryAttempts = 3;
 const deliveryTimeoutMs = 1200;
+const mapleRealtimeLoginIds = new Set(["maple", "test05"]);
 
 function getRealtimeUrl() {
   return process.env.MAPLE_REALTIME_URL?.trim().replace(/\/$/, "") ?? "";
@@ -33,7 +34,7 @@ export function isMapleRealtimeStagingUser(
 ) {
   return (
     isMapleRealtimeStagingConfigured() &&
-    user.loginId.trim().toLowerCase() === "maple"
+    mapleRealtimeLoginIds.has(user.loginId.trim().toLowerCase())
   );
 }
 
