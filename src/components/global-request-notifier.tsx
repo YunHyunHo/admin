@@ -40,6 +40,18 @@ export type RequestNotificationSyncDetail = RequestNotificationSnapshot & {
   waitUntil: (promise: Promise<unknown>) => void;
 };
 
+export type RequestRealtimeDetail = {
+  eventId?: string;
+  kind?: string;
+  replayed?: boolean;
+  requestId?: string;
+  status?: string;
+  outboxCreatedAt?: string;
+  railwayReceivedAt?: string;
+  railwayBroadcastAt?: string;
+  waitUntil: (promise: Promise<unknown>) => void;
+};
+
 export const pendingRequestCountsEventName = "pending-request-counts";
 export const requestNotificationSyncEventName = "request-notification-sync";
 export const requestNotificationSnapshotEventName =
@@ -450,6 +462,7 @@ export function GlobalRequestNotifier({
       let isSocketReady = false;
       let webSocket: WebSocket | null = null;
       let eventSource: EventSource | null = null;
+      let eventHandlingQueue = Promise.resolve();
       const scopedRealtimeCursorKey = `${realtimeCursorKey}:${noticeScopeKey ?? "default"}`;
       let clientInstanceId = "";
 
@@ -506,15 +519,12 @@ export function GlobalRequestNotifier({
       const handleReady = () => {
         void syncRequests();
       };
-      const handleRequestEvent = (data: string, lastEventId = "") => {
+      const handleRequestEvent = async (data: string, lastEventId = "") => {
+        const listSyncPromises: Promise<unknown>[] = [];
+        let soundRequested = false;
+
         try {
-          const detail = JSON.parse(data) as {
-            eventId?: string;
-            kind?: string;
-            replayed?: boolean;
-            requestId?: string;
-            status?: string;
-          };
+          const detail = JSON.parse(data) as Omit<RequestRealtimeDetail, "waitUntil">;
           const eventId = detail.eventId ?? lastEventId;
 
           if (debugRealtimeEvents) {
@@ -532,7 +542,7 @@ export function GlobalRequestNotifier({
             lastRealtimeEventIdRef.current &&
             BigInt(eventId) <= BigInt(lastRealtimeEventIdRef.current)
           ) {
-            return;
+            return { duplicate: true, soundRequested: false };
           }
 
           if (eventId) {
@@ -565,7 +575,8 @@ export function GlobalRequestNotifier({
 
               if (!wasPending && !detail.replayed) {
                 setNoticeMessage("1건 신규 신청");
-                void playNoticeSoundWithRetry();
+                soundRequested = true;
+                listSyncPromises.push(playNoticeSoundWithRetry());
               }
             } else {
               knownPendingIdsRef.current.delete(pendingKey);
@@ -610,15 +621,27 @@ export function GlobalRequestNotifier({
               !detail.replayed
             ) {
               setNoticeMessage("1건 신규 신청");
-              void playNoticeSoundWithRetry();
+              soundRequested = true;
+              listSyncPromises.push(playNoticeSoundWithRetry());
             }
           }
 
           window.dispatchEvent(
             new CustomEvent(requestRealtimeEventName, {
-              detail,
+              detail: {
+                ...detail,
+                waitUntil: (promise: Promise<unknown>) => {
+                  listSyncPromises.push(Promise.resolve(promise).catch(() => undefined));
+                },
+              } satisfies RequestRealtimeDetail,
             }),
           );
+
+          if (!eventDrivenSnapshotEnabled) {
+            listSyncPromises.push(syncRequests());
+          }
+
+          await waitForListSync(listSyncPromises);
 
           if (debugRealtimeEvents) {
             console.info("[maple-sse-debug] browser-ui-events-dispatched", {
@@ -628,12 +651,10 @@ export function GlobalRequestNotifier({
             });
             setRealtimeDebugStage(`ui-updated:${eventId || "unknown"}`);
           }
+          return { duplicate: false, soundRequested };
         } catch {
           // Ignore malformed realtime payloads and rely on the next refresh.
-        }
-
-        if (!eventDrivenSnapshotEnabled) {
-          void syncRequests();
+          return { duplicate: false, soundRequested };
         }
       };
 
@@ -724,6 +745,7 @@ export function GlobalRequestNotifier({
             }, webSocketRecycleIntervalMs);
           };
           socket.onmessage = (message) => {
+            const clientReceivedAt = new Date().toISOString();
             try {
               const payload = JSON.parse(String(message.data)) as {
                 cursor?: string | null;
@@ -733,6 +755,9 @@ export function GlobalRequestNotifier({
                   replayed?: boolean;
                   requestId?: string;
                   status?: string;
+                  outboxCreatedAt?: string;
+                  railwayReceivedAt?: string;
+                  railwayBroadcastAt?: string;
                 };
                 type?: string;
               };
@@ -749,13 +774,22 @@ export function GlobalRequestNotifier({
                 setNoticeMessage("실시간 연결됨");
                 handleReady();
               } else if (payload.type === "request-event" && payload.event) {
-                handleRequestEvent(JSON.stringify(payload.event));
-                if (payload.event.eventId && socket.readyState === WebSocket.OPEN) {
-                  socket.send(JSON.stringify({
-                    type: "ack",
-                    eventId: payload.event.eventId,
-                  }));
-                }
+                eventHandlingQueue = eventHandlingQueue.then(async () => {
+                  const result = await handleRequestEvent(JSON.stringify(payload.event));
+                  if (payload.event?.eventId && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({
+                      type: "ack",
+                      eventId: payload.event.eventId,
+                      kind: payload.event.kind,
+                      requestId: payload.event.requestId,
+                      outboxCreatedAt: payload.event.outboxCreatedAt,
+                      clientReceivedAt,
+                      uiUpdatedAt: new Date().toISOString(),
+                      duplicate: result.duplicate,
+                      soundRequested: result.soundRequested,
+                    }));
+                  }
+                });
               } else if (payload.type === "resync-required") {
                 persistRealtimeCursor(payload.cursor);
                 void syncRequests();
@@ -822,7 +856,7 @@ export function GlobalRequestNotifier({
           handleReady();
         };
         const handleEventSourceRequest = (event: MessageEvent<string>) => {
-          handleRequestEvent(event.data, event.lastEventId);
+          void handleRequestEvent(event.data, event.lastEventId);
         };
 
         eventSource.addEventListener("ready", handleEventSourceReady);

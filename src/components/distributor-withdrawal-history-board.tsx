@@ -7,6 +7,7 @@ import {
   requestNotifierRefreshEventName,
   requestRealtimeEventName,
   type RequestNotificationSyncDetail,
+  type RequestRealtimeDetail,
 } from "@/components/global-request-notifier";
 import { ModalFeedback } from "@/components/modal-feedback";
 import type { DistributorWithdrawalRow } from "@/lib/distributor-withdrawals-repository";
@@ -457,13 +458,13 @@ export function DistributorWithdrawalHistoryBoard({
 
   useEffect(() => {
     function handleRealtimeEvent(event: Event) {
-      const detail = (event as CustomEvent<{ kind?: string }>).detail;
+      const detail = (event as CustomEvent<RequestRealtimeDetail>).detail;
 
       if (detail?.kind !== "distributor_withdrawal") {
         return;
       }
 
-      void refreshRows();
+      detail.waitUntil(refreshRows());
     }
 
     window.addEventListener(requestRealtimeEventName, handleRealtimeEvent);

@@ -6,6 +6,7 @@ import {
   requestNotifierRefreshEventName,
   requestRealtimeEventName,
   type RequestNotificationSyncDetail,
+  type RequestRealtimeDetail,
 } from "@/components/global-request-notifier";
 import { ModalFeedback } from "@/components/modal-feedback";
 import { NotificationVolumeControl } from "@/components/notification-volume-control";
@@ -824,13 +825,13 @@ export function ChargeRequestsBoard({
 
   useEffect(() => {
     function handleRealtimeEvent(event: Event) {
-      const detail = (event as CustomEvent<{ kind?: string }>).detail;
+      const detail = (event as CustomEvent<RequestRealtimeDetail>).detail;
 
       if (detail?.kind !== "charge") {
         return;
       }
 
-      void refreshRequestsForNotification();
+      detail.waitUntil(refreshRequestsForNotification());
     }
 
     window.addEventListener(requestRealtimeEventName, handleRealtimeEvent);

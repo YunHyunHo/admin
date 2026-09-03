@@ -7,6 +7,7 @@ import {
   requestNotifierRefreshEventName,
   requestRealtimeEventName,
   type RequestNotificationSyncDetail,
+  type RequestRealtimeDetail,
 } from "@/components/global-request-notifier";
 import { ModalFeedback } from "@/components/modal-feedback";
 import type {
@@ -504,13 +505,13 @@ export function DomainExchangesBoard({
 
   useEffect(() => {
     function handleRealtimeEvent(event: Event) {
-      const detail = (event as CustomEvent<{ kind?: string }>).detail;
+      const detail = (event as CustomEvent<RequestRealtimeDetail>).detail;
 
       if (detail?.kind !== "domain_exchange") {
         return;
       }
 
-      void refreshRows();
+      detail.waitUntil(refreshRows());
     }
 
     window.addEventListener(requestRealtimeEventName, handleRealtimeEvent);
