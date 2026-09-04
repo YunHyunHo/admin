@@ -498,13 +498,11 @@ export function GlobalRequestNotifier({
       };
 
       const scheduleDisconnectedFallbackSync = () => {
-        clearSocketTimer(disconnectedFallbackTimeoutId);
-        disconnectedFallbackTimeoutId = null;
-
         if (
           isCancelled ||
           isSocketReady ||
-          periodicFallbackSyncEnabled
+          periodicFallbackSyncEnabled ||
+          disconnectedFallbackTimeoutId !== null
         ) {
           return;
         }
@@ -765,14 +763,18 @@ export function GlobalRequestNotifier({
               if (payload.type === "ready") {
                 clearSocketTimer(socketReadyTimeoutId);
                 socketReadyTimeoutId = null;
-                clearSocketTimer(disconnectedFallbackTimeoutId);
-                disconnectedFallbackTimeoutId = null;
-                isSocketReady = true;
-                if (payload.cursor) {
-                  persistRealtimeCursor(payload.cursor);
-                }
-                setNoticeMessage("실시간 연결됨");
-                handleReady();
+                eventHandlingQueue = eventHandlingQueue.then(async () => {
+                  if (isCancelled || webSocket !== socket || socket.readyState !== WebSocket.OPEN) return;
+                  await syncRequests();
+                  if (isCancelled || webSocket !== socket || socket.readyState !== WebSocket.OPEN) return;
+                  if (payload.cursor) persistRealtimeCursor(payload.cursor);
+                  isSocketReady = true;
+                  clearSocketTimer(disconnectedFallbackTimeoutId);
+                  disconnectedFallbackTimeoutId = null;
+                  setNoticeMessage("실시간 연결됨");
+                }).catch(() => {
+                  socket.close(1013, "state synchronization failed");
+                });
               } else if (payload.type === "request-event" && payload.event) {
                 eventHandlingQueue = eventHandlingQueue.then(async () => {
                   const result = await handleRequestEvent(JSON.stringify(payload.event));
@@ -789,6 +791,8 @@ export function GlobalRequestNotifier({
                       soundRequested: result.soundRequested,
                     }));
                   }
+                }).catch(() => {
+                  socket.close(1013, "event processing failed");
                 });
               } else if (payload.type === "resync-required") {
                 persistRealtimeCursor(payload.cursor);
