@@ -488,6 +488,9 @@ export function GlobalRequestNotifier({
       let disconnectedFallbackTimeoutId: number | null = null;
       let socketRetryDelayMs = 500;
       let isSocketReady = false;
+      let outageSyncStarted = false;
+      let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+      let lastPongAt = 0;
       let webSocket: WebSocket | null = null;
       let eventSource: EventSource | null = null;
       let eventHandlingQueue = Promise.resolve();
@@ -544,6 +547,14 @@ export function GlobalRequestNotifier({
 
       const handleReady = () => {
         void syncRequests();
+      };
+      const beginSocketFallback = () => {
+        isSocketReady = false;
+        if (!isCancelled && !outageSyncStarted) {
+          outageSyncStarted = true;
+          void syncRequests();
+        }
+        scheduleDisconnectedFallbackSync();
       };
       const handleRequestEvent = async (data: string, lastEventId = "") => {
         const listSyncPromises: Promise<unknown>[] = [];
@@ -800,7 +811,9 @@ export function GlobalRequestNotifier({
                 type?: string;
               };
 
-              if (payload.type === "ready") {
+              if (payload.type === "pong") {
+                lastPongAt = Date.now();
+              } else if (payload.type === "ready") {
                 clearSocketTimer(socketReadyTimeoutId);
                 socketReadyTimeoutId = null;
                 eventHandlingQueue = eventHandlingQueue.then(async () => {
@@ -809,6 +822,19 @@ export function GlobalRequestNotifier({
                   if (isCancelled || webSocket !== socket || socket.readyState !== WebSocket.OPEN) return;
                   if (payload.cursor) persistRealtimeCursor(payload.cursor);
                   isSocketReady = true;
+                  outageSyncStarted = false;
+                  lastPongAt = Date.now();
+                  clearInterval(heartbeatTimer);
+                  heartbeatTimer = setInterval(() => {
+                    if (isCancelled || webSocket !== socket) return;
+                    if (Date.now() - lastPongAt > 15000) {
+                      beginSocketFallback();
+                      socket.close(1013, "heartbeat timeout");
+                    } else if (socket.readyState === WebSocket.OPEN) {
+                      socket.send(JSON.stringify({ type: "ping" }));
+                    }
+                  }, 5000);
+                  window.dispatchEvent(new Event("realtime-control-refresh"));
                   clearSocketTimer(disconnectedFallbackTimeoutId);
                   disconnectedFallbackTimeoutId = null;
                   setNoticeMessage("실시간 연결됨");
@@ -845,10 +871,11 @@ export function GlobalRequestNotifier({
             }
           };
           socket.onerror = () => {
-            isSocketReady = false;
+            beginSocketFallback();
             setNoticeMessage("실시간 재연결 중");
           };
           socket.onclose = () => {
+            clearInterval(heartbeatTimer);
             if (webSocket === socket) {
               webSocket = null;
             }
@@ -861,7 +888,7 @@ export function GlobalRequestNotifier({
             socketReadyTimeoutId = null;
             clearSocketTimer(socketRecycleTimeoutId);
             socketRecycleTimeoutId = null;
-            isSocketReady = false;
+            beginSocketFallback();
             setNoticeMessage("실시간 재연결 중");
             scheduleDisconnectedFallbackSync();
             socketRetryTimeoutId = window.setTimeout(() => {
@@ -959,6 +986,7 @@ export function GlobalRequestNotifier({
         clearSocketTimer(socketReadyTimeoutId);
         clearSocketTimer(socketRecycleTimeoutId);
         clearSocketTimer(disconnectedFallbackTimeoutId);
+        clearInterval(heartbeatTimer);
         webSocket?.close(1000, "page closed");
         eventSource?.close();
         clearNoticeRetry();

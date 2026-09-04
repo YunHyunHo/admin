@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { logoutAction } from "@/app/actions/auth";
 import { DashboardSummaryToggle } from "@/components/dashboard-summary-toggle";
 import { GlobalDashboardSummaryPanel } from "@/components/global-dashboard-summary-panel";
-import { GlobalRequestNotifier } from "@/components/global-request-notifier";
+import { AccountRealtimeNotifier } from "@/components/account-realtime-notifier";
 import { QuickActionNav } from "@/components/quick-action-nav";
 import type { SessionUser } from "@/lib/auth";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -378,7 +378,8 @@ export async function AdminShell({
                   />
                 ) : null}
                 <div className="absolute right-4 top-4 flex items-center gap-2 sm:right-6 lg:static">
-                    <GlobalRequestNotifier
+                    <AccountRealtimeNotifier
+                      accountModeControlEnabled={mapleWebSocketPilot}
                       realtimeEventsEnabled={realtimeEventsEnabled}
                       realtimeEventsPath={realtimeEventsPath}
                       eventDrivenSnapshotEnabled={
