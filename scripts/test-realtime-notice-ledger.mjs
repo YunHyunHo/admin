@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import { createRealtimeNoticeLedger } from '../src/lib/realtime-notice-ledger.ts';
+
+const storage = () => {
+  const data = new Map();
+  return { getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) };
+};
+const pc1 = storage();
+const pc2 = storage();
+const a = createRealtimeNoticeLedger(pc1, 'maple');
+const b = createRealtimeNoticeLedger(pc2, 'maple');
+assert.equal(a.has('1', 'charge:a'), false, 'first replay must alert');
+a.queue('1', 'charge:a');
+assert.equal(a.has('1', 'charge:a'), false, 'blocked audio is not completion');
+assert.deepEqual(createRealtimeNoticeLedger(pc1, 'maple').pending(), [['1', 'charge:a']], 'blocked audio survives reload');
+a.complete('1', 'charge:a');
+assert.equal(a.has('1', 'charge:a'), true, 'lost ACK replay must not alert twice');
+assert.deepEqual(a.pending(), []);
+assert.equal(b.has('1', 'charge:a'), false, 'another PC independently alerts');
+assert.equal(createRealtimeNoticeLedger(pc1, 'maple').has('1', 'charge:a'), true, 'completion survives reload');
+a.completeFallback(['domain-exchange:b', 'distributor-withdrawal:c']);
+assert.equal(a.has('2', 'domain-exchange:b'), true, 'fallback already alerted');
+a.complete('2', 'domain-exchange:b');
+assert.equal(a.has('2', 'domain-exchange:b'), true);
+assert.equal(a.has('3', 'domain-exchange:b'), false, 'later pending event remains independent');
+assert.equal(a.has('4', 'distributor-withdrawal:c'), true);
+assert.equal(createRealtimeNoticeLedger(pc1, 'other').has('1', 'charge:a'), false, 'account scope isolated');
+const unavailable = { getItem() { throw Error('blocked'); }, setItem() { throw Error('blocked'); } };
+const memoryOnly = createRealtimeNoticeLedger(unavailable, 'maple');
+memoryOnly.complete('1', 'charge:a');
+assert.equal(memoryOnly.has('1', 'charge:a'), true);
+console.log('PASS: 13 notification-ledger assertions (replay, ACK loss, fallback, reload, per-client scope, storage failure)');

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { NotificationVolumeControl } from "@/components/notification-volume-control";
 import { useNotificationSoundVolume } from "@/lib/notification-sound-volume";
+import { createRealtimeNoticeLedger } from "@/lib/realtime-notice-ledger";
 
 const noticeSoundPath = "/sounds/notice.mp3";
 const defaultPollIntervalMs = 1000;
@@ -173,6 +174,20 @@ export function GlobalRequestNotifier({
   const isSyncingRef = useRef(false);
   const retryTimeoutRef = useRef<number | null>(null);
   const lastRealtimeEventIdRef = useRef<string | null>(null);
+  const noticeLedgerRef = useRef<ReturnType<typeof createRealtimeNoticeLedger> | null>(null);
+  const noticeLedgerScopeRef = useRef<string | undefined>(undefined);
+  const getNoticeLedger = useCallback(() => {
+    if (!noticeLedgerRef.current || noticeLedgerScopeRef.current !== noticeScopeKey) {
+      const storage = {
+        getItem: (key: string) => window.sessionStorage.getItem(key),
+        setItem: (key: string, value: string) => window.sessionStorage.setItem(key, value),
+      };
+      noticeLedgerRef.current = createRealtimeNoticeLedger(storage,
+        `winpay-realtime-notices:${noticeScopeKey ?? "default"}`);
+      noticeLedgerScopeRef.current = noticeScopeKey;
+    }
+    return noticeLedgerRef.current;
+  }, [noticeScopeKey]);
   const [isSoundReady, setIsSoundReady] = useState(
     reliableNoticeSoundEnabled ? reliableNoticeSoundReady : true,
   );
@@ -287,23 +302,24 @@ export function GlobalRequestNotifier({
       if (reliableNoticeSoundEnabled) {
         try {
           await playNoticeSound();
+          return true;
         } catch {
           markNoticeBlocked();
         }
 
-        return;
+        return false;
       }
 
       for (let attempt = 1; attempt <= maxNoticePlayAttempts; attempt += 1) {
         try {
           await playNoticeSound();
-          return;
+          return true;
         } catch {
           markNoticeBlocked();
         }
 
         if (attempt >= maxNoticePlayAttempts) {
-          return;
+          return false;
         }
 
         await new Promise<void>((resolve) => {
@@ -326,11 +342,17 @@ export function GlobalRequestNotifier({
     try {
       clearNoticeRetry();
       await playNoticeSound();
+      const backlog = eventDrivenSnapshotEnabled && webSocketTransportEnabled
+        ? getNoticeLedger().pending() : [];
+      for (const [index, [eventId, requestKey]] of backlog.entries()) {
+        if (index > 0) await playNoticeSound();
+        getNoticeLedger().complete(eventId, requestKey);
+      }
       markNoticeReady("알림음 켜짐");
     } catch {
       markNoticeBlocked();
     }
-  }, [clearNoticeRetry, markNoticeBlocked, markNoticeReady, playNoticeSound]);
+  }, [clearNoticeRetry, getNoticeLedger, markNoticeBlocked, markNoticeReady, playNoticeSound, eventDrivenSnapshotEnabled, webSocketTransportEnabled]);
 
   const unlockNoticeSound = useCallback(async () => {
     try {
@@ -366,9 +388,10 @@ export function GlobalRequestNotifier({
 
       const pendingSnapshot = collectPendingSnapshot(data);
       const nextPendingIds = pendingSnapshot.ids;
-      const newPendingCount = [...nextPendingIds].filter(
+      const newPendingKeys = [...nextPendingIds].filter(
         (id) => !knownPendingIdsRef.current.has(id),
-      ).length;
+      );
+      const newPendingCount = newPendingKeys.length;
       const listSyncPromises: Promise<unknown>[] = [];
 
       knownPendingIdsRef.current = nextPendingIds;
@@ -421,12 +444,17 @@ export function GlobalRequestNotifier({
 
       if (newPendingCount > 0) {
         setNoticeMessage(`${newPendingCount}건 신규 신청`);
-        void playNoticeSoundWithRetry();
+        if (eventDrivenSnapshotEnabled && webSocketTransportEnabled) {
+          const sounded = await playNoticeSoundWithRetry();
+          if (sounded) getNoticeLedger().completeFallback(newPendingKeys);
+        } else {
+          void playNoticeSoundWithRetry();
+        }
       }
     } finally {
       isSyncingRef.current = false;
     }
-  }, [persistKnownPendingIds, playNoticeSoundWithRetry]);
+  }, [persistKnownPendingIds, playNoticeSoundWithRetry, eventDrivenSnapshotEnabled, webSocketTransportEnabled, getNoticeLedger]);
 
   useEffect(() => {
     if (!pendingSnapshotStorageKey) {
@@ -535,17 +563,11 @@ export function GlobalRequestNotifier({
             setRealtimeDebugStage(`received:${eventId || "unknown"}`);
           }
 
-          if (
+          const duplicate = !!(
             eventId &&
             lastRealtimeEventIdRef.current &&
             BigInt(eventId) <= BigInt(lastRealtimeEventIdRef.current)
-          ) {
-            return { duplicate: true, soundRequested: false };
-          }
-
-          if (eventId) {
-            persistRealtimeCursor(eventId);
-          }
+          );
 
           const prefix =
             detail.kind === "charge"
@@ -560,6 +582,22 @@ export function GlobalRequestNotifier({
           const wasPending = pendingKey
             ? knownPendingIdsRef.current.has(pendingKey)
             : false;
+
+          if (eventDrivenSnapshotEnabled && webSocketTransportEnabled && eventId && pendingKey && detail.status === "PENDING") {
+            const ledger = getNoticeLedger();
+            if (ledger.has(eventId, pendingKey)) {
+              ledger.complete(eventId, pendingKey);
+            } else {
+              ledger.queue(eventId, pendingKey);
+              setNoticeMessage("1건 신규 신청");
+              soundRequested = true;
+              const sounded = await playNoticeSoundWithRetry();
+              if (sounded) {
+                ledger.complete(eventId, pendingKey);
+              }
+            }
+          }
+          if (duplicate) return { duplicate: true, soundRequested };
 
           if (
             reliableNoticeSoundEnabled &&
@@ -614,6 +652,7 @@ export function GlobalRequestNotifier({
             );
 
             if (
+              !webSocketTransportEnabled &&
               detail.status === "PENDING" &&
               !wasPending &&
               !detail.replayed
@@ -640,6 +679,7 @@ export function GlobalRequestNotifier({
           }
 
           await waitForListSync(listSyncPromises);
+          if (eventId) persistRealtimeCursor(eventId);
 
           if (debugRealtimeEvents) {
             console.info("[maple-sse-debug] browser-ui-events-dispatched", {
@@ -967,6 +1007,7 @@ export function GlobalRequestNotifier({
     reliableNoticeSoundEnabled,
     debugRealtimeEvents,
     webSocketTransportEnabled,
+    getNoticeLedger,
     externalWebSocketTransportEnabled,
     noticeScopeKey,
     playNoticeSoundWithRetry,
