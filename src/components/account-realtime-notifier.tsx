@@ -37,7 +37,11 @@ export function AccountRealtimeNotifier({ accountModeControlEnabled, ...props }:
       finally { clearTimeout(deadline); running = false; }
       if (!stopped) {
         setMode(next);
-        timer = setTimeout(check, intervalMs);
+        // Keep the control-plane cadence measured from request start. Waiting a
+        // full interval after a slow response doubles the configured rollback
+        // delay (for example, a 5s request plus another 5s wait).
+        const elapsedMs = Date.now() - now;
+        timer = setTimeout(check, Math.max(0, intervalMs - elapsedMs));
       }
     }
     void check();
