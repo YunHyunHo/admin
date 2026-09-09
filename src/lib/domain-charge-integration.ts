@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { routeChargeKey } from "@/lib/preview-charge-key";
 
 import { query } from "@/lib/db";
 
@@ -51,10 +51,6 @@ export async function ensureDomainChargeIntegrationSchema() {
   `);
 
   schemaReady = true;
-}
-
-function hashApiKey(apiKey: string) {
-  return createHash("sha256").update(apiKey).digest("hex");
 }
 
 export async function getDomainChargeMode(
@@ -116,13 +112,9 @@ export async function getDomainChargeModeByIdentifier(input: {
 export async function resolveDomainChargeIntegration(
   apiKey: string,
 ): Promise<DomainChargeIntegrationScope | null> {
+  const keyRoute = routeChargeKey(apiKey);
+  if (keyRoute.kind === "reject") return null;
   await ensureDomainChargeIntegrationSchema();
-
-  const normalizedKey = apiKey.trim();
-
-  if (!normalizedKey) {
-    return null;
-  }
 
   const result = await query<DomainChargeIntegrationScope>(
     `
@@ -153,11 +145,13 @@ export async function resolveDomainChargeIntegration(
         order by a.created_at desc
         limit 1
       ) domain_admin on true
-      where integration.api_key_hash = $1
+      where ${keyRoute.kind === "preview"
+        ? "integration.domain_id = $1::uuid and master_admin.login_id = 'maple'"
+        : "integration.api_key_hash = $1"}
         and integration.status = 'ACTIVE'
       limit 1
     `,
-    [hashApiKey(normalizedKey)],
+    [keyRoute.kind === "preview" ? keyRoute.domainId : keyRoute.hash],
   );
 
   return result.rows[0] ?? null;
