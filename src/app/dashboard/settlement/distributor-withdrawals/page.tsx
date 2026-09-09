@@ -15,7 +15,7 @@ import { isPerformancePilotUser } from "@/lib/performance-pilot";
 import { canManageMasterResources } from "@/lib/permissions";
 import {
   getRequestBoardFallbackRefreshIntervalMs,
-  isMapleSseNoPollingPilot,
+  isRealtimeV2Eligible,
 } from "@/lib/realtime-sync-pilot";
 
 
@@ -28,6 +28,7 @@ export default async function DistributorWithdrawalsPage() {
 
   const isMaster = canManageMasterResources(user);
   const serverPagingEnabled = isPerformancePilotUser(user);
+  const realtimeV2Eligible = await isRealtimeV2Eligible(user);
   const [withdrawalData, availableBalance] = await Promise.all([
     serverPagingEnabled
       ? getDistributorWithdrawalRowsPage(user)
@@ -49,7 +50,7 @@ export default async function DistributorWithdrawalsPage() {
         availableBalance={availableBalance}
         serverPagingEnabled={serverPagingEnabled}
         fallbackRefreshIntervalMs={getRequestBoardFallbackRefreshIntervalMs(user)}
-        fallbackRefreshEnabled={!isMapleSseNoPollingPilot(user)}
+        fallbackRefreshEnabled={!realtimeV2Eligible}
         initialPageData={Array.isArray(withdrawalData) ? undefined : withdrawalData}
       />
     </AdminShell>

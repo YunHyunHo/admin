@@ -14,7 +14,7 @@ import { isPerformancePilotUser } from "@/lib/performance-pilot";
 import { canProcessRequests } from "@/lib/permissions";
 import {
   getRequestBoardFallbackRefreshIntervalMs,
-  isMapleSseNoPollingPilot,
+  isRealtimeV2Eligible,
   isRealtimeSyncPilot,
 } from "@/lib/realtime-sync-pilot";
 
@@ -55,6 +55,7 @@ export default async function ChargesPage() {
   }
 
   const incrementalSyncEnabled = isRealtimeSyncPilot(user);
+  const realtimeV2Eligible = await isRealtimeV2Eligible(user);
   const serverHistoryEnabled = isPerformancePilotUser(user);
   const initialSyncCursor = incrementalSyncEnabled
     ? await getServerSyncCursor()
@@ -100,7 +101,7 @@ export default async function ChargesPage() {
         initialSyncCursor={initialSyncCursor}
         serverHistoryEnabled={serverHistoryEnabled}
         fallbackRefreshIntervalMs={getRequestBoardFallbackRefreshIntervalMs(user)}
-        fallbackRefreshEnabled={!isMapleSseNoPollingPilot(user)}
+        fallbackRefreshEnabled={!realtimeV2Eligible}
         initialApprovedHistoryPage={
           hasPilotHistoryPages(companyRequests)
             ? companyRequests.approvedPage

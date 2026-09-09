@@ -5,21 +5,23 @@ import {
   runAfterTransactionCommit,
   withTransaction,
 } from "@/lib/db";
-import { scheduleMapleRealtimeDelivery } from "@/lib/realtime-staging";
+import { scheduleRealtimeDelivery } from "@/lib/realtime-staging";
 
 export const adminRequestEventsChannel = "admin_request_events";
 
 export type AdminRequestEventKind =
   | "charge"
   | "domain_exchange"
-  | "distributor_withdrawal";
+  | "distributor_withdrawal"
+  | "domain_update";
 
 export type AdminRequestEventStatus =
   | "PENDING"
   | "APPROVED"
   | "REJECTED"
   | "COMPLETED"
-  | "CANCELED";
+  | "CANCELED"
+  | "UPDATED";
 
 export type AdminRequestEvent = {
   kind: AdminRequestEventKind;
@@ -94,7 +96,7 @@ async function persistAndPublishAdminRequestEvent(
   ]);
 
   runAfterTransactionCommit(executor, async () => {
-    scheduleMapleRealtimeDelivery(storedEvent);
+    scheduleRealtimeDelivery(storedEvent);
 
     try {
       await appendAdminRequestEventToRedis(storedEvent);
@@ -178,7 +180,8 @@ export function parseAdminRequestEvent(payload: string | undefined) {
     if (
       (event.kind === "charge" ||
         event.kind === "domain_exchange" ||
-        event.kind === "distributor_withdrawal") &&
+        event.kind === "distributor_withdrawal" ||
+        event.kind === "domain_update") &&
       typeof event.requestId === "string" &&
       (typeof event.companyId === "string" || event.companyId === null) &&
       (typeof event.domainId === "string" || event.domainId === null) &&
@@ -187,7 +190,8 @@ export function parseAdminRequestEvent(payload: string | undefined) {
         event.status === "APPROVED" ||
         event.status === "REJECTED" ||
         event.status === "COMPLETED" ||
-        event.status === "CANCELED") &&
+        event.status === "CANCELED" ||
+        event.status === "UPDATED") &&
       typeof event.occurredAt === "string"
     ) {
       if (event.eventId !== undefined && !/^\d+$/.test(event.eventId)) {

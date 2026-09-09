@@ -7,9 +7,10 @@ create table if not exists realtime_account_flags (
   updated_at timestamptz not null default now(),
   primary key (environment, login_id)
 );
+-- login_id stores the owner MASTER login id. One row controls the whole group.
 -- Operator example (use an authenticated database console; no public mutation endpoint):
 -- insert into realtime_account_flags(environment, login_id, enabled)
 -- values ('preview', 'maple', true)
 -- on conflict (environment, login_id) do update
 -- set enabled = excluded.enabled, updated_at = now();
--- Rollback: change true to false. Keep each login_id independent.
+-- Rollback: change true to false. Railway broadcasts the change to the group.

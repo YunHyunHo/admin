@@ -13,16 +13,13 @@ export function AccountRealtimeNotifier({ accountModeControlEnabled, ...props }:
   useEffect(() => {
     if (!accountModeControlEnabled) return;
     let stopped = false;
-    let timer: ReturnType<typeof setTimeout>;
     let controller: AbortController | undefined;
     let running = false;
-    let intervalMs = 5000;
     async function check() {
       if (stopped || running) return;
       running = true;
       const now = Date.now();
       setMetrics(previous => ({ requests: previous.requests + 1, startedAt: previous.startedAt || now, lastCheckAt: now }));
-      clearTimeout(timer);
       controller = new AbortController();
       const deadline = setTimeout(() => controller?.abort(), 2000);
       let next: "legacy" | "websocket" = "legacy";
@@ -31,28 +28,28 @@ export function AccountRealtimeNotifier({ accountModeControlEnabled, ...props }:
         if (response.ok) {
           const data = await response.json();
           if (data.mode === "websocket") next = "websocket";
-          if ([5000, 30000, 60000].includes(data.checkIntervalMs)) intervalMs = data.checkIntervalMs;
         }
       } catch { /* Fail closed to the established notification transport. */ }
       finally { clearTimeout(deadline); running = false; }
-      if (!stopped) {
-        setMode(next);
-        // Keep the control-plane cadence measured from request start. Waiting a
-        // full interval after a slow response doubles the configured rollback
-        // delay (for example, a 5s request plus another 5s wait).
-        const elapsedMs = Date.now() - now;
-        timer = setTimeout(check, Math.max(0, intervalMs - elapsedMs));
-      }
+      if (!stopped) setMode(next);
     }
     void check();
     const onVisible = () => { if (document.visibilityState === "visible") void check(); };
     const onReconnect = () => { void check(); };
+    const onControl = (event: Event) => {
+      const detail = (event as CustomEvent<{ mode?: string }>).detail;
+      if (detail?.mode === "legacy" || detail?.mode === "websocket") {
+        setMode(detail.mode);
+      }
+    };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("realtime-control-refresh", onReconnect);
+    window.addEventListener("realtime-control-mode", onControl);
     return () => {
-      stopped = true; clearTimeout(timer); controller?.abort();
+      stopped = true; controller?.abort();
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("realtime-control-refresh", onReconnect);
+      window.removeEventListener("realtime-control-mode", onControl);
     };
   }, [accountModeControlEnabled, pathname]);
 

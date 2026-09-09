@@ -9,6 +9,7 @@ import {
   getScopedDistributorCondition,
 } from "@/lib/master-scope";
 import type { SessionUser } from "@/lib/auth";
+import { publishAdminRequestEvent } from "@/lib/admin-request-events";
 
 export type DomainListOwnerOption = {
   id: string;
@@ -558,6 +559,8 @@ export async function updateDomainWithdrawAccount(input: {
   await withTransaction(async (client) => {
     const result = await client.query<{
       domain_id: string;
+      company_id: string;
+      distributor_id: string | null;
       updated_at: string;
     }>(
       `
@@ -572,6 +575,8 @@ export async function updateDomainWithdrawAccount(input: {
           and ${getMasterOwnedCompanyExistsCondition("dom.company_id", "$5")}
         returning
           dom.id::text as domain_id,
+          dom.company_id::text as company_id,
+          dom.distributor_id::text as distributor_id,
           to_char(dom.updated_at at time zone 'Asia/Seoul', 'YYYY-MM-DD HH24:MI:SS') as updated_at
       `,
       [
@@ -596,6 +601,15 @@ export async function updateDomainWithdrawAccount(input: {
         updatedAt: updated.updated_at,
       }),
     ]);
+    await publishAdminRequestEvent(client, {
+      kind: "domain_update",
+      requestId: updated.domain_id,
+      companyId: updated.company_id,
+      domainId: updated.domain_id,
+      distributorId: updated.distributor_id,
+      status: "UPDATED",
+      occurredAt: new Date().toISOString(),
+    });
   });
 }
 

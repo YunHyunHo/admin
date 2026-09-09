@@ -16,7 +16,7 @@ import { isPerformancePilotUser } from "@/lib/performance-pilot";
 import { canManageMasterResources } from "@/lib/permissions";
 import {
   getRequestBoardFallbackRefreshIntervalMs,
-  isMapleSseNoPollingPilot,
+  isRealtimeV2Eligible,
   isRealtimeSyncPilot,
 } from "@/lib/realtime-sync-pilot";
 import { getServerSyncCursor } from "@/lib/db";
@@ -31,6 +31,7 @@ export default async function DomainExchangesPage() {
 
   const isMaster = canManageMasterResources(user);
   const incrementalSyncEnabled = isRealtimeSyncPilot(user);
+  const realtimeV2Eligible = await isRealtimeV2Eligible(user);
   const serverPagingEnabled = isPerformancePilotUser(user);
   const initialSyncCursor = incrementalSyncEnabled
     ? await getServerSyncCursor()
@@ -68,7 +69,7 @@ export default async function DomainExchangesPage() {
         initialSyncCursor={initialSyncCursor}
         serverPagingEnabled={serverPagingEnabled}
         fallbackRefreshIntervalMs={getRequestBoardFallbackRefreshIntervalMs(user)}
-        fallbackRefreshEnabled={!isMapleSseNoPollingPilot(user)}
+        fallbackRefreshEnabled={!realtimeV2Eligible}
         initialPageData={Array.isArray(exchangeData) ? undefined : exchangeData}
       />
     </AdminShell>

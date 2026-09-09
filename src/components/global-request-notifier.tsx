@@ -809,6 +809,7 @@ export function GlobalRequestNotifier({
                   railwayBroadcastAt?: string;
                 };
                 type?: string;
+                mode?: "legacy" | "websocket";
               };
 
               if (payload.type === "pong") {
@@ -863,6 +864,10 @@ export function GlobalRequestNotifier({
               } else if (payload.type === "resync-required") {
                 persistRealtimeCursor(payload.cursor);
                 void syncRequests();
+              } else if (payload.type === "control") {
+                window.dispatchEvent(new CustomEvent("realtime-control-mode", {
+                  detail: { mode: payload.mode },
+                }));
               } else if (payload.type === "error") {
                 setNoticeMessage("실시간 재연결 중");
               }

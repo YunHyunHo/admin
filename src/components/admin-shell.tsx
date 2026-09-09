@@ -10,11 +10,9 @@ import type { SessionUser } from "@/lib/auth";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
   getNotificationFallbackPollIntervalMs,
-  isMapleImmediateRealtimePilot,
-  isMapleSseNoPollingPilot,
-  isMapleWebSocketPilot,
   isReliableNoticeSoundEnabled,
   isReliableRequestEventRecoveryEnabled,
+  isRealtimeV2Eligible,
   isRealtimeSyncPilot,
   isReducedNotificationPollingPilot,
 } from "@/lib/realtime-sync-pilot";
@@ -210,18 +208,14 @@ export async function AdminShell({
     .filter((group) => group.items.length > 0);
   const visibleQuickActions = isSettlementOnlyUser ? [] : quickActions;
   const realtimeEventsEnabled = isRealtimeSyncPilot(user);
-  const mapleImmediateRealtimePilot = isMapleImmediateRealtimePilot(user);
-  const mapleSseNoPollingPilot = isMapleSseNoPollingPilot(user);
-  const mapleWebSocketPilot = isMapleWebSocketPilot(user);
+  const realtimeV2Eligible = await isRealtimeV2Eligible(user);
   const reducedNotificationPollingPilot =
     isReducedNotificationPollingPilot(user);
   const reliableNoticeSoundEnabled = isReliableNoticeSoundEnabled(user);
   const reliableRequestEventRecoveryEnabled =
     isReliableRequestEventRecoveryEnabled(user);
   const notificationFallbackPollIntervalMs =
-    mapleImmediateRealtimePilot
-      ? 30_000
-      : getNotificationFallbackPollIntervalMs(user);
+    getNotificationFallbackPollIntervalMs(user);
   const realtimeEventsPath = reducedNotificationPollingPilot
     ? "/api/live-sync"
     : "/api/request-events";
@@ -379,21 +373,21 @@ export async function AdminShell({
                 ) : null}
                 <div className="absolute right-4 top-4 flex items-center gap-2 sm:right-6 lg:static">
                     <AccountRealtimeNotifier
-                      accountModeControlEnabled={mapleWebSocketPilot}
+                      accountModeControlEnabled={realtimeV2Eligible}
                       realtimeEventsEnabled={realtimeEventsEnabled}
                       realtimeEventsPath={realtimeEventsPath}
                       eventDrivenSnapshotEnabled={
-                        mapleImmediateRealtimePilot ||
+                        realtimeV2Eligible ||
                         reducedNotificationPollingPilot
                       }
                       webSocketTransportEnabled={
-                        mapleWebSocketPilot ||
+                        realtimeV2Eligible ||
                         (reducedNotificationPollingPilot &&
-                          !mapleImmediateRealtimePilot)
+                          !realtimeV2Eligible)
                       }
-                      externalWebSocketTransportEnabled={mapleWebSocketPilot}
+                      externalWebSocketTransportEnabled={realtimeV2Eligible}
                       periodicFallbackSyncEnabled={
-                        !mapleWebSocketPilot && !mapleSseNoPollingPilot
+                        !realtimeV2Eligible
                       }
                       fallbackPollIntervalMs={notificationFallbackPollIntervalMs}
                       reliableNoticeSoundEnabled={reliableNoticeSoundEnabled}
@@ -401,7 +395,7 @@ export async function AdminShell({
                         reliableRequestEventRecoveryEnabled
                       }
                       debugRealtimeEvents={
-                        mapleSseNoPollingPilot &&
+                        realtimeV2Eligible &&
                         process.env.VERCEL_ENV === "preview"
                       }
                       noticeScopeKey={user.loginId}
