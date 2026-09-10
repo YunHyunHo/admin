@@ -11,8 +11,21 @@ import {
   getAdminRequestUsageIdentity,
   recordRequestUsage,
 } from "@/lib/request-usage-metrics";
+import {
+  logAdminRealtimeDiagnostic,
+  parseRealtimeClientDiagnostic,
+} from "@/lib/realtime-diagnostics";
 
 export const runtime = "nodejs";
+
+function parseDiagnosticHeader(value: string | null) {
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
+}
 
 export async function GET(request: Request) {
   const user = await getSessionUser();
@@ -20,6 +33,20 @@ export async function GET(request: Request) {
   if (!user) {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
+
+  const diagnosticValue = parseDiagnosticHeader(
+    request.headers.get("x-realtime-diagnostic"),
+  );
+  const diagnostic = parseRealtimeClientDiagnostic(diagnosticValue);
+  await logAdminRealtimeDiagnostic({
+    request,
+    user,
+    event: "notification-snapshot-requested",
+    client: {
+      ...diagnostic,
+      buildVersion: diagnostic.buildVersion ?? "missing-client-build",
+    },
+  });
 
   recordRequestUsage({
     request,

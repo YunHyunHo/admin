@@ -61,8 +61,8 @@ export const requestNotifierRefreshEventName = "request-notifier-refresh";
 export const requestRealtimeEventName = "request-realtime-event";
 export const pendingRequestCountsStorageKey = "pending-request-counts-snapshot";
 
-async function fetchJson<T>(url: string) {
-  const response = await fetch(url, { cache: "no-store" });
+async function fetchJson<T>(url: string, init?: RequestInit) {
+  const response = await fetch(url, { ...init, cache: "no-store" });
 
   if (!response.ok) {
     return null;
@@ -150,6 +150,9 @@ type GlobalRequestNotifierProps = {
   reliableRequestEventRecoveryEnabled?: boolean;
   debugRealtimeEvents?: boolean;
   noticeScopeKey?: string;
+  realtimeMode?: "legacy" | "websocket";
+  realtimeModeReason?: string;
+  realtimeBuildVersion?: string;
 };
 
 export function GlobalRequestNotifier({
@@ -165,6 +168,9 @@ export function GlobalRequestNotifier({
   reliableRequestEventRecoveryEnabled = false,
   debugRealtimeEvents = false,
   noticeScopeKey,
+  realtimeMode = "legacy",
+  realtimeModeReason = "not-provided",
+  realtimeBuildVersion = "unknown",
 }: GlobalRequestNotifierProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const { volume: notificationSoundVolume } = useNotificationSoundVolume();
@@ -176,6 +182,41 @@ export function GlobalRequestNotifier({
   const lastRealtimeEventIdRef = useRef<string | null>(null);
   const noticeLedgerRef = useRef<ReturnType<typeof createRealtimeNoticeLedger> | null>(null);
   const noticeLedgerScopeRef = useRef<string | undefined>(undefined);
+  const realtimeDiagnosticRef = useRef({
+    mode: realtimeMode,
+    modeReason: realtimeModeReason,
+    tokenStatus: "not-requested",
+    wsStatus: "not-connected",
+    fallbackReason: "none",
+    buildVersion: realtimeBuildVersion,
+    clientInstanceId: "unknown",
+  });
+
+  const reportRealtimeDiagnostic = useCallback((
+    event: string,
+    update: Partial<typeof realtimeDiagnosticRef.current> = {},
+  ) => {
+    realtimeDiagnosticRef.current = {
+      ...realtimeDiagnosticRef.current,
+      ...update,
+    };
+    void fetch("/api/realtime-diagnostics", {
+      method: "POST",
+      cache: "no-store",
+      keepalive: true,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event, ...realtimeDiagnosticRef.current }),
+    }).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    realtimeDiagnosticRef.current = {
+      ...realtimeDiagnosticRef.current,
+      mode: realtimeMode,
+      modeReason: realtimeModeReason,
+      buildVersion: realtimeBuildVersion,
+    };
+  }, [realtimeBuildVersion, realtimeMode, realtimeModeReason]);
   const getNoticeLedger = useCallback(() => {
     if (!noticeLedgerRef.current || noticeLedgerScopeRef.current !== noticeScopeKey) {
       const storage = {
@@ -379,6 +420,11 @@ export function GlobalRequestNotifier({
     try {
       const data = await fetchJson<RequestNotificationSnapshot>(
         "/api/request-notifications",
+        {
+          headers: {
+            "X-Realtime-Diagnostic": JSON.stringify(realtimeDiagnosticRef.current),
+          },
+        },
       );
 
       // A temporary API failure must not erase the baseline and replay old alerts.
@@ -507,6 +553,14 @@ export function GlobalRequestNotifier({
       } catch {
         clientInstanceId = window.crypto.randomUUID();
       }
+      realtimeDiagnosticRef.current.clientInstanceId = clientInstanceId;
+      reportRealtimeDiagnostic("client-mode-mounted", {
+        tokenStatus: externalWebSocketTransportEnabled
+          ? "not-requested"
+          : "not-required",
+        wsStatus: webSocketTransportEnabled ? "initializing" : "not-connected",
+        fallbackReason: periodicFallbackSyncEnabled ? "legacy-periodic" : "none",
+      });
 
       const persistRealtimeCursor = (eventId: string | null | undefined) => {
         if (!eventId) {
@@ -548,10 +602,14 @@ export function GlobalRequestNotifier({
       const handleReady = () => {
         void syncRequests();
       };
-      const beginSocketFallback = () => {
+      const beginSocketFallback = (reason: string) => {
         isSocketReady = false;
         if (!isCancelled && !outageSyncStarted) {
           outageSyncStarted = true;
+          reportRealtimeDiagnostic("fallback-entered", {
+            wsStatus: "disconnected",
+            fallbackReason: reason,
+          });
           void syncRequests();
         }
         scheduleDisconnectedFallbackSync();
@@ -723,6 +781,10 @@ export function GlobalRequestNotifier({
           let authToken: string | null = null;
 
           if (externalWebSocketTransportEnabled) {
+            reportRealtimeDiagnostic("token-requested", {
+              tokenStatus: "requesting",
+              wsStatus: "not-connected",
+            });
             try {
               const tokenResponse = await fetch(
                 `/api/realtime-token?clientInstanceId=${encodeURIComponent(clientInstanceId)}`,
@@ -739,8 +801,20 @@ export function GlobalRequestNotifier({
 
               socketUrl = new URL(tokenPayload.webSocketUrl);
               authToken = tokenPayload.token;
-            } catch {
+              reportRealtimeDiagnostic("token-received", {
+                tokenStatus: "received",
+                wsStatus: "connecting",
+              });
+            } catch (error) {
               setNoticeMessage("실시간 재연결 중");
+              const reason = error instanceof Error
+                ? error.message
+                : "token-request-failed";
+              reportRealtimeDiagnostic("token-failed", {
+                tokenStatus: "failed",
+                wsStatus: "not-connected",
+                fallbackReason: reason,
+              });
               scheduleDisconnectedFallbackSync();
               socketRetryTimeoutId = window.setTimeout(() => {
                 socketRetryTimeoutId = null;
@@ -769,6 +843,11 @@ export function GlobalRequestNotifier({
             socketRetryDelayMs = 500;
             isSocketReady = false;
             setNoticeMessage("실시간 연결 준비중");
+            reportRealtimeDiagnostic("websocket-open", {
+              tokenStatus: authToken ? "received" : "not-required",
+              wsStatus: "open-awaiting-ready",
+              fallbackReason: "none",
+            });
 
             if (authToken) {
               socket.send(JSON.stringify({
@@ -829,7 +908,7 @@ export function GlobalRequestNotifier({
                   heartbeatTimer = setInterval(() => {
                     if (isCancelled || webSocket !== socket) return;
                     if (Date.now() - lastPongAt > 15000) {
-                      beginSocketFallback();
+                      beginSocketFallback("heartbeat-timeout");
                       socket.close(1013, "heartbeat timeout");
                     } else if (socket.readyState === WebSocket.OPEN) {
                       socket.send(JSON.stringify({ type: "ping" }));
@@ -839,7 +918,15 @@ export function GlobalRequestNotifier({
                   clearSocketTimer(disconnectedFallbackTimeoutId);
                   disconnectedFallbackTimeoutId = null;
                   setNoticeMessage("실시간 연결됨");
+                  reportRealtimeDiagnostic("websocket-ready", {
+                    wsStatus: "ready",
+                    fallbackReason: "none",
+                  });
                 }).catch(() => {
+                  reportRealtimeDiagnostic("websocket-state-sync-failed", {
+                    wsStatus: "state-sync-failed",
+                    fallbackReason: "state-synchronization-failed",
+                  });
                   socket.close(1013, "state synchronization failed");
                 });
               } else if (payload.type === "request-event" && payload.event) {
@@ -870,16 +957,24 @@ export function GlobalRequestNotifier({
                 }));
               } else if (payload.type === "error") {
                 setNoticeMessage("실시간 재연결 중");
+                reportRealtimeDiagnostic("websocket-server-error", {
+                  wsStatus: "server-error",
+                  fallbackReason: "server-error-message",
+                });
               }
             } catch {
               // Ignore malformed socket messages and rely on cursor recovery.
             }
           };
           socket.onerror = () => {
-            beginSocketFallback();
+            beginSocketFallback("websocket-error");
+            reportRealtimeDiagnostic("websocket-error", {
+              wsStatus: "error",
+              fallbackReason: "websocket-error",
+            });
             setNoticeMessage("실시간 재연결 중");
           };
-          socket.onclose = () => {
+          socket.onclose = (event) => {
             clearInterval(heartbeatTimer);
             if (webSocket === socket) {
               webSocket = null;
@@ -893,7 +988,12 @@ export function GlobalRequestNotifier({
             socketReadyTimeoutId = null;
             clearSocketTimer(socketRecycleTimeoutId);
             socketRecycleTimeoutId = null;
-            beginSocketFallback();
+            const closeReason = `close-${event.code}-${event.reason || "no-reason"}`;
+            beginSocketFallback(closeReason);
+            reportRealtimeDiagnostic("websocket-closed", {
+              wsStatus: closeReason,
+              fallbackReason: closeReason,
+            });
             setNoticeMessage("실시간 재연결 중");
             scheduleDisconnectedFallbackSync();
             socketRetryTimeoutId = window.setTimeout(() => {
@@ -906,13 +1006,24 @@ export function GlobalRequestNotifier({
 
         void connectWebSocket();
       } else if ("EventSource" in window) {
+        reportRealtimeDiagnostic("legacy-eventsource-selected", {
+          tokenStatus: "not-requested",
+          wsStatus: "not-connected",
+          fallbackReason: "legacy-sse",
+        });
         if (debugRealtimeEvents) {
           console.info("[maple-sse-debug] browser-event-source-connecting", {
             path: realtimeEventsPath,
           });
         }
 
-        eventSource = new EventSource(realtimeEventsPath);
+        const eventSourceUrl = new URL(realtimeEventsPath, window.location.href);
+        eventSourceUrl.searchParams.set("clientInstanceId", clientInstanceId);
+        eventSourceUrl.searchParams.set(
+          "buildVersion",
+          realtimeDiagnosticRef.current.buildVersion,
+        );
+        eventSource = new EventSource(eventSourceUrl);
         const handleEventSourceReady = (event: MessageEvent<string>) => {
           isSocketReady = true;
           clearSocketTimer(disconnectedFallbackTimeoutId);
@@ -1044,6 +1155,7 @@ export function GlobalRequestNotifier({
     externalWebSocketTransportEnabled,
     noticeScopeKey,
     playNoticeSoundWithRetry,
+    reportRealtimeDiagnostic,
     syncRequests,
   ]);
 

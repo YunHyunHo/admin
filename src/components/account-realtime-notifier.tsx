@@ -7,10 +7,19 @@ import { usePathname } from "next/navigation";
 type Props = ComponentProps<typeof GlobalRequestNotifier> & {
   accountModeControlEnabled: boolean;
   initialMode: "legacy" | "websocket";
+  initialModeReason: string;
+  buildVersion: string;
 };
 
-export function AccountRealtimeNotifier({ accountModeControlEnabled, initialMode, ...props }: Props) {
+export function AccountRealtimeNotifier({
+  accountModeControlEnabled,
+  initialMode,
+  initialModeReason,
+  buildVersion,
+  ...props
+}: Props) {
   const [mode, setMode] = useState<"legacy" | "websocket">(initialMode);
+  const [modeReason, setModeReason] = useState(initialModeReason);
   const [metrics, setMetrics] = useState({ requests: 0, startedAt: 0, lastCheckAt: 0 });
   const pathname = usePathname();
   useEffect(() => {
@@ -34,7 +43,10 @@ export function AccountRealtimeNotifier({ accountModeControlEnabled, initialMode
         }
       } catch { /* Keep the server-rendered/last confirmed mode on transient control-plane failure. */ }
       finally { clearTimeout(deadline); running = false; }
-      if (!stopped && next) setMode(next);
+      if (!stopped && next) {
+        setMode(next);
+        setModeReason("control-plane-check");
+      }
     }
     void check();
     const onVisible = () => { if (document.visibilityState === "visible") void check(); };
@@ -43,6 +55,7 @@ export function AccountRealtimeNotifier({ accountModeControlEnabled, initialMode
       const detail = (event as CustomEvent<{ mode?: string }>).detail;
       if (detail?.mode === "legacy" || detail?.mode === "websocket") {
         setMode(detail.mode);
+        setModeReason("websocket-control-event");
       }
     };
     document.addEventListener("visibilitychange", onVisible);
@@ -68,5 +81,8 @@ export function AccountRealtimeNotifier({ accountModeControlEnabled, initialMode
     externalWebSocketTransportEnabled={mode === "websocket"}
     periodicFallbackSyncEnabled={mode === "legacy"}
     fallbackPollIntervalMs={1000}
+    realtimeMode={mode}
+    realtimeModeReason={modeReason}
+    realtimeBuildVersion={buildVersion}
   /></>;
 }

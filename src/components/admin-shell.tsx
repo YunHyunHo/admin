@@ -376,6 +376,11 @@ export async function AdminShell({
                     <AccountRealtimeNotifier
                       accountModeControlEnabled={realtimeV2Eligible}
                       initialMode={realtimeAccountControl.mode}
+                      initialModeReason={realtimeAccountControl.reason}
+                      buildVersion={
+                        process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ??
+                        "unknown"
+                      }
                       realtimeEventsEnabled={realtimeEventsEnabled}
                       realtimeEventsPath={realtimeEventsPath}
                       eventDrivenSnapshotEnabled={

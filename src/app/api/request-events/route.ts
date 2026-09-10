@@ -31,6 +31,7 @@ import {
   getAdminRequestUsageIdentity,
   recordRequestUsage,
 } from "@/lib/request-usage-metrics";
+import { logAdminRealtimeDiagnostic } from "@/lib/realtime-diagnostics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -223,6 +224,24 @@ export async function GET(request: Request) {
   if (!user) {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
+
+  const requestUrl = new URL(request.url);
+  await logAdminRealtimeDiagnostic({
+    request,
+    user,
+    event: "legacy-sse-connected",
+    client: {
+      mode: "legacy",
+      modeReason: "request-events-route-used",
+      tokenStatus: "not-requested",
+      wsStatus: "not-connected",
+      fallbackReason: "legacy-sse",
+      buildVersion:
+        requestUrl.searchParams.get("buildVersion") ?? "missing-client-build",
+      clientInstanceId:
+        requestUrl.searchParams.get("clientInstanceId") ?? "missing-client-id",
+    },
+  });
 
   recordRequestUsage({
     request,

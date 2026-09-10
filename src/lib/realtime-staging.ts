@@ -85,6 +85,21 @@ async function getOwnerLoginIdForAdmin(
   return result.rows[0]?.login_id.trim().toLowerCase() ?? null;
 }
 
+export async function getAdminRealtimeEligibility(
+  user: Pick<SessionUser, "id" | "loginId" | "role">,
+) {
+  const configured = isRealtimeV2Configured();
+  if (!configured) {
+    return { configured, ownerLoginId: null, ownerEnabled: false };
+  }
+  const ownerLoginId = await getOwnerLoginIdForAdmin(user);
+  const ownerEnabled = Boolean(
+    ownerLoginId && getEnabledOwnerLoginIds().has(ownerLoginId),
+  );
+
+  return { configured, ownerLoginId, ownerEnabled };
+}
+
 async function getAdminScope(user: SessionUser, ownerLoginId: string) {
   if (user.role === "MASTER") {
     const result = await getPgPool().query<{
@@ -151,9 +166,9 @@ async function getAdminScope(user: SessionUser, ownerLoginId: string) {
 }
 
 export async function getAdminRealtimePrincipal(user: SessionUser): Promise<RealtimePrincipal | null> {
-  if (!isRealtimeV2Configured()) return null;
-  const ownerLoginId = await getOwnerLoginIdForAdmin(user);
-  if (!ownerLoginId || !getEnabledOwnerLoginIds().has(ownerLoginId)) return null;
+  const eligibility = await getAdminRealtimeEligibility(user);
+  if (!eligibility.configured || !eligibility.ownerLoginId || !eligibility.ownerEnabled) return null;
+  const ownerLoginId = eligibility.ownerLoginId;
   const scope = await getAdminScope(user, ownerLoginId);
   return {
     principalType: "admin",
