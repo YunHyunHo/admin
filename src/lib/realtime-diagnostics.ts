@@ -12,6 +12,13 @@ export type RealtimeClientDiagnostic = {
   fallbackReason?: string;
   buildVersion?: string;
   clientInstanceId?: string;
+  visibilityState?: string;
+  connectedAt?: string;
+  lastHeartbeatAt?: string;
+  timeoutDetectedAt?: string;
+  closeCode?: number;
+  closeReason?: string;
+  fallbackEnteredAt?: string;
 };
 
 function clean(value: unknown, maximumLength = 120) {
@@ -43,6 +50,15 @@ export function parseRealtimeClientDiagnostic(
     fallbackReason: clean(input.fallbackReason),
     buildVersion: clean(input.buildVersion, 64),
     clientInstanceId: clean(input.clientInstanceId, 80),
+    visibilityState: clean(input.visibilityState, 24),
+    connectedAt: clean(input.connectedAt, 48),
+    lastHeartbeatAt: clean(input.lastHeartbeatAt, 48),
+    timeoutDetectedAt: clean(input.timeoutDetectedAt, 48),
+    closeCode: typeof input.closeCode === "number"
+      ? input.closeCode
+      : undefined,
+    closeReason: clean(input.closeReason, 120),
+    fallbackEnteredAt: clean(input.fallbackEnteredAt, 48),
   };
 }
 
@@ -78,5 +94,12 @@ export async function logAdminRealtimeDiagnostic(input: {
     fallbackReason: client.fallbackReason ?? "none",
     buildVersion: client.buildVersion ?? getRealtimeBuildVersion(),
     clientInstanceId: client.clientInstanceId ?? "unknown",
+    visibilityState: client.visibilityState ?? "unknown",
+    connectedAt: client.connectedAt ?? null,
+    lastHeartbeatAt: client.lastHeartbeatAt ?? null,
+    timeoutDetectedAt: client.timeoutDetectedAt ?? null,
+    closeCode: client.closeCode ?? null,
+    closeReason: client.closeReason ?? null,
+    fallbackEnteredAt: client.fallbackEnteredAt ?? null,
   }));
 }
