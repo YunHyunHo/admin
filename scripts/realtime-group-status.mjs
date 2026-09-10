@@ -36,23 +36,32 @@ try {
        from admins
        where lower(login_id) = $1 and role = 'MASTER' and status <> 'DELETED'
        limit 1
-     ), account_tree as (
-       select a.id, a.login_id, a.role::text role, a.created_by,
+     ), admin_chains as (
+       select a.id root_id, a.id, a.login_id, a.role::text role, a.created_by,
               array[a.id] path, 0 depth
        from admins a
-       join owner o on a.id = o.id
+       where a.status <> 'DELETED'
        union all
-       select child.id, child.login_id, child.role::text, child.created_by,
-              tree.path || child.id, tree.depth + 1
-       from account_tree tree
-       join admins child on child.created_by = tree.id
-       where child.status <> 'DELETED'
-         and tree.depth < 31
-         and not child.id = any(tree.path)
+       select chain.root_id, parent.id, parent.login_id, parent.role::text, parent.created_by,
+              chain.path || parent.id, chain.depth + 1
+       from admin_chains chain
+       join admins parent on parent.id = chain.created_by
+       where parent.status <> 'DELETED'
+         and chain.depth < 31
+         and not parent.id = any(chain.path)
+     ), resolved_owners as (
+       select distinct on (root_id) root_id, lower(login_id) final_master
+       from admin_chains
+       where role = 'MASTER'
+       order by root_id, depth
      ), group_admins as (
-       select distinct on (id) id, login_id, role, depth
-       from account_tree
-       order by id, depth
+       select a.id, a.login_id, a.role::text role,
+              case when a.id = o.id then 0 else 1 end depth,
+              resolved.final_master
+       from admins a
+       join resolved_owners resolved on resolved.root_id = a.id
+       join owner o on resolved.final_master = o.login_id
+       where a.status <> 'DELETED'
      ), partner_domains as (
        select distinct d.id
        from domains d
@@ -71,7 +80,7 @@ try {
        (select coalesce(jsonb_agg(jsonb_build_object(
           'loginId', login_id,
           'role', role,
-          'finalMaster', $1,
+          'finalMaster', final_master,
           'realtime', case when (select enabled from realtime_account_flags
             where environment = $2 and lower(login_id) = $1 limit 1) is true
             then 'websocket' else 'legacy' end
