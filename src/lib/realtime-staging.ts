@@ -58,13 +58,29 @@ export function isRealtimeV2Configured() {
 }
 
 async function getOwnerLoginIdForAdmin(
-  user: Pick<SessionUser, "loginId" | "role" | "createdBy">,
+  user: Pick<SessionUser, "id" | "loginId" | "role">,
 ) {
   if (user.role === "MASTER") return user.loginId.trim().toLowerCase();
-  if (!user.createdBy) return null;
   const result = await getPgPool().query<{ login_id: string }>(
-    `select login_id from admins where id = $1::uuid and status <> 'DELETED' limit 1`,
-    [user.createdBy],
+    `with recursive admin_chain as (
+       select id, login_id, role::text role, created_by, array[id] path, 0 depth
+       from admins
+       where id = $1::uuid and status <> 'DELETED'
+       union all
+       select parent.id, parent.login_id, parent.role::text, parent.created_by,
+              chain.path || parent.id, chain.depth + 1
+       from admin_chain chain
+       join admins parent on parent.id = chain.created_by
+       where parent.status <> 'DELETED'
+         and chain.depth < 31
+         and not parent.id = any(chain.path)
+     )
+     select login_id
+     from admin_chain
+     where role = 'MASTER'
+     order by depth
+     limit 1`,
+    [user.id],
   );
   return result.rows[0]?.login_id.trim().toLowerCase() ?? null;
 }
@@ -152,13 +168,30 @@ export async function getAdminRealtimePrincipal(user: SessionUser): Promise<Real
 export async function getPartnerRealtimePrincipal(input: { loginId: string; domainId: string }) {
   if (!isRealtimeV2Configured()) return null;
   const result = await getPgPool().query<{ owner_login_id: string }>(
-    `select lower(owner.login_id) owner_login_id
+    `with recursive domain_admins as (
+       select distinct domain_admin.id, domain_admin.login_id, domain_admin.role::text role,
+              domain_admin.created_by, array[domain_admin.id] path, 0 depth
        from domains d
        join admin_company_mappings acm on acm.company_id = d.company_id
-       join admins domain_admin on domain_admin.id = acm.admin_id and domain_admin.role = 'DOMAIN_ADMIN'
-       join admins owner on owner.id = domain_admin.created_by and owner.role = 'MASTER'
-      where d.id = $1::uuid and d.status <> 'DELETED' and domain_admin.status <> 'DELETED'
-      limit 1`,
+       join admins domain_admin on domain_admin.id = acm.admin_id
+       where d.id = $1::uuid
+         and d.status <> 'DELETED'
+         and domain_admin.role = 'DOMAIN_ADMIN'
+         and domain_admin.status <> 'DELETED'
+       union all
+       select parent.id, parent.login_id, parent.role::text, parent.created_by,
+              chain.path || parent.id, chain.depth + 1
+       from domain_admins chain
+       join admins parent on parent.id = chain.created_by
+       where parent.status <> 'DELETED'
+         and chain.depth < 31
+         and not parent.id = any(chain.path)
+     )
+     select lower(login_id) owner_login_id
+     from domain_admins
+     where role = 'MASTER'
+     order by depth
+     limit 1`,
     [input.domainId],
   );
   const ownerLoginId = result.rows[0]?.owner_login_id;

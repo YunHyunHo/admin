@@ -4,10 +4,13 @@ import { useEffect, useState, type ComponentProps } from "react";
 import { GlobalRequestNotifier } from "@/components/global-request-notifier";
 import { usePathname } from "next/navigation";
 
-type Props = ComponentProps<typeof GlobalRequestNotifier> & { accountModeControlEnabled: boolean };
+type Props = ComponentProps<typeof GlobalRequestNotifier> & {
+  accountModeControlEnabled: boolean;
+  initialMode: "legacy" | "websocket";
+};
 
-export function AccountRealtimeNotifier({ accountModeControlEnabled, ...props }: Props) {
-  const [mode, setMode] = useState<"legacy" | "websocket">("legacy");
+export function AccountRealtimeNotifier({ accountModeControlEnabled, initialMode, ...props }: Props) {
+  const [mode, setMode] = useState<"legacy" | "websocket">(initialMode);
   const [metrics, setMetrics] = useState({ requests: 0, startedAt: 0, lastCheckAt: 0 });
   const pathname = usePathname();
   useEffect(() => {
@@ -22,16 +25,16 @@ export function AccountRealtimeNotifier({ accountModeControlEnabled, ...props }:
       setMetrics(previous => ({ requests: previous.requests + 1, startedAt: previous.startedAt || now, lastCheckAt: now }));
       controller = new AbortController();
       const deadline = setTimeout(() => controller?.abort(), 2000);
-      let next: "legacy" | "websocket" = "legacy";
+      let next: "legacy" | "websocket" | null = null;
       try {
         const response = await fetch("/api/realtime-mode", { cache: "no-store", signal: controller.signal });
         if (response.ok) {
           const data = await response.json();
-          if (data.mode === "websocket") next = "websocket";
+          if (data.mode === "legacy" || data.mode === "websocket") next = data.mode;
         }
-      } catch { /* Fail closed to the established notification transport. */ }
+      } catch { /* Keep the server-rendered/last confirmed mode on transient control-plane failure. */ }
       finally { clearTimeout(deadline); running = false; }
-      if (!stopped) setMode(next);
+      if (!stopped && next) setMode(next);
     }
     void check();
     const onVisible = () => { if (document.visibilityState === "visible") void check(); };

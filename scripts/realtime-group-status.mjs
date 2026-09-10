@@ -31,16 +31,28 @@ const pool = new Pool({
 
 try {
   const result = await pool.query(
-    `with owner as (
+    `with recursive owner as (
        select id, lower(login_id) login_id
        from admins
        where lower(login_id) = $1 and role = 'MASTER' and status <> 'DELETED'
        limit 1
-     ), group_admins as (
-       select a.id, a.role::text role
+     ), account_tree as (
+       select a.id, a.login_id, a.role::text role, a.created_by,
+              array[a.id] path, 0 depth
        from admins a
-       join owner o on a.id = o.id or a.created_by = o.id
-       where a.status <> 'DELETED'
+       join owner o on a.id = o.id
+       union all
+       select child.id, child.login_id, child.role::text, child.created_by,
+              tree.path || child.id, tree.depth + 1
+       from account_tree tree
+       join admins child on child.created_by = tree.id
+       where child.status <> 'DELETED'
+         and tree.depth < 31
+         and not child.id = any(tree.path)
+     ), group_admins as (
+       select distinct on (id) id, login_id, role, depth
+       from account_tree
+       order by id, depth
      ), partner_domains as (
        select distinct d.id
        from domains d
@@ -55,7 +67,15 @@ try {
           from (select role, count(*)::int count from group_admins group by role) roles) role_counts,
        (select count(*)::int from partner_domains) partner_domains,
        (select enabled from realtime_account_flags
-         where environment = $2 and lower(login_id) = $1 limit 1) flag_enabled`,
+         where environment = $2 and lower(login_id) = $1 limit 1) flag_enabled,
+       (select coalesce(jsonb_agg(jsonb_build_object(
+          'loginId', login_id,
+          'role', role,
+          'finalMaster', $1,
+          'realtime', case when (select enabled from realtime_account_flags
+            where environment = $2 and lower(login_id) = $1 limit 1) is true
+            then 'websocket' else 'legacy' end
+        ) order by depth, lower(login_id)), '[]'::jsonb) from group_admins) accounts`,
     [ownerLoginId, environment],
   );
 
@@ -75,6 +95,7 @@ try {
             : row.flag_enabled === false
               ? "legacy"
               : "not-configured",
+        accounts: row.accounts,
         localEnvironmentHints: {
           realtimeUrl: Boolean(
             process.env.REALTIME_V2_URL || process.env.MAPLE_REALTIME_URL,

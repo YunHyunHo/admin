@@ -12,10 +12,10 @@ import {
   getNotificationFallbackPollIntervalMs,
   isReliableNoticeSoundEnabled,
   isReliableRequestEventRecoveryEnabled,
-  isRealtimeV2Eligible,
   isRealtimeSyncPilot,
   isReducedNotificationPollingPilot,
 } from "@/lib/realtime-sync-pilot";
+import { getRealtimeAccountControl } from "@/lib/realtime-account-mode";
 
 const sideMenuGroups = [
   {
@@ -208,7 +208,8 @@ export async function AdminShell({
     .filter((group) => group.items.length > 0);
   const visibleQuickActions = isSettlementOnlyUser ? [] : quickActions;
   const realtimeEventsEnabled = isRealtimeSyncPilot(user);
-  const realtimeV2Eligible = await isRealtimeV2Eligible(user);
+  const realtimeAccountControl = await getRealtimeAccountControl(user);
+  const realtimeV2Eligible = realtimeAccountControl.eligible;
   const reducedNotificationPollingPilot =
     isReducedNotificationPollingPilot(user);
   const reliableNoticeSoundEnabled = isReliableNoticeSoundEnabled(user);
@@ -374,6 +375,7 @@ export async function AdminShell({
                 <div className="absolute right-4 top-4 flex items-center gap-2 sm:right-6 lg:static">
                     <AccountRealtimeNotifier
                       accountModeControlEnabled={realtimeV2Eligible}
+                      initialMode={realtimeAccountControl.mode}
                       realtimeEventsEnabled={realtimeEventsEnabled}
                       realtimeEventsPath={realtimeEventsPath}
                       eventDrivenSnapshotEnabled={
