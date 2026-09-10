@@ -10,6 +10,9 @@ const defaultPollIntervalMs = 1000;
 const defaultDisconnectedFallbackPollIntervalMs = 10_000;
 const webSocketReadyTimeoutMs = 8_000;
 const webSocketRecycleIntervalMs = 12 * 60_000;
+const webSocketHeartbeatIntervalMs = 15_000;
+const webSocketHeartbeatTimeoutMs = 45_000;
+const webSocketReconnectGraceMs = 5_000;
 const noticeSoundReadyKey = "winpay-notice-sound-ready";
 const pendingNoticeSnapshotKey = "winpay-pending-notice-snapshot";
 const noticeRetryDelayMs = 1200;
@@ -190,6 +193,13 @@ export function GlobalRequestNotifier({
     fallbackReason: "none",
     buildVersion: realtimeBuildVersion,
     clientInstanceId: "unknown",
+    visibilityState: "unknown",
+    connectedAt: null as string | null,
+    lastHeartbeatAt: null as string | null,
+    timeoutDetectedAt: null as string | null,
+    closeCode: null as number | null,
+    closeReason: null as string | null,
+    fallbackEnteredAt: null as string | null,
   });
 
   const reportRealtimeDiagnostic = useCallback((
@@ -199,6 +209,9 @@ export function GlobalRequestNotifier({
     realtimeDiagnosticRef.current = {
       ...realtimeDiagnosticRef.current,
       ...update,
+      visibilityState: typeof document === "undefined"
+        ? "unknown"
+        : document.visibilityState,
     };
     void fetch("/api/realtime-diagnostics", {
       method: "POST",
@@ -531,6 +544,7 @@ export function GlobalRequestNotifier({
       let socketRetryTimeoutId: number | null = null;
       let socketReadyTimeoutId: number | null = null;
       let socketRecycleTimeoutId: number | null = null;
+      let socketFallbackGraceTimeoutId: number | null = null;
       let disconnectedFallbackTimeoutId: number | null = null;
       let socketRetryDelayMs = 500;
       let isSocketReady = false;
@@ -609,10 +623,28 @@ export function GlobalRequestNotifier({
           reportRealtimeDiagnostic("fallback-entered", {
             wsStatus: "disconnected",
             fallbackReason: reason,
+            fallbackEnteredAt: new Date().toISOString(),
           });
           void syncRequests();
         }
         scheduleDisconnectedFallbackSync();
+      };
+      const scheduleSocketFallback = (reason: string) => {
+        if (
+          isCancelled ||
+          isSocketReady ||
+          periodicFallbackSyncEnabled ||
+          socketFallbackGraceTimeoutId !== null
+        ) {
+          return;
+        }
+
+        socketFallbackGraceTimeoutId = window.setTimeout(() => {
+          socketFallbackGraceTimeoutId = null;
+          if (!isCancelled && !isSocketReady) {
+            beginSocketFallback(reason);
+          }
+        }, webSocketReconnectGraceMs);
       };
       const handleRequestEvent = async (data: string, lastEventId = "") => {
         const listSyncPromises: Promise<unknown>[] = [];
@@ -815,7 +847,7 @@ export function GlobalRequestNotifier({
                 wsStatus: "not-connected",
                 fallbackReason: reason,
               });
-              scheduleDisconnectedFallbackSync();
+              scheduleSocketFallback(reason);
               socketRetryTimeoutId = window.setTimeout(() => {
                 socketRetryTimeoutId = null;
                 void connectWebSocket();
@@ -847,6 +879,10 @@ export function GlobalRequestNotifier({
               tokenStatus: authToken ? "received" : "not-required",
               wsStatus: "open-awaiting-ready",
               fallbackReason: "none",
+              connectedAt: new Date().toISOString(),
+              timeoutDetectedAt: null,
+              closeCode: null,
+              closeReason: null,
             });
 
             if (authToken) {
@@ -889,10 +925,25 @@ export function GlobalRequestNotifier({
                 };
                 type?: string;
                 mode?: "legacy" | "websocket";
+                clientSentAt?: string;
+                serverReceivedAt?: string;
+                serverSentAt?: string;
               };
 
               if (payload.type === "pong") {
                 lastPongAt = Date.now();
+                const browserReceivedAt = new Date().toISOString();
+                if (socket.readyState === WebSocket.OPEN) {
+                  socket.send(JSON.stringify({
+                    type: "heartbeat-observed",
+                    clientSentAt: payload.clientSentAt,
+                    serverReceivedAt: payload.serverReceivedAt,
+                    serverSentAt: payload.serverSentAt,
+                    browserReceivedAt,
+                    browserRespondedAt: new Date().toISOString(),
+                    visibilityState: document.visibilityState,
+                  }));
+                }
               } else if (payload.type === "ready") {
                 clearSocketTimer(socketReadyTimeoutId);
                 socketReadyTimeoutId = null;
@@ -904,16 +955,36 @@ export function GlobalRequestNotifier({
                   isSocketReady = true;
                   outageSyncStarted = false;
                   lastPongAt = Date.now();
+                  clearSocketTimer(socketFallbackGraceTimeoutId);
+                  socketFallbackGraceTimeoutId = null;
                   clearInterval(heartbeatTimer);
                   heartbeatTimer = setInterval(() => {
                     if (isCancelled || webSocket !== socket) return;
-                    if (Date.now() - lastPongAt > 15000) {
-                      beginSocketFallback("heartbeat-timeout");
+                    if (Date.now() - lastPongAt > webSocketHeartbeatTimeoutMs) {
+                      const timeoutDetectedAt = new Date().toISOString();
+                      if (socket.readyState === WebSocket.OPEN) {
+                        socket.send(JSON.stringify({
+                          type: "heartbeat-timeout",
+                          lastPongAt: new Date(lastPongAt).toISOString(),
+                          detectedAt: timeoutDetectedAt,
+                          visibilityState: document.visibilityState,
+                        }));
+                      }
+                      reportRealtimeDiagnostic("heartbeat-timeout", {
+                        wsStatus: "heartbeat-timeout",
+                        fallbackReason: "reconnecting-before-fallback",
+                        lastHeartbeatAt: new Date(lastPongAt).toISOString(),
+                        timeoutDetectedAt,
+                      });
                       socket.close(1013, "heartbeat timeout");
                     } else if (socket.readyState === WebSocket.OPEN) {
-                      socket.send(JSON.stringify({ type: "ping" }));
+                      socket.send(JSON.stringify({
+                        type: "ping",
+                        clientSentAt: new Date().toISOString(),
+                        visibilityState: document.visibilityState,
+                      }));
                     }
-                  }, 5000);
+                  }, webSocketHeartbeatIntervalMs);
                   window.dispatchEvent(new Event("realtime-control-refresh"));
                   clearSocketTimer(disconnectedFallbackTimeoutId);
                   disconnectedFallbackTimeoutId = null;
@@ -921,6 +992,8 @@ export function GlobalRequestNotifier({
                   reportRealtimeDiagnostic("websocket-ready", {
                     wsStatus: "ready",
                     fallbackReason: "none",
+                    lastHeartbeatAt: new Date(lastPongAt).toISOString(),
+                    fallbackEnteredAt: null,
                   });
                 }).catch(() => {
                   reportRealtimeDiagnostic("websocket-state-sync-failed", {
@@ -967,15 +1040,17 @@ export function GlobalRequestNotifier({
             }
           };
           socket.onerror = () => {
-            beginSocketFallback("websocket-error");
+            isSocketReady = false;
             reportRealtimeDiagnostic("websocket-error", {
               wsStatus: "error",
-              fallbackReason: "websocket-error",
+              fallbackReason: "reconnecting-before-fallback",
             });
             setNoticeMessage("실시간 재연결 중");
+            scheduleSocketFallback("websocket-error");
           };
           socket.onclose = (event) => {
             clearInterval(heartbeatTimer);
+            isSocketReady = false;
             if (webSocket === socket) {
               webSocket = null;
             }
@@ -989,13 +1064,14 @@ export function GlobalRequestNotifier({
             clearSocketTimer(socketRecycleTimeoutId);
             socketRecycleTimeoutId = null;
             const closeReason = `close-${event.code}-${event.reason || "no-reason"}`;
-            beginSocketFallback(closeReason);
             reportRealtimeDiagnostic("websocket-closed", {
               wsStatus: closeReason,
-              fallbackReason: closeReason,
+              fallbackReason: "reconnecting-before-fallback",
+              closeCode: event.code,
+              closeReason: event.reason || "no-reason",
             });
             setNoticeMessage("실시간 재연결 중");
-            scheduleDisconnectedFallbackSync();
+            scheduleSocketFallback(closeReason);
             socketRetryTimeoutId = window.setTimeout(() => {
               socketRetryTimeoutId = null;
               void connectWebSocket();
@@ -1088,7 +1164,7 @@ export function GlobalRequestNotifier({
       } else {
         // Event-driven pilots use one initial authoritative snapshot. After
         // that, polling runs only while SSE/WebSocket is unavailable.
-        void syncRequests().finally(scheduleDisconnectedFallbackSync);
+        void syncRequests();
       }
 
       return () => {
@@ -1101,6 +1177,7 @@ export function GlobalRequestNotifier({
         }
         clearSocketTimer(socketReadyTimeoutId);
         clearSocketTimer(socketRecycleTimeoutId);
+        clearSocketTimer(socketFallbackGraceTimeoutId);
         clearSocketTimer(disconnectedFallbackTimeoutId);
         clearInterval(heartbeatTimer);
         webSocket?.close(1000, "page closed");
