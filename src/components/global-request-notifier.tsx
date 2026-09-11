@@ -891,6 +891,7 @@ export function GlobalRequestNotifier({
                 token: authToken,
                 clientInstanceId,
                 lastProcessedEventId: lastRealtimeEventIdRef.current,
+                buildVersion: realtimeDiagnosticRef.current.buildVersion,
               }));
             }
 
