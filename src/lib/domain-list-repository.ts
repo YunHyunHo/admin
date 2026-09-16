@@ -423,6 +423,113 @@ export async function updateDomainEntryStatus(input: {
   );
 }
 
+export async function updateDomainEntryName(input: {
+  id: string;
+  domainName: string;
+  user: SessionUser;
+}) {
+  if (!isUuid(input.id)) {
+    throw new Error("도메인 정보를 확인해주세요.");
+  }
+
+  const domainName = input.domainName.trim();
+
+  if (!domainName) {
+    throw new Error("변경할 도메인명을 입력해주세요.");
+  }
+
+  await withTransaction(async (client) => {
+    const domainResult = await client.query<{
+      domain_id: string;
+      company_id: string;
+      distributor_id: string | null;
+      master_admin_id: string;
+    }>(
+      `
+        select
+          dom.id::text as domain_id,
+          dom.company_id::text as company_id,
+          dom.distributor_id::text as distributor_id,
+          owner_admin.created_by::text as master_admin_id
+        from domains dom
+        join admin_company_mappings owner_mapping
+          on owner_mapping.company_id = dom.company_id
+        join admins owner_admin
+          on owner_admin.id = owner_mapping.admin_id
+         and owner_admin.role = 'DOMAIN_ADMIN'
+         and owner_admin.status <> 'DELETED'
+        where dom.id = $1::uuid
+          and dom.status <> 'DELETED'
+          and (
+            ($2 = 'MASTER' and owner_admin.created_by = $3::uuid)
+            or ($2 = 'DOMAIN_ADMIN' and owner_admin.id = $3::uuid)
+          )
+        order by owner_admin.created_at asc
+        limit 1
+      `,
+      [input.id, input.user.role, input.user.id],
+    );
+    const domain = domainResult.rows[0];
+
+    if (!domain) {
+      throw new Error("도메인명을 변경할 권한이 없거나 도메인을 찾지 못했습니다.");
+    }
+
+    const duplicateResult = await client.query<{ id: string }>(
+      `
+        select c.id::text
+        from companies c
+        where lower(trim(c.company_name)) = lower(trim($1))
+          and c.id <> $2::uuid
+          and ${getMasterOwnedCompanyExistsCondition("c.id", "$3")}
+        limit 1
+      `,
+      [domainName, domain.company_id, domain.master_admin_id],
+    );
+
+    if (duplicateResult.rows[0]) {
+      throw new Error("이미 사용 중인 도메인명입니다.");
+    }
+
+    await client.query(
+      `
+        update companies
+        set company_name = $2,
+            updated_at = now()
+        where id = $1::uuid
+      `,
+      [domain.company_id, domainName],
+    );
+
+    await client.query(
+      `
+        update admins domain_admin
+        set name = $2,
+            updated_at = now()
+        where domain_admin.role = 'DOMAIN_ADMIN'
+          and domain_admin.status <> 'DELETED'
+          and exists (
+            select 1
+            from admin_company_mappings mapping
+            where mapping.admin_id = domain_admin.id
+              and mapping.company_id = $1::uuid
+          )
+      `,
+      [domain.company_id, domainName],
+    );
+
+    await publishAdminRequestEvent(client, {
+      kind: "domain_update",
+      requestId: domain.domain_id,
+      companyId: domain.company_id,
+      domainId: domain.domain_id,
+      distributorId: domain.distributor_id,
+      status: "UPDATED",
+      occurredAt: new Date().toISOString(),
+    });
+  });
+}
+
 export async function updateDomainEntryAccount(input: {
   id: string;
   bankName: string;

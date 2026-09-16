@@ -88,6 +88,10 @@ export function DomainListBoard({
   const [savingWithdrawAccountId, setSavingWithdrawAccountId] = useState<string | null>(
     null,
   );
+  const [nameModalRow, setNameModalRow] = useState<DomainListRow | null>(null);
+  const [nextDomainName, setNextDomainName] = useState("");
+  const [nameModalMessage, setNameModalMessage] = useState("");
+  const [isSavingDomainName, setIsSavingDomainName] = useState(false);
   const isRefreshingRef = useRef(false);
   const hasQueuedRefreshRef = useRef(false);
   const pendingSignatureRef = useRef<string | null>(null);
@@ -189,6 +193,19 @@ export function DomainListBoard({
     setBalanceAmount("");
     setBalanceModalMessage("");
     setIsAdjustingBalance(false);
+  }
+
+  function openNameModal(row: DomainListRow) {
+    setNameModalRow(row);
+    setNextDomainName(row.companyName);
+    setNameModalMessage("");
+  }
+
+  function closeNameModal() {
+    setNameModalRow(null);
+    setNextDomainName("");
+    setNameModalMessage("");
+    setIsSavingDomainName(false);
   }
 
   function applyPayload(data: ApiResponse) {
@@ -357,6 +374,52 @@ export function DomainListBoard({
       setMessage(data.message ?? "도메인 상태가 변경되었습니다.");
     } finally {
       setProcessingId(null);
+    }
+  }
+
+  async function handleUpdateDomainName() {
+    if (!nameModalRow || isSavingDomainName) {
+      return;
+    }
+
+    const normalizedName = nextDomainName.trim();
+
+    if (!normalizedName) {
+      setNameModalMessage("변경할 도메인명을 입력해주세요.");
+      return;
+    }
+
+    if (normalizedName === nameModalRow.companyName) {
+      setNameModalMessage("현재 도메인명과 동일합니다.");
+      return;
+    }
+
+    setIsSavingDomainName(true);
+    setNameModalMessage("");
+
+    try {
+      const response = await fetch("/api/domain-list", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: nameModalRow.id,
+          action: "update-name",
+          domainName: normalizedName,
+        }),
+      });
+      const text = await response.text();
+      const data = safeParseJson(text);
+
+      if (!response.ok || !("rows" in data)) {
+        setNameModalMessage(data.message ?? "도메인명 변경에 실패했습니다.");
+        return;
+      }
+
+      applyPayload(data);
+      setMessage(data.message ?? "도메인명이 변경되었습니다.");
+      closeNameModal();
+    } finally {
+      setIsSavingDomainName(false);
     }
   }
 
@@ -731,6 +794,14 @@ export function DomainListBoard({
                       </button>
                       <button
                         type="button"
+                        onClick={() => openNameModal(row)}
+                        disabled={processingId === row.id}
+                        className="rounded-xl bg-blue-500/18 px-3 py-2 text-xs font-semibold text-blue-100 transition hover:bg-blue-500/28 disabled:cursor-not-allowed disabled:bg-white/6 disabled:text-white/34"
+                      >
+                        도메인명 변경
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => {
                           void openAccountModal(row);
                         }}
@@ -871,6 +942,61 @@ export function DomainListBoard({
                 type="button"
                 onClick={closeCreateModal}
                 className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {nameModalRow ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-[440px] rounded-[28px] border border-white/10 bg-white p-6 text-slate-950 shadow-[0_28px_120px_rgba(0,0,0,0.58)]">
+            <h3 className="text-2xl font-semibold tracking-[-0.04em]">
+              도메인명 변경
+            </h3>
+            <p className="mt-3 text-sm leading-6 text-slate-500">
+              대리점과 업체명 컬럼에 표시되는 이름이 함께 변경됩니다.
+            </p>
+
+            <div className="mt-7 space-y-4">
+              <ModalFeedback message={nameModalMessage} />
+              <label className="block">
+                <span className="mb-2 block text-xs font-semibold text-slate-500">
+                  변경할 도메인명
+                </span>
+                <input
+                  value={nextDomainName}
+                  onChange={(event) => setNextDomainName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void handleUpdateDomainName();
+                    }
+                  }}
+                  autoFocus
+                  className="h-14 w-full rounded-xl border border-slate-300 px-5 text-sm outline-none transition focus:border-blue-500"
+                />
+              </label>
+            </div>
+
+            <div className="mt-10 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  void handleUpdateDomainName();
+                }}
+                disabled={isSavingDomainName}
+                className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {isSavingDomainName ? "변경 중" : "변경"}
+              </button>
+              <button
+                type="button"
+                onClick={closeNameModal}
+                disabled={isSavingDomainName}
+                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 취소
               </button>
