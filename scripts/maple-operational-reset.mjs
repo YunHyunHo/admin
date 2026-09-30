@@ -342,11 +342,11 @@ try {
     await client.query(
       `update admins
        set status = 'DELETED',
-           password_hash = $2,
+           password_hash = $2::text,
            password_ciphertext = null,
            created_by = null,
            last_login_at = null,
-           memo = concat_ws(E'\n', nullif(memo, ''), $3),
+           memo = concat_ws(E'\n', nullif(memo, ''), $3::text),
            updated_at = now()
        where id = any($1::uuid[])
        returning id::text`,
