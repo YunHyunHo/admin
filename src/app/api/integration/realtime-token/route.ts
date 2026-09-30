@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getPartnerAccess } from "@/lib/partner-auth";
 import {
   createRealtimeToken,
+  getRealtimeAccountBaseline,
   getPartnerRealtimePrincipal,
   getRealtimeGroupMode,
 } from "@/lib/realtime-staging";
@@ -11,7 +12,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const partnerAccess = getPartnerAccess(request);
+  const partnerAccess = await getPartnerAccess(request);
   if (!partnerAccess.access) {
     return NextResponse.json(
       { mode: "legacy", message: "유효한 업체 로그인 토큰이 필요합니다." },
@@ -35,8 +36,10 @@ export async function GET(request: Request) {
     );
   }
 
+  const baselineEventId = await getRealtimeAccountBaseline(principal.ownerLoginId);
+
   return NextResponse.json(
-    { mode: "websocket", ...createRealtimeToken({ principal, clientInstanceId }) },
+    { mode: "websocket", ...createRealtimeToken({ principal, clientInstanceId }), baselineEventId },
     { headers: { "Cache-Control": "no-store, private" } },
   );
 }

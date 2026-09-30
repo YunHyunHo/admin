@@ -208,7 +208,7 @@ export function verifyPartnerAccessToken(token: string) {
   }
 }
 
-export function getPartnerAccess(request: Request) {
+export async function getPartnerAccess(request: Request) {
   const authorization = request.headers.get("authorization")?.trim() ?? "";
 
   if (!authorization) {
@@ -216,10 +216,40 @@ export function getPartnerAccess(request: Request) {
   }
 
   const [scheme, token] = authorization.split(/\s+/, 2);
-  const access =
+  const decoded =
     scheme?.toLowerCase() === "bearer" && token
       ? verifyPartnerAccessToken(token)
       : null;
+
+  if (!decoded) {
+    return { provided: true, access: null };
+  }
+
+  const result = await query<{ active: boolean }>(
+    `
+      select exists (
+        select 1
+        from admins a
+        join admin_company_mappings acm
+          on acm.admin_id = a.id
+         and acm.company_id = $4::uuid
+        join admin_domain_mappings adm
+          on adm.admin_id = a.id
+         and adm.domain_id = $3::uuid
+        join domains dom
+          on dom.id = adm.domain_id
+         and dom.company_id = acm.company_id
+        where a.id = $1::uuid
+          and a.login_id = $2
+          and a.role = 'DOMAIN_ADMIN'
+          and a.status = 'ACTIVE'
+          and dom.status = 'ACTIVE'
+      ) as active
+    `,
+    [decoded.sub, decoded.loginId, decoded.domainId, decoded.partnerId],
+  );
+
+  const access = result.rows[0]?.active === true ? decoded : null;
 
   return { provided: true, access };
 }

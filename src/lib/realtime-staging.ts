@@ -229,6 +229,22 @@ export async function getRealtimeGroupMode(ownerLoginId: string) {
   return result.rows[0]?.enabled === true ? "websocket" : "legacy";
 }
 
+export async function getRealtimeAccountBaseline(ownerLoginId: string) {
+  try {
+    const result = await getPgPool().query<{ baseline_event_id: string }>(
+      `select baseline_event_id::text
+       from realtime_account_baselines
+       where environment = $1 and lower(login_id) = $2
+       limit 1`,
+      [getRealtimeEnvironment(), ownerLoginId.toLowerCase()],
+    );
+    return result.rows[0]?.baseline_event_id ?? null;
+  } catch (error) {
+    if ((error as { code?: string }).code === "42P01") return null;
+    throw error;
+  }
+}
+
 function base64UrlJson(value: unknown) {
   return Buffer.from(JSON.stringify(value)).toString("base64url");
 }

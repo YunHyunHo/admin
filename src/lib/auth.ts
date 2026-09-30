@@ -6,6 +6,7 @@ import {
   getMasterAccount,
   type AdminAccountRecord,
 } from "@/lib/admin-accounts";
+import { hasDatabaseUrl, query } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
 
 const SESSION_COOKIE = "vendor_admin_session";
@@ -112,8 +113,27 @@ export async function clearSession() {
 export async function getSessionUser() {
   const cookieStore = await cookies();
   const raw = cookieStore.get(SESSION_COOKIE)?.value;
+  const user = decodeSession(raw);
 
-  return decodeSession(raw);
+  if (!user || !hasDatabaseUrl()) {
+    return user;
+  }
+
+  const result = await query<{ active: boolean }>(
+    `
+      select exists (
+        select 1
+        from admins
+        where id = $1::uuid
+          and login_id = $2
+          and role = $3::admin_role
+          and status = 'ACTIVE'
+      ) as active
+    `,
+    [user.id, user.loginId, user.role],
+  );
+
+  return result.rows[0]?.active === true ? user : null;
 }
 
 export function getTestAccounts() {

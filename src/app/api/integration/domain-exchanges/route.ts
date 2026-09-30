@@ -26,7 +26,7 @@ type IntegrationDomainExchangePayload = {
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const partnerAccess = getPartnerAccess(request);
+  const partnerAccess = await getPartnerAccess(request);
 
   if (partnerAccess.provided && !partnerAccess.access) {
     return NextResponse.json(
@@ -73,7 +73,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const payload = (await request.json()) as IntegrationDomainExchangePayload;
-  const partnerAccess = getPartnerAccess(request);
+  const partnerAccess = await getPartnerAccess(request);
 
   if (partnerAccess.provided && !partnerAccess.access) {
     return NextResponse.json(

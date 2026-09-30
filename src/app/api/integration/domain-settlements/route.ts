@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const partnerAccess = getPartnerAccess(request);
+  const partnerAccess = await getPartnerAccess(request);
 
   if (partnerAccess.provided && !partnerAccess.access) {
     return NextResponse.json(

@@ -825,6 +825,7 @@ export function GlobalRequestNotifier({
               const tokenPayload = (await tokenResponse.json().catch(() => null)) as {
                 token?: string;
                 webSocketUrl?: string;
+                baselineEventId?: string | null;
               } | null;
 
               if (!tokenResponse.ok || !tokenPayload?.token || !tokenPayload.webSocketUrl) {
@@ -833,6 +834,29 @@ export function GlobalRequestNotifier({
 
               socketUrl = new URL(tokenPayload.webSocketUrl);
               authToken = tokenPayload.token;
+              const baselineEventId = tokenPayload.baselineEventId;
+              if (
+                baselineEventId &&
+                /^\d+$/.test(baselineEventId) &&
+                (!lastRealtimeEventIdRef.current ||
+                  BigInt(lastRealtimeEventIdRef.current) < BigInt(baselineEventId))
+              ) {
+                knownPendingIdsRef.current.clear();
+                hasInitializedRef.current = false;
+                noticeLedgerRef.current = null;
+                try {
+                  if (pendingSnapshotStorageKey) {
+                    window.sessionStorage.removeItem(pendingSnapshotStorageKey);
+                  }
+                  window.sessionStorage.removeItem(pendingRequestCountsStorageKey);
+                  const ledgerKey = `winpay-realtime-notices:${noticeScopeKey ?? "default"}`;
+                  window.sessionStorage.removeItem(ledgerKey);
+                  window.sessionStorage.removeItem(`${ledgerKey}:pending`);
+                } catch {
+                  // Restricted storage still uses the in-memory reset above.
+                }
+                persistRealtimeCursor(baselineEventId);
+              }
               reportRealtimeDiagnostic("token-received", {
                 tokenStatus: "received",
                 wsStatus: "connecting",
@@ -1232,6 +1256,7 @@ export function GlobalRequestNotifier({
     getNoticeLedger,
     externalWebSocketTransportEnabled,
     noticeScopeKey,
+    pendingSnapshotStorageKey,
     playNoticeSoundWithRetry,
     reportRealtimeDiagnostic,
     syncRequests,

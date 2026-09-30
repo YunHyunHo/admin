@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import {
   createRealtimeToken,
+  getRealtimeAccountBaseline,
   getAdminRealtimePrincipal,
   getRealtimeGroupMode,
 } from "@/lib/realtime-staging";
@@ -80,8 +81,10 @@ export async function GET(request: Request) {
     },
   });
 
+  const baselineEventId = await getRealtimeAccountBaseline(principal.ownerLoginId);
+
   return NextResponse.json(
-    createRealtimeToken({ principal, clientInstanceId }),
+    { ...createRealtimeToken({ principal, clientInstanceId }), baselineEventId },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

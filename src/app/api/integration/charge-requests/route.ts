@@ -41,7 +41,7 @@ function isUuid(value: string | undefined) {
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const partnerAccess = getPartnerAccess(request);
+  const partnerAccess = await getPartnerAccess(request);
 
   if (partnerAccess.provided && !partnerAccess.access) {
     return NextResponse.json(
@@ -129,7 +129,7 @@ export async function POST(request: Request) {
     );
   }
   const apiKey = request.headers.get("x-api-key")?.trim() ?? "";
-  const partnerAccess = getPartnerAccess(request);
+  const partnerAccess = await getPartnerAccess(request);
 
   if (partnerAccess.provided && !partnerAccess.access) {
     return NextResponse.json(
