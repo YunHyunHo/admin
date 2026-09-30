@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import type { PoolClient, QueryResultRow } from "pg";
 
 import { hasDatabaseUrl, query, withTransaction } from "@/lib/db";
 import { formatKoreanDateTime, getKoreanNowStamp } from "@/lib/korean-time";
@@ -41,6 +42,16 @@ export type AdminAccountRecord = {
 export type PublicAdminAccount = Omit<AdminAccountRecord, "password" | "visiblePassword">;
 
 const managedCompanyOptions = ["전체"];
+
+type DbExecutor = Pick<PoolClient, "query">;
+
+function executeQuery<T extends QueryResultRow>(
+  executor: DbExecutor | undefined,
+  text: string,
+  values: unknown[] = [],
+) {
+  return executor ? executor.query<T>(text, values) : query<T>(text, values);
+}
 
 type DbAdminRow = {
   id: string;
@@ -251,13 +262,15 @@ async function getDbAdminActor(adminId?: string | null) {
 async function getScopedCompanyIdsByNames(
   companyNames: string[],
   user?: Pick<SessionUser, "id" | "role"> | null,
+  executor?: DbExecutor,
 ) {
   if (!companyNames.length) {
     return [] as string[];
   }
 
   if (user?.role === "MASTER") {
-    const result = await query<{ id: string; company_name: string }>(
+    const result = await executeQuery<{ id: string; company_name: string }>(
+      executor,
       `
         select distinct c.id::text as id, c.company_name
         from companies c
@@ -276,7 +289,8 @@ async function getScopedCompanyIdsByNames(
   }
 
   if (user?.role === "DOMAIN_ADMIN") {
-    const result = await query<{ id: string; company_name: string }>(
+    const result = await executeQuery<{ id: string; company_name: string }>(
+      executor,
       `
         select distinct c.id::text as id, c.company_name
         from companies c
@@ -292,7 +306,8 @@ async function getScopedCompanyIdsByNames(
     return result.rows.map((row) => row.id);
   }
 
-  const result = await query<{ id: string }>(
+  const result = await executeQuery<{ id: string }>(
+    executor,
     `
       select id::text as id
       from companies
@@ -665,146 +680,157 @@ export async function createPersistedAdminAccount(input: {
       : normalizeManagedCompanies(input.managedCompanies, companyOptions);
   const passwordHash = await hashPassword(input.password);
   const encryptedPassword = encryptVisiblePassword(input.password);
-  const result = await query<{ id: string }>(
-    `
-      insert into admins (
-        login_id,
-        password_hash,
-        password_ciphertext,
-        name,
-        role,
-        status,
-        created_by
-      )
-      values (
-        $1,
-        $2,
-        $3,
-        $4,
-        $5,
-        'ACTIVE',
-        $6::uuid
-      )
-      returning id::text
-    `,
-    [
-      input.loginId,
-      passwordHash,
-      encryptedPassword,
-      input.nickname,
-      input.role,
-      input.role === "MASTER" ? null : input.createdById ?? null,
-    ],
-  );
-  const adminId = result.rows[0]?.id;
-
-  if (!adminId) {
-    throw new Error("어드민 계정 생성에 실패했습니다.");
-  }
-
-  const scopedCompanyIds = await getScopedCompanyIdsByNames(
-    normalizedCompanies,
-    ownerScope,
-  );
-  let primaryCompanyId = scopedCompanyIds[0] ?? null;
-
-  if (!primaryCompanyId && normalizedCompanies.length) {
-    const createdCompany = await query<{ id: string }>(
+  const adminId = await withTransaction(async (client) => {
+    const result = await client.query<{ id: string }>(
       `
-        insert into companies (company_name, status)
-        values ($1, 'ACTIVE')
+        insert into admins (
+          login_id,
+          password_hash,
+          password_ciphertext,
+          name,
+          role,
+          status,
+          created_by
+        )
+        values (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          'ACTIVE',
+          $6::uuid
+        )
         returning id::text
       `,
-      [normalizedCompanies[0]],
+      [
+        input.loginId,
+        passwordHash,
+        encryptedPassword,
+        input.nickname,
+        input.role,
+        input.role === "MASTER" ? null : input.createdById ?? null,
+      ],
     );
-    primaryCompanyId = createdCompany.rows[0]?.id ?? null;
-    if (primaryCompanyId) {
-      scopedCompanyIds.push(primaryCompanyId);
+    const createdAdminId = result.rows[0]?.id;
+
+    if (!createdAdminId) {
+      throw new Error("어드민 계정 생성에 실패했습니다.");
     }
-  }
 
-  if (normalizedCompanies.length) {
-    await query(
-      `
-        insert into admin_company_mappings (admin_id, company_id)
-        select $1::uuid, unnest($2::uuid[])
-        on conflict (admin_id, company_id) do nothing
-      `,
-      [adminId, scopedCompanyIds],
+    const scopedCompanyIds = await getScopedCompanyIdsByNames(
+      normalizedCompanies,
+      ownerScope,
+      client,
     );
-  }
+    let primaryCompanyId = scopedCompanyIds[0] ?? null;
 
-  if (primaryCompanyId && input.role !== "MASTER") {
-    let parentDistributorId: string | null = null;
-
-    if (input.role === "ADMIN" && input.parentAdminId) {
-      const parentResult = await query<{ distributor_id: string }>(
+    if (!primaryCompanyId && normalizedCompanies.length) {
+      const companyResult = await client.query<{ id: string }>(
         `
-          select dist.id::text as distributor_id
-          from distributors dist
-          join admins a on a.id = dist.admin_id
-          where a.id = $1::uuid
-            and a.role = 'TOP_DISTRIBUTOR'
-            and a.created_by = $2::uuid
-          limit 1
+          insert into companies (company_name, status)
+          values ($1, 'ACTIVE')
+          on conflict (company_name) do update
+          set company_name = excluded.company_name
+          returning id::text
         `,
-        [input.parentAdminId, input.createdById ?? null],
+        [normalizedCompanies[0]],
       );
+      primaryCompanyId = companyResult.rows[0]?.id ?? null;
 
-      parentDistributorId = parentResult.rows[0]?.distributor_id ?? null;
-
-      if (!parentDistributorId) {
-        throw new Error("연결할 상위총판을 찾지 못했습니다.");
+      if (primaryCompanyId) {
+        scopedCompanyIds.push(primaryCompanyId);
       }
     }
 
-    await query(
-      `
-        update distributors
-        set
-          company_id = $1::uuid,
-          parent_distributor_id = $4::uuid,
-          name = $3,
-          level = $5,
-          status = 'ACTIVE',
-          updated_at = now()
-        where admin_id = $2::uuid
-      `,
-      [
-        primaryCompanyId,
-        adminId,
-        input.nickname,
-        parentDistributorId,
-        input.role === "TOP_DISTRIBUTOR" ? "TOP_DISTRIBUTOR" : "DISTRIBUTOR",
-      ],
-    );
-    await query(
-      `
-        insert into distributors (
-          company_id,
-          admin_id,
-          parent_distributor_id,
-          name,
-          level,
-          current_balance,
-          status
-        )
-        select $1::uuid, $2::uuid, $3::uuid, $4, $5, 0, 'ACTIVE'
-        where not exists (
-          select 1
-          from distributors
+    if (normalizedCompanies.length) {
+      await client.query(
+        `
+          insert into admin_company_mappings (admin_id, company_id)
+          select $1::uuid, unnest($2::uuid[])
+          on conflict (admin_id, company_id) do nothing
+        `,
+        [createdAdminId, scopedCompanyIds],
+      );
+    }
+
+    if (primaryCompanyId && input.role !== "MASTER") {
+      let parentDistributorId: string | null = null;
+
+      if (input.role === "ADMIN" && input.parentAdminId) {
+        const parentResult = await client.query<{ distributor_id: string }>(
+          `
+            select dist.id::text as distributor_id
+            from distributors dist
+            join admins a on a.id = dist.admin_id
+            where a.id = $1::uuid
+              and a.role = 'TOP_DISTRIBUTOR'
+              and a.created_by = $2::uuid
+            limit 1
+          `,
+          [input.parentAdminId, input.createdById ?? null],
+        );
+
+        parentDistributorId = parentResult.rows[0]?.distributor_id ?? null;
+
+        if (!parentDistributorId) {
+          throw new Error("연결할 상위총판을 찾지 못했습니다.");
+        }
+      }
+
+      const distributorLevel =
+        input.role === "TOP_DISTRIBUTOR" ? "TOP_DISTRIBUTOR" : "DISTRIBUTOR";
+
+      await client.query(
+        `
+          update distributors
+          set
+            company_id = $1::uuid,
+            parent_distributor_id = $3::uuid,
+            name = $4,
+            level = $5,
+            status = 'ACTIVE',
+            updated_at = now()
           where admin_id = $2::uuid
-        )
-      `,
-      [
-        primaryCompanyId,
-        adminId,
-        parentDistributorId,
-        input.nickname,
-        input.role === "TOP_DISTRIBUTOR" ? "TOP_DISTRIBUTOR" : "DISTRIBUTOR",
-      ],
-    );
-  }
+        `,
+        [
+          primaryCompanyId,
+          createdAdminId,
+          parentDistributorId,
+          input.nickname,
+          distributorLevel,
+        ],
+      );
+      await client.query(
+        `
+          insert into distributors (
+            company_id,
+            admin_id,
+            parent_distributor_id,
+            name,
+            level,
+            current_balance,
+            status
+          )
+          select $1::uuid, $2::uuid, $3::uuid, $4, $5, 0, 'ACTIVE'
+          where not exists (
+            select 1
+            from distributors
+            where admin_id = $2::uuid
+          )
+        `,
+        [
+          primaryCompanyId,
+          createdAdminId,
+          parentDistributorId,
+          input.nickname,
+          distributorLevel,
+        ],
+      );
+    }
+
+    return createdAdminId;
+  });
 
   return (await getAllAdminAccounts(ownerScope)).find((account) => account.id === adminId);
 }

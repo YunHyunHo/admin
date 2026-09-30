@@ -79,6 +79,24 @@ function isAdminRole(value: string | undefined): value is AdminRole {
   );
 }
 
+function isDuplicateLoginIdError(error: unknown) {
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return false;
+  }
+
+  const databaseError = error as {
+    code?: string;
+    constraint?: string;
+    detail?: string;
+  };
+
+  return (
+    databaseError.code === "23505" &&
+    (databaseError.constraint?.includes("admins_login_id") === true ||
+      databaseError.detail?.includes("(login_id)") === true)
+  );
+}
+
 export async function GET() {
   try {
     const user = await getSessionUser();
@@ -245,12 +263,7 @@ export async function POST(request: Request) {
 
     return response;
   } catch (error) {
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      error.code === "23505"
-    ) {
+    if (isDuplicateLoginIdError(error)) {
       return NextResponse.json(
         { message: "이미 사용 중인 아이디입니다." },
         { status: 409 },
