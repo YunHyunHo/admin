@@ -129,12 +129,45 @@ try {
     ["admin_id"],
     [accountIds],
   );
-  const companyIds = unique(adminCompanyMappings.map((row) => String(row.company_id)));
+  const mappedCompanyIds = unique(adminCompanyMappings.map((row) => String(row.company_id)));
+  const sharedCompanyIds = mappedCompanyIds.length
+    ? (
+        await client.query(
+          `select distinct m.company_id::text id
+           from admin_company_mappings m
+           where m.company_id = any($1::uuid[])
+             and m.admin_id <> all($2::uuid[])`,
+          [mappedCompanyIds, accountIds],
+        )
+      ).rows.map((row) => String(row.id))
+    : [];
+  const companyIds = mappedCompanyIds.filter((id) => !sharedCompanyIds.includes(id));
   const companies = companyIds.length
     ? (await client.query(`select * from companies where id = any($1::uuid[]) for update`, [companyIds])).rows
     : [];
-  const domains = companyIds.length
-    ? (await client.query(`select * from domains where company_id = any($1::uuid[]) for update`, [companyIds])).rows
+  const sharedCompanies = sharedCompanyIds.length
+    ? (await client.query(`select * from companies where id = any($1::uuid[])`, [sharedCompanyIds])).rows
+    : [];
+  const mappedDomainIds = targetIds.length
+    ? (
+        await client.query(
+          `select distinct domain_id::text id
+           from admin_domain_mappings
+           where admin_id = any($1::uuid[])`,
+          [targetIds],
+        )
+      ).rows.map((row) => String(row.id))
+    : [];
+  const domains = companyIds.length || mappedDomainIds.length
+    ? (
+        await client.query(
+          `select * from domains
+           where company_id = any($1::uuid[])
+              or id = any($2::uuid[])
+           for update`,
+          [companyIds, mappedDomainIds],
+        )
+      ).rows
     : [];
   const domainIds = ids(domains);
   const distributors = (
@@ -142,7 +175,7 @@ try {
       `select * from distributors
        where admin_id = any($1::uuid[]) or company_id = any($2::uuid[])
        for update`,
-      [accountIds, companyIds],
+      [targetIds, companyIds],
     )
   ).rows;
   const distributorIds = ids(distributors);
@@ -274,6 +307,7 @@ try {
     activeTargetAccounts: activeTargets.length,
     existingDeletedTombstones: targets.length - activeTargets.length,
     companies: companies.length,
+    sharedCompaniesPreserved: sharedCompanies.length,
     domains: domains.length,
     distributors: distributors.length,
     charges: charges.length,
