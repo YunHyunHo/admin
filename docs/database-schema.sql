@@ -49,11 +49,16 @@ create table admins (
 
 create table companies (
   id uuid primary key default gen_random_uuid(),
-  company_name text not null unique,
+  company_name text not null,
+  owner_master_id uuid references admins(id) on delete set null,
   status admin_status not null default 'ACTIVE',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+create unique index companies_owner_master_name_uidx
+  on companies (owner_master_id, company_name)
+  where owner_master_id is not null;
 
 create table admin_company_mappings (
   id uuid primary key default gen_random_uuid(),

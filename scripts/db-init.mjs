@@ -77,6 +77,16 @@ async function applySchemaUpgrades(client) {
       add column if not exists withdraw_account_number text,
       add column if not exists dashboard_position integer
   `);
+  await client.query(`
+    alter table companies
+      add column if not exists owner_master_id uuid references admins(id) on delete set null
+  `);
+  await client.query(`alter table companies drop constraint if exists companies_company_name_key`);
+  await client.query(`
+    create unique index if not exists companies_owner_master_name_uidx
+      on companies (owner_master_id, company_name)
+      where owner_master_id is not null
+  `);
 }
 
 async function seedBaseData(client) {
@@ -84,11 +94,23 @@ async function seedBaseData(client) {
   const passwordHash = await hashPassword(masterPassword);
   const companyResult = await client.query(
     `
-      insert into companies (company_name, status)
-      values ('전체', 'ACTIVE')
-      on conflict (company_name) do update
-      set status = 'ACTIVE', updated_at = now()
-      returning id
+      with existing as (
+        select id
+        from companies
+        where company_name = '전체'
+          and owner_master_id is null
+        order by created_at asc
+        limit 1
+      ), inserted as (
+        insert into companies (company_name, status)
+        select '전체', 'ACTIVE'
+        where not exists (select 1 from existing)
+        returning id
+      )
+      select id from inserted
+      union all
+      select id from existing
+      limit 1
     `,
   );
   const companyId = companyResult.rows[0]?.id;

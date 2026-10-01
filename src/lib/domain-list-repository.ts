@@ -202,6 +202,36 @@ export async function createDomainEntry(input: CreateDomainEntryInput) {
 
   try {
     await withTransaction(async (client) => {
+      const ownerResult = await client.query<{ id: string }>(
+        `
+          with recursive owner_chain as (
+            select id, role::text as role, created_by, array[id] as path, 0 as depth
+            from admins
+            where id = $1::uuid
+              and status <> 'DELETED'
+            union all
+            select parent.id, parent.role::text, parent.created_by,
+                   owner_chain.path || parent.id, owner_chain.depth + 1
+            from owner_chain
+            join admins parent on parent.id = owner_chain.created_by
+            where owner_chain.depth < 31
+              and not parent.id = any(owner_chain.path)
+              and parent.status <> 'DELETED'
+          )
+          select id::text
+          from owner_chain
+          where role = 'MASTER'
+          order by depth desc
+          limit 1
+        `,
+        [input.createdById],
+      );
+      const ownerMasterId = ownerResult.rows[0]?.id;
+
+      if (!ownerMasterId) {
+        throw new Error("업체를 생성할 마스터 계정을 찾지 못했습니다.");
+      }
+
       const duplicateLogin = await client.query<{ id: string }>(
         `
           select id::text
@@ -221,10 +251,10 @@ export async function createDomainEntry(input: CreateDomainEntryInput) {
           select c.id::text
           from companies c
           where c.company_name = $1
-            and ${getMasterOwnedCompanyExistsCondition("c.id", "$2")}
+            and c.owner_master_id = $2::uuid
           limit 1
         `,
-        [domainName, input.createdById],
+        [domainName, ownerMasterId],
       );
 
       if (duplicateCompany.rows[0]) {
@@ -268,11 +298,11 @@ export async function createDomainEntry(input: CreateDomainEntryInput) {
 
       const companyResult = await client.query<{ id: string }>(
         `
-          insert into companies (company_name, status)
-          values ($1, 'ACTIVE')
+          insert into companies (company_name, owner_master_id, status)
+          values ($1, $2::uuid, 'ACTIVE')
           returning id::text
         `,
-        [domainName],
+        [domainName, ownerMasterId],
       );
 
       const companyId = companyResult.rows[0]?.id;
@@ -386,6 +416,8 @@ export async function createDomainEntry(input: CreateDomainEntryInput) {
       (error as { code?: string }).code === "23505"
     ) {
       const detail = "detail" in error ? String((error as { detail?: string }).detail ?? "") : "";
+      const constraint =
+        "constraint" in error ? String((error as { constraint?: string }).constraint ?? "") : "";
 
       if (detail.includes("domains_domain_name_key")) {
         throw new Error("이미 사용 중인 URL입니다.");
@@ -395,7 +427,11 @@ export async function createDomainEntry(input: CreateDomainEntryInput) {
         throw new Error("이미 사용 중인 로그인 아이디입니다.");
       }
 
-      if (detail.includes("companies_company_name_key")) {
+      if (
+        constraint === "companies_company_name_key" ||
+        constraint === "companies_owner_master_name_uidx" ||
+        detail.includes("(owner_master_id, company_name)")
+      ) {
         throw new Error("이미 사용 중인 도메인 이름입니다.");
       }
     }

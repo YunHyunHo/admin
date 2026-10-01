@@ -46,12 +46,23 @@ export function getMasterOwnedCompanyExistsCondition(
   return `
     exists (
       select 1
-      from admin_company_mappings scoped_acm
-      join admins scoped_admin on scoped_admin.id = scoped_acm.admin_id
-      where scoped_acm.company_id = ${companyIdExpression}
-        and scoped_admin.created_by = ${param}::uuid
-        and scoped_admin.role = 'DOMAIN_ADMIN'
-        and scoped_admin.status <> 'DELETED'
+      from companies scoped_company
+      where scoped_company.id = ${companyIdExpression}
+        and (
+          scoped_company.owner_master_id = ${param}::uuid
+          or (
+            scoped_company.owner_master_id is null
+            and exists (
+              select 1
+              from admin_company_mappings scoped_acm
+              join admins scoped_admin on scoped_admin.id = scoped_acm.admin_id
+              where scoped_acm.company_id = scoped_company.id
+                and scoped_admin.created_by = ${param}::uuid
+                and scoped_admin.role = 'DOMAIN_ADMIN'
+                and scoped_admin.status <> 'DELETED'
+            )
+          )
+        )
     )
   `;
 }

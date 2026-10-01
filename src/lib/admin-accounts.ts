@@ -681,6 +681,36 @@ export async function createPersistedAdminAccount(input: {
   const passwordHash = await hashPassword(input.password);
   const encryptedPassword = encryptVisiblePassword(input.password);
   const adminId = await withTransaction(async (client) => {
+    const ownerResult = await client.query<{ id: string }>(
+      `
+        with recursive owner_chain as (
+          select id, role::text as role, created_by, array[id] as path, 0 as depth
+          from admins
+          where id = $1::uuid
+            and status <> 'DELETED'
+          union all
+          select parent.id, parent.role::text, parent.created_by,
+                 owner_chain.path || parent.id, owner_chain.depth + 1
+          from owner_chain
+          join admins parent on parent.id = owner_chain.created_by
+          where owner_chain.depth < 31
+            and not parent.id = any(owner_chain.path)
+            and parent.status <> 'DELETED'
+        )
+        select id::text
+        from owner_chain
+        where role = 'MASTER'
+        order by depth desc
+        limit 1
+      `,
+      [input.createdById ?? null],
+    );
+    const ownerMasterId = ownerResult.rows[0]?.id ?? null;
+
+    if (input.role !== "MASTER" && !ownerMasterId) {
+      throw new Error("계정을 생성할 마스터 정보를 찾지 못했습니다.");
+    }
+
     const result = await client.query<{ id: string }>(
       `
         insert into admins (
@@ -728,13 +758,15 @@ export async function createPersistedAdminAccount(input: {
     if (!primaryCompanyId && normalizedCompanies.length) {
       const companyResult = await client.query<{ id: string }>(
         `
-          insert into companies (company_name, status)
-          values ($1, 'ACTIVE')
-          on conflict (company_name) do update
+          insert into companies (company_name, owner_master_id, status)
+          values ($1, $2::uuid, 'ACTIVE')
+          on conflict (owner_master_id, company_name)
+          where owner_master_id is not null
+          do update
           set company_name = excluded.company_name
           returning id::text
         `,
-        [normalizedCompanies[0]],
+        [normalizedCompanies[0], ownerMasterId],
       );
       primaryCompanyId = companyResult.rows[0]?.id ?? null;
 
