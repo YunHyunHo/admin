@@ -68,7 +68,7 @@ const sideMenuGroups = [
     title: "도메인",
     items: [
       {
-        title: "도메인",
+        title: "도메인(업체)",
         href: "/dashboard/domains/list",
         key: "domain-list",
       },
