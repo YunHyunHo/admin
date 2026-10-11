@@ -54,13 +54,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "환전금액을 확인해주세요." }, { status: 400 });
   }
 
-  if (!bankName || !accountHolder || !accountNumber) {
-    return NextResponse.json(
-      { message: "출금은행, 예금주, 계좌번호를 모두 입력해주세요." },
-      { status: 400 },
-    );
-  }
-
   try {
     const snapshot = await createHeadquartersWithdrawal({
       user,

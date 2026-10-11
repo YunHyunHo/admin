@@ -213,9 +213,9 @@ export function HeadquartersBalancePanel({ initialSnapshot }: Props) {
             <div className="mt-6 space-y-3">
               {[
                 ["amount", "환전금액", "number"],
-                ["bankName", "출금은행", "text"],
-                ["accountHolder", "예금주", "text"],
-                ["accountNumber", "계좌번호", "text"],
+                ["bankName", "출금은행 (선택)", "text"],
+                ["accountHolder", "예금주 (선택)", "text"],
+                ["accountNumber", "계좌번호 (선택)", "text"],
               ].map(([key, placeholder, type]) => (
                 <input
                   key={key}
