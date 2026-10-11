@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { AdminShell } from "@/components/admin-shell";
+import { HeadquartersBalancePanel } from "@/components/headquarters-balance-panel";
 import {
   DomainExchangesBoard,
   fallbackDomainExchanges,
@@ -20,6 +21,7 @@ import {
   isRealtimeSyncPilot,
 } from "@/lib/realtime-sync-pilot";
 import { getServerSyncCursor } from "@/lib/db";
+import { getHeadquartersAccountSnapshot } from "@/lib/headquarters-withdrawals-repository";
 
 
 export default async function DomainExchangesPage() {
@@ -36,7 +38,7 @@ export default async function DomainExchangesPage() {
   const initialSyncCursor = incrementalSyncEnabled
     ? await getServerSyncCursor()
     : undefined;
-  const [exchangeData, domainOptions, createContext] = await Promise.all([
+  const [exchangeData, domainOptions, createContext, headquartersSnapshot] = await Promise.all([
     serverPagingEnabled
       ? getDomainExchangeRowsPage(user)
       : getDomainExchangeRows(fallbackDomainExchanges, user),
@@ -48,6 +50,7 @@ export default async function DomainExchangesPage() {
           hasConnectedDomain: false,
         })
       : getDomainExchangeCreateContext(user),
+    getHeadquartersAccountSnapshot(user),
   ]);
 
   return (
@@ -57,6 +60,9 @@ export default async function DomainExchangesPage() {
       badge="Domain Exchanges"
       helperText="도메인 기준 환전 요청을 확인하고 처리하는 화면입니다."
     >
+      {headquartersSnapshot ? (
+        <HeadquartersBalancePanel initialSnapshot={headquartersSnapshot} />
+      ) : null}
       <DomainExchangesBoard
         initialRows={Array.isArray(exchangeData) ? exchangeData : exchangeData.rows}
         domainOptions={domainOptions}

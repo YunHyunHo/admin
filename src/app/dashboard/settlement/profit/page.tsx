@@ -1,10 +1,8 @@
 import { redirect } from "next/navigation";
 
 import { AdminShell } from "@/components/admin-shell";
-import { HeadquartersBalancePanel } from "@/components/headquarters-balance-panel";
 import { SettlementProfitBoard } from "@/components/settlement-profit-board";
 import { getSessionUser } from "@/lib/auth";
-import { getHeadquartersAccountSnapshot } from "@/lib/headquarters-withdrawals-repository";
 import { getCurrentMonthReportDateRange } from "@/lib/mock-report-service";
 import { getSettlementProfitForUser } from "@/lib/settlement-repository";
 
@@ -17,10 +15,11 @@ export default async function SettlementProfitPage() {
   }
 
   const defaultRange = getCurrentMonthReportDateRange();
-  const [initialProfit, headquartersSnapshot] = await Promise.all([
-    getSettlementProfitForUser(user, defaultRange.startDate, defaultRange.endDate),
-    getHeadquartersAccountSnapshot(user),
-  ]);
+  const initialProfit = await getSettlementProfitForUser(
+    user,
+    defaultRange.startDate,
+    defaultRange.endDate,
+  );
 
   return (
     <AdminShell
@@ -29,9 +28,6 @@ export default async function SettlementProfitPage() {
       badge="Profit"
       helperText="승인 완료된 충전 데이터 기준으로 본사/총판 수익을 확인하는 화면입니다."
     >
-      {headquartersSnapshot ? (
-        <HeadquartersBalancePanel initialSnapshot={headquartersSnapshot} />
-      ) : null}
       <SettlementProfitBoard
         companyName={user.companyName}
         initialDomainName={initialProfit.domainName}
