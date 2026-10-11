@@ -186,6 +186,31 @@ async function main() {
         check (status in ('PENDING', 'SENT', 'FAILED'))
       );
     `);
+    await pool.query(`
+      create table if not exists headquarters_withdrawals (
+        id uuid primary key default gen_random_uuid(),
+        master_admin_id uuid not null references admins(id),
+        request_amount numeric(18, 0) not null,
+        before_balance numeric(18, 0) not null,
+        after_balance numeric(18, 0) not null,
+        bank_name text not null,
+        account_number text not null,
+        account_holder text not null,
+        status text not null default 'PENDING',
+        requested_at timestamptz not null default now(),
+        processed_at timestamptz,
+        processed_by uuid references admins(id),
+        created_by uuid not null references admins(id),
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        check (request_amount > 0),
+        check (before_balance >= 0),
+        check (after_balance >= 0),
+        check (status in ('PENDING', 'APPROVED', 'REJECTED', 'CANCELED'))
+      );
+      create index if not exists headquarters_withdrawals_master_requested_idx
+        on headquarters_withdrawals (master_admin_id, requested_at desc);
+    `);
 
     console.log("Database migrations applied.");
   } finally {
