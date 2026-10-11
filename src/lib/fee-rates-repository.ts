@@ -84,7 +84,6 @@ type FeeRateDbRow = {
   partner3_id: string | null;
   partner4_id: string | null;
   distributor_name: string | null;
-  child_distributor_names: string | null;
   top_distributor_name: string | null;
   sub_distributor_name: string | null;
   partner1_name: string | null;
@@ -109,39 +108,46 @@ function formatStamp(value: Date | string) {
   return formatKoreanDateTime(value);
 }
 
-function getTotalRate(
-  row: Pick<
-    FeeRateDbRow,
-    | "company_rate"
-    | "distributor_rate"
-    | "agency_rate"
-    | "sub_distributor_rate"
-    | "partner1_rate"
-    | "partner2_rate"
-    | "partner3_rate"
-    | "partner4_rate"
-  >,
-) {
-  return (
-    Number(row.company_rate) +
-    Number(row.partner1_rate ?? row.distributor_rate) +
-    Number(row.partner2_rate ?? row.agency_rate) +
-    Number(row.partner3_rate ?? row.sub_distributor_rate) +
-    Number(row.partner4_rate ?? 0)
-  );
-}
-
 function toSettingsRow(row: FeeRateDbRow): FeeRateSettingsRow {
   const hasPartnerRows = Boolean(
     row.partner1_id || row.partner2_id || row.partner3_id || row.partner4_id,
   );
+  const legacyDistributorId =
+    row.distributor_id && row.distributor_id !== row.top_distributor_id
+      ? row.distributor_id
+      : undefined;
+  const topDistributorRate = hasPartnerRows
+    ? row.partner1_id
+      ? Number(row.partner1_rate ?? 0)
+      : 0
+    : row.top_distributor_id
+      ? Number(row.distributor_rate)
+      : 0;
+  const distributorRate = hasPartnerRows
+    ? row.partner2_id
+      ? Number(row.partner2_rate ?? 0)
+      : 0
+    : legacyDistributorId
+      ? Number(row.agency_rate)
+      : 0;
+  const subDistributorRate = hasPartnerRows
+    ? row.partner3_id
+      ? Number(row.partner3_rate ?? 0)
+      : 0
+    : row.sub_distributor_id
+      ? Number(row.sub_distributor_rate)
+      : 0;
+  const thirdDistributorRate = row.partner4_id
+    ? Number(row.partner4_rate ?? 0)
+    : 0;
+  const companyRate = Number(row.company_rate);
 
   return {
     id: row.id,
     domainId: row.domain_id ?? undefined,
     distributorId: hasPartnerRows
       ? (row.partner2_id ?? undefined)
-      : (row.distributor_id ?? undefined),
+      : legacyDistributorId,
     topDistributorId: hasPartnerRows
       ? (row.partner1_id ?? undefined)
       : (row.top_distributor_id ?? undefined),
@@ -151,23 +157,31 @@ function toSettingsRow(row: FeeRateDbRow): FeeRateSettingsRow {
     thirdDistributorId: row.partner4_id ?? undefined,
     vendorName: row.vendor_name ?? row.company_name ?? "-",
     domainName: row.domain_name ?? "-",
-    totalRate: Number(getTotalRate(row).toFixed(2)),
+    totalRate: Number(
+      (
+        companyRate +
+        topDistributorRate +
+        distributorRate +
+        subDistributorRate +
+        thirdDistributorRate
+      ).toFixed(2),
+    ),
     companyName: "본사",
-    companyRate: Number(row.company_rate),
+    companyRate,
     topDistributor: hasPartnerRows
       ? (row.partner1_name ?? "-")
       : (row.top_distributor_name ?? "-"),
-    topDistributorRate: Number(row.partner1_rate ?? row.distributor_rate),
+    topDistributorRate,
     distributor: hasPartnerRows
       ? (row.partner2_name ?? "-")
-      : (row.distributor_name ?? row.child_distributor_names ?? "-"),
-    distributorRate: Number(row.partner2_rate ?? row.agency_rate),
+      : (row.distributor_name ?? "-"),
+    distributorRate,
     subDistributor: hasPartnerRows
       ? (row.partner3_name ?? "-")
       : (row.sub_distributor_name ?? "-"),
-    subDistributorRate: Number(row.partner3_rate ?? row.sub_distributor_rate),
+    subDistributorRate,
     thirdDistributor: row.partner4_name ?? "-",
-    thirdDistributorRate: Number(row.partner4_rate ?? 0),
+    thirdDistributorRate,
     updatedAt: formatStamp(row.updated_at),
   };
 }
@@ -232,7 +246,6 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
           when parent_dist.id is null then null
           else dist.name
         end as distributor_name,
-        child_dist.names as child_distributor_names,
         coalesce(sub_dist.name, '-') as sub_distributor_name,
         partner_rows.partner1_name,
         partner_rows.partner2_name,
@@ -253,7 +266,7 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
         end::text as distributor_rate,
         case
           when dist.id is null then 0
-          when parent_dist.id is null and child_dist.names is null then 0
+          when parent_dist.id is null then 0
           else coalesce(fr.agency_rate, 0.1)
         end::text as agency_rate,
         case
@@ -270,12 +283,6 @@ export async function getFeeRateSettingsForUser(user: SessionUser) {
       left join distributors dist on dist.id = dom.distributor_id
       left join distributors parent_dist on parent_dist.id = dist.parent_distributor_id
       left join admins dist_admin on dist_admin.id = dist.admin_id
-      left join lateral (
-        select string_agg(child.name, ', ' order by child.name) as names
-        from distributors child
-        where child.parent_distributor_id = dist.id
-          and child.status = 'ACTIVE'
-      ) child_dist on parent_dist.id is null
       left join lateral (
         select a.name
         from admin_domain_mappings adm
