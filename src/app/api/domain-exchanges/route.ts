@@ -6,12 +6,17 @@ import {
   cancelApprovedDomainExchange,
   createDomainExchange,
   getDomainExchangeCreateContext,
+  getManagedDomainExchangeCreateContext,
   getDomainExchangeRowsPage,
   getDomainExchangeRows,
   rejectDomainExchange,
 } from "@/lib/domain-exchanges-repository";
 import { getServerSyncCursor, hasDatabaseUrl } from "@/lib/db";
-import { canManageMasterResources, canUseDistributorMenus } from "@/lib/permissions";
+import {
+  canManageMasterResources,
+  canProcessRequests,
+  canUseDistributorMenus,
+} from "@/lib/permissions";
 import { notifyExchangeDecision } from "@/lib/telegram-notifications";
 import { isRealtimeSyncPilot } from "@/lib/realtime-sync-pilot";
 import {
@@ -45,6 +50,7 @@ function getEmptyDomainExchangeCreateContext() {
     defaultDomainId: null,
     currentBalance: 0,
     hasConnectedDomain: false,
+    withdrawAccount: null,
   };
 }
 
@@ -94,6 +100,33 @@ export async function GET(request: Request) {
   const searchParams = new URL(request.url).searchParams;
   const mode = searchParams.get("mode");
 
+  if (mode === "create-context") {
+    const domainId = searchParams.get("domainId")?.trim();
+
+    if (!domainId || !isUuid(domainId)) {
+      return NextResponse.json(
+        { message: "환전신청을 생성할 업체를 선택해주세요." },
+        { status: 400 },
+      );
+    }
+
+    try {
+      return NextResponse.json({
+        createContext: await getManagedDomainExchangeCreateContext(user, domainId),
+      });
+    } catch (error) {
+      return NextResponse.json(
+        {
+          message:
+            error instanceof Error
+              ? error.message
+              : "업체 환전정보를 불러오지 못했습니다.",
+        },
+        { status: 400 },
+      );
+    }
+  }
+
   if (mode === "page") {
     return NextResponse.json({
       ...(await getDomainExchangeRowsPage(user, {
@@ -125,7 +158,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "로그인이 필요합니다." }, { status: 401 });
   }
 
-  if (!canUseDistributorMenus(user)) {
+  if (!canProcessRequests(user)) {
     return NextResponse.json(
       { message: "환전 요청을 생성할 권한이 없습니다." },
       { status: 403 },

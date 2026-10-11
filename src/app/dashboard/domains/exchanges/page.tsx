@@ -13,7 +13,7 @@ import {
   getDomainExchangeRows,
 } from "@/lib/domain-exchanges-repository";
 import { isPerformancePilotUser } from "@/lib/performance-pilot";
-import { canManageMasterResources } from "@/lib/permissions";
+import { canManageMasterResources, canProcessRequests } from "@/lib/permissions";
 import {
   getRequestBoardFallbackRefreshIntervalMs,
   isRealtimeV2Eligible,
@@ -63,8 +63,9 @@ export default async function DomainExchangesPage() {
         defaultDomainId={createContext.defaultDomainId}
         currentBalance={createContext.currentBalance}
         hasConnectedDomain={createContext.hasConnectedDomain}
-        canCreateExchanges={!isMaster}
+        canCreateExchanges={canProcessRequests(user)}
         canProcessExchanges={isMaster}
+        usesManagedWithdrawAccount={isMaster}
         incrementalSyncEnabled={incrementalSyncEnabled}
         initialSyncCursor={initialSyncCursor}
         serverPagingEnabled={serverPagingEnabled}

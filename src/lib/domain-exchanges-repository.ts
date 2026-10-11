@@ -3,6 +3,7 @@ import { publishAdminRequestEvent } from "@/lib/admin-request-events";
 import { getDomainWithdrawAccount } from "@/lib/domain-withdraw-account";
 import { formatKoreanDateTime } from "@/lib/korean-time";
 import { getScopedDataCondition } from "@/lib/master-scope";
+import { canManageMasterResources } from "@/lib/permissions";
 import type { PoolClient, QueryResultRow } from "pg";
 import type { SessionUser } from "@/lib/auth";
 import type {
@@ -69,6 +70,11 @@ export type DomainExchangeCreateContext = {
   defaultDomainId: string | null;
   currentBalance: number;
   hasConnectedDomain: boolean;
+  withdrawAccount: {
+    bankName: string;
+    accountHolder: string;
+    accountNumber: string;
+  } | null;
 };
 
 export type DomainExchangePageResponse = {
@@ -400,6 +406,66 @@ export async function getDomainExchangeCreateContext(user: SessionUser) {
       ? domainBalance.withdrawableBalance
       : Number(scopeRow.current_balance),
     hasConnectedDomain: Boolean(scopeRow.domain_id),
+    withdrawAccount: null,
+  } satisfies DomainExchangeCreateContext;
+}
+
+async function findManagedExchangeScope(domainId: string, user: SessionUser) {
+  const scope = await getScopedDataCondition(user, {
+    company: "dom",
+    distributor: "dist",
+    distributorAdmin: "dist_admin",
+  });
+  const scopedSql = shiftSqlParams(scope.sql, 1);
+  const result = await query<{
+    company_id: string;
+    domain_id: string;
+    distributor_id: string | null;
+  }>(
+    `
+      select
+        dom.company_id::text,
+        dom.id::text as domain_id,
+        dom.distributor_id::text
+      from domains dom
+      join companies c on c.id = dom.company_id
+      left join distributors dist on dist.id = dom.distributor_id
+      left join admins dist_admin on dist_admin.id = dist.admin_id
+      where dom.id = $1::uuid
+        and dom.status <> 'DELETED'
+        ${scopedSql}
+      limit 1
+    `,
+    [domainId, ...scope.values],
+  );
+  const managedScope = result.rows[0];
+
+  if (!managedScope) {
+    throw new Error("환전신청을 생성할 수 있는 업체를 찾을 수 없습니다.");
+  }
+
+  return managedScope;
+}
+
+export async function getManagedDomainExchangeCreateContext(
+  user: SessionUser,
+  domainId: string,
+) {
+  if (!canManageMasterResources(user)) {
+    throw new Error("업체 환전신청을 생성할 권한이 없습니다.");
+  }
+
+  const scope = await findManagedExchangeScope(domainId, user);
+  const [balance, withdrawAccount] = await Promise.all([
+    getDomainExchangeBalance({ query }, scope.domain_id),
+    getDomainWithdrawAccount(scope.domain_id),
+  ]);
+
+  return {
+    defaultDomainId: scope.domain_id,
+    currentBalance: balance.withdrawableBalance,
+    hasConnectedDomain: true,
+    withdrawAccount,
   } satisfies DomainExchangeCreateContext;
 }
 
@@ -926,6 +992,36 @@ async function insertExchangeRequest(
 export async function createDomainExchange(
   input: CreateDomainExchangeInput & { user: SessionUser },
 ) {
+  if (canManageMasterResources(input.user)) {
+    if (!input.domainId) {
+      throw new Error("환전신청을 생성할 업체를 선택해주세요.");
+    }
+
+    const scope = await findManagedExchangeScope(input.domainId, input.user);
+    const [balance, configuredAccount] = await Promise.all([
+      getDomainExchangeBalance({ query }, scope.domain_id),
+      getDomainWithdrawAccount(scope.domain_id),
+    ]);
+
+    if (input.amount > balance.withdrawableBalance) {
+      throw new Error("보유금보다 큰 금액은 신청할 수 없습니다.");
+    }
+
+    if (!configuredAccount) {
+      throw new Error("선택한 업체의 출금계좌를 먼저 설정해주세요.");
+    }
+
+    return insertExchangeRequest({
+      ...input,
+      bankName: configuredAccount.bankName,
+      accountHolder: configuredAccount.accountHolder,
+      accountNumber: configuredAccount.accountNumber,
+      companyId: scope.company_id,
+      domainId: scope.domain_id,
+      distributorId: scope.distributor_id,
+    });
+  }
+
   const scope = await findExchangeScope(input.domainId, input.user);
 
   if (input.amount > Number(scope.current_balance)) {

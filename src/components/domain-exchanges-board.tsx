@@ -226,6 +226,7 @@ type DomainExchangesBoardProps = {
   hasConnectedDomain?: boolean;
   canCreateExchanges?: boolean;
   canProcessExchanges?: boolean;
+  usesManagedWithdrawAccount?: boolean;
   incrementalSyncEnabled?: boolean;
   initialSyncCursor?: string;
   serverPagingEnabled?: boolean;
@@ -259,13 +260,14 @@ export function DomainExchangesBoard({
   initialRows = fallbackDomainExchanges,
   eyebrow = "Domain Exchange",
   title = "도메인 환전",
-  description = "하부계정은 환전을 신청하고, 마스터는 신청 내역을 승인 또는 거절합니다.",
+  description = "환전신청을 생성하고 신청 내역을 승인 또는 거절합니다.",
   domainOptions = [],
   defaultDomainId = null,
   currentBalance = 0,
   hasConnectedDomain = false,
   canCreateExchanges = false,
   canProcessExchanges = true,
+  usesManagedWithdrawAccount = false,
   incrementalSyncEnabled = false,
   initialSyncCursor = "",
   serverPagingEnabled = false,
@@ -287,6 +289,9 @@ export function DomainExchangesBoard({
   const [bankName, setBankName] = useState("");
   const [accountHolder, setAccountHolder] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
+  const [availableBalance, setAvailableBalance] = useState(currentBalance);
+  const [isCreateContextLoading, setIsCreateContextLoading] = useState(false);
+  const createContextRequestIdRef = useRef(0);
   const pendingSignatureRef = useRef(
     getPendingExchangeSignature(initialRows),
   );
@@ -599,7 +604,17 @@ export function DomainExchangesBoard({
       return;
     }
 
-    if (numericAmount > currentBalance) {
+    if (usesManagedWithdrawAccount && !domainId) {
+      setCreateModalMessage("환전신청을 생성할 업체를 선택해주세요.");
+      return;
+    }
+
+    if (isCreateContextLoading) {
+      setCreateModalMessage("업체 환전정보를 불러오는 중입니다.");
+      return;
+    }
+
+    if (numericAmount > availableBalance) {
       setCreateModalMessage("보유금보다 큰 금액은 신청할 수 없습니다.");
       return;
     }
@@ -651,6 +666,7 @@ export function DomainExchangesBoard({
 
       setPage(1);
       setDomainId(defaultDomainId ?? "");
+      setAvailableBalance(currentBalance);
       setAmount("");
       setBankName("");
       setAccountHolder("");
@@ -659,6 +675,81 @@ export function DomainExchangesBoard({
       setIsCreateModalOpen(false);
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function changeCreateDomain(nextDomainId: string) {
+    setDomainId(nextDomainId);
+
+    if (!usesManagedWithdrawAccount) {
+      return;
+    }
+
+    const requestId = createContextRequestIdRef.current + 1;
+    createContextRequestIdRef.current = requestId;
+    setAvailableBalance(0);
+    setBankName("");
+    setAccountHolder("");
+    setAccountNumber("");
+    setCreateModalMessage("");
+
+    if (!nextDomainId) {
+      return;
+    }
+
+    setIsCreateContextLoading(true);
+
+    try {
+      const response = await fetch(
+        `/api/domain-exchanges?mode=create-context&domainId=${encodeURIComponent(nextDomainId)}`,
+        { cache: "no-store" },
+      );
+      const data = (await response.json().catch(() => null)) as
+        | {
+            createContext?: {
+              currentBalance: number;
+              withdrawAccount: {
+                bankName: string;
+                accountHolder: string;
+                accountNumber: string;
+              } | null;
+            };
+            message?: string;
+          }
+        | null;
+
+      if (requestId !== createContextRequestIdRef.current) {
+        return;
+      }
+
+      if (!response.ok || !data?.createContext) {
+        setCreateModalMessage(data?.message ?? "업체 환전정보를 불러오지 못했습니다.");
+        return;
+      }
+
+      setAvailableBalance(data.createContext.currentBalance);
+      const withdrawAccount = data.createContext.withdrawAccount;
+
+      if (!withdrawAccount) {
+        setCreateModalMessage("선택한 업체의 출금계좌를 먼저 설정해주세요.");
+        return;
+      }
+
+      setBankName(withdrawAccount.bankName);
+      setAccountHolder(withdrawAccount.accountHolder);
+      setAccountNumber(withdrawAccount.accountNumber);
+    } catch (error) {
+      if (requestId === createContextRequestIdRef.current) {
+        setCreateModalMessage(
+          error instanceof Error
+            ? error.message
+            : "업체 환전정보를 불러오지 못했습니다.",
+        );
+      }
+    } finally {
+      if (requestId === createContextRequestIdRef.current) {
+        setIsCreateContextLoading(false);
+      }
     }
   }
 
@@ -766,13 +857,20 @@ export function DomainExchangesBoard({
             <button
               type="button"
               onClick={() => {
-                setDomainId(defaultDomainId ?? "");
+                const nextDomainId = usesManagedWithdrawAccount
+                  ? ""
+                  : defaultDomainId ?? "";
+                setDomainId(nextDomainId);
+                setAvailableBalance(usesManagedWithdrawAccount ? 0 : currentBalance);
+                setBankName("");
+                setAccountHolder("");
+                setAccountNumber("");
                 setCreateModalMessage("");
                 setIsCreateModalOpen(true);
               }}
               className="rounded-2xl bg-fuchsia-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-fuchsia-400"
             >
-              환전신청
+              {usesManagedWithdrawAccount ? "환전신청 생성" : "환전신청"}
             </button>
           </div>
         ) : null}
@@ -938,15 +1036,17 @@ export function DomainExchangesBoard({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/72 px-4 backdrop-blur-sm">
           <div className="w-full max-w-[520px] rounded-[28px] border border-white/10 bg-white p-6 text-slate-950 shadow-[0_28px_120px_rgba(0,0,0,0.58)]">
             <h3 className="text-xl font-semibold tracking-[-0.03em]">
-              환전신청
+              {usesManagedWithdrawAccount ? "업체 환전신청 생성" : "환전신청"}
             </h3>
 
             <div className="mt-7 space-y-4">
               <ModalFeedback message={createModalMessage} />
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                <p>보유금: <strong>{currentBalance.toLocaleString("ko-KR")} 원</strong></p>
+                <p>출금 가능 보유금: <strong>{availableBalance.toLocaleString("ko-KR")} 원</strong></p>
                 <p className="mt-1">
-                  {hasConnectedDomain
+                  {usesManagedWithdrawAccount
+                    ? "업체를 선택하면 등록된 최신 출금계좌가 자동으로 적용됩니다."
+                    : hasConnectedDomain
                     ? "연결된 도메인이 있으면 자동으로 적용됩니다. 필요하면 다른 도메인으로 바꿀 수 있어요."
                     : "연결된 도메인이 없어도 환전신청은 가능합니다."}
                 </p>
@@ -955,10 +1055,16 @@ export function DomainExchangesBoard({
                 <span className="sr-only">도메인 선택</span>
                 <select
                   value={domainId}
-                  onChange={(event) => setDomainId(event.target.value)}
+                  onChange={(event) => void changeCreateDomain(event.target.value)}
                   className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-slate-500"
                 >
-                  <option value="">{hasConnectedDomain ? "자동 연결 도메인 사용" : "도메인 미연결 상태로 신청"}</option>
+                  <option value="">
+                    {usesManagedWithdrawAccount
+                      ? "업체 선택"
+                      : hasConnectedDomain
+                        ? "자동 연결 도메인 사용"
+                        : "도메인 미연결 상태로 신청"}
+                  </option>
                   {domainOptions.map((domain) => (
                     <option key={domain.id} value={domain.id}>
                       {domain.name}
@@ -984,7 +1090,8 @@ export function DomainExchangesBoard({
                   value={bankName}
                   onChange={(event) => setBankName(event.target.value)}
                   placeholder="출금은행"
-                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
+                  readOnly={usesManagedWithdrawAccount}
+                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500 read-only:bg-slate-100 read-only:text-slate-600"
                 />
               </label>
 
@@ -994,7 +1101,8 @@ export function DomainExchangesBoard({
                   value={accountHolder}
                   onChange={(event) => setAccountHolder(event.target.value)}
                   placeholder="예금주"
-                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
+                  readOnly={usesManagedWithdrawAccount}
+                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500 read-only:bg-slate-100 read-only:text-slate-600"
                 />
               </label>
 
@@ -1004,7 +1112,8 @@ export function DomainExchangesBoard({
                   value={accountNumber}
                   onChange={(event) => setAccountNumber(event.target.value)}
                   placeholder="계좌번호"
-                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
+                  readOnly={usesManagedWithdrawAccount}
+                  className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500 read-only:bg-slate-100 read-only:text-slate-600"
                 />
               </label>
             </div>
@@ -1013,10 +1122,10 @@ export function DomainExchangesBoard({
               <button
                 type="button"
                 onClick={createExchange}
-                disabled={isSubmitting}
+                disabled={isSubmitting || isCreateContextLoading}
                 className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
-                {isSubmitting ? "신청 중" : "신청"}
+                {isSubmitting ? "신청 중" : isCreateContextLoading ? "불러오는 중" : "신청"}
               </button>
               <button
                 type="button"
