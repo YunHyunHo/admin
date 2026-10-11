@@ -22,12 +22,30 @@ export function HeadquartersBalancePanel({ initialSnapshot }: Props) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState("");
+  const [modalMessage, setModalMessage] = useState("");
+
+  async function refreshSnapshot() {
+    const response = await fetch("/api/headquarters-withdrawals", {
+      cache: "no-store",
+    });
+    const data = (await response.json()) as HeadquartersAccountSnapshot & {
+      message?: string;
+    };
+
+    if (!response.ok) {
+      throw new Error(data.message ?? "본사 환전 내역을 불러오지 못했습니다.");
+    }
+
+    setSnapshot(data);
+    return data;
+  }
 
   async function submitWithdrawal() {
     if (isSubmitting) return;
 
     setIsSubmitting(true);
     setMessage("");
+    setModalMessage("");
 
     try {
       const response = await fetch("/api/headquarters-withdrawals", {
@@ -46,12 +64,19 @@ export function HeadquartersBalancePanel({ initialSnapshot }: Props) {
         throw new Error(data.message ?? "본사 환전 처리에 실패했습니다.");
       }
 
-      setSnapshot(data);
+      await refreshSnapshot();
       setForm(emptyForm);
       setIsOpen(false);
       setMessage(data.message ?? "본사 환전 신청이 생성되었습니다.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "본사 환전 처리에 실패했습니다.");
+      const errorMessage =
+        error instanceof Error ? error.message : "본사 환전 처리에 실패했습니다.";
+      setModalMessage(errorMessage);
+      try {
+        await refreshSnapshot();
+      } catch {
+        // 원래 요청 오류를 유지합니다.
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -72,10 +97,15 @@ export function HeadquartersBalancePanel({ initialSnapshot }: Props) {
       });
       const data = (await response.json()) as HeadquartersAccountSnapshot & { message?: string };
       if (!response.ok) throw new Error(data.message ?? "본사 환전 처리에 실패했습니다.");
-      setSnapshot(data);
+      await refreshSnapshot();
       setMessage(data.message ?? `본사 환전 신청이 ${actionLabel}되었습니다.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "본사 환전 처리에 실패했습니다.");
+      try {
+        await refreshSnapshot();
+      } catch {
+        // 원래 처리 오류를 유지합니다.
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -99,6 +129,7 @@ export function HeadquartersBalancePanel({ initialSnapshot }: Props) {
           type="button"
           onClick={() => {
             setMessage("");
+            setModalMessage("");
             setIsOpen(true);
           }}
           className="h-11 rounded-xl bg-blue-600 px-6 text-sm font-semibold text-white transition hover:bg-blue-500"
@@ -197,6 +228,11 @@ export function HeadquartersBalancePanel({ initialSnapshot }: Props) {
                 />
               ))}
             </div>
+            {modalMessage ? (
+              <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+                {modalMessage}
+              </p>
+            ) : null}
             <div className="mt-7 flex justify-end gap-3">
               <button
                 type="button"
