@@ -392,8 +392,8 @@ export async function processHeadquartersWithdrawal(
           $2,
           'headquarters_withdrawal',
           $3::uuid,
-          jsonb_build_object('status', $4),
-          jsonb_build_object('status', $5)
+          jsonb_build_object('status', $4::text),
+          jsonb_build_object('status', $5::text)
         )
       `,
       [
