@@ -76,7 +76,7 @@ Content-Type: application/json
 | `externalId` | 권장 | 외부 도메인 관리자 사이트의 고유 요청 ID |
 | `domainId` | 권장 | 마스터 관리자에 등록된 도메인 UUID |
 | `domainName` | 조건부 | `domainId`가 없을 때 사용하는 도메인/업체명 |
-| `depositorName` | 필수 | 입금자명 |
+| `depositorName` | 선택 | 입금자명 |
 | `amount` | 필수 | 충전 신청 금액. 1원 이상의 정수로 전달 |
 | `bankName` | 선택 | 입금은행 |
 | `accountNumber` | 선택 | 입금계좌번호 |
@@ -154,9 +154,9 @@ Content-Type: application/json
 | `domainName` | 조건부 | `domainId`가 없을 때 사용하는 도메인/업체명 |
 | `userId` | 필수 | 도메인 관리자 또는 요청 사용자 ID |
 | `amount` | 필수 | 출금/환전 신청 금액. 1원 이상의 정수로 전달 |
-| `bankName` | 필수 | 출금은행 |
-| `accountHolder` | 필수 | 예금주 |
-| `accountNumber` | 필수 | 계좌번호 |
+| `bankName` | 선택 | 출금은행 |
+| `accountHolder` | 선택 | 예금주 |
+| `accountNumber` | 선택 | 계좌번호 |
 
 ### 성공 응답 제안
 
@@ -191,7 +191,7 @@ Content-Type: application/json
 충전신청은 이미 준비된 API가 있습니다.
 POST https://laylow.me/api/integration/charge-requests
 
-요청에는 externalId, domainId 또는 domainName, depositorName, amount, bankName, accountNumber를 JSON으로 보내주세요.
+요청에는 externalId, domainId 또는 domainName, amount를 JSON으로 보내고, depositorName, bankName, accountNumber는 필요한 경우에만 보내주세요.
 가능하면 domainName보다 마스터 관리자에서 생성된 domainId를 보내는 방식이 안전합니다.
 이 요청이 성공하면 마스터 관리자 > 거래내역 > 충전신청에 대기 상태로 노출됩니다.
 

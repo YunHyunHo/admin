@@ -27,9 +27,9 @@ X-API-Key: 발급받은_API_KEY
 | 필드 | 타입 | 필수 | 설명 |
 | --- | --- | ---: | --- |
 | `externalId` | UUID string | 필수 | 외부 사이트가 신청마다 자동 생성하는 중복방지 ID |
-| `depositorName` | string | 필수 | 실제 입금자명. 구매내역의 `구매자`로 표시 |
+| `depositorName` | string | 선택 | 실제 입금자명. 구매내역의 `구매자`로 표시하며 생략 시 `-`로 표시 |
 | `amount` | integer | 필수 | 충전금액. 최소 `1`원인 정수이며 최대 제한 없음 |
-| `bankName` | string | 선택 | Mancoin `result.bank_name`. 계좌정보를 보낼 때 세 필드를 모두 전송 |
+| `bankName` | string | 선택 | Mancoin `result.bank_name` |
 | `accountHolder` | string | 선택 | Mancoin `result.bank_holder` |
 | `accountNumber` | string | 선택 | Mancoin `result.bank_account` |
 
@@ -51,13 +51,12 @@ Mancoin 충전 생성 결과를 전달할 때는 다음과 같이 매핑합니�
 - `result.bank_account` -> `accountNumber`
 - `result.price` -> `amount`
 
-세 계좌 필드를 보내면 신청 당시 값으로 저장되어 도메인 어드민 구매내역에도 동일하게 표시됩니다. 세 필드를 모두 생략하면 마스터 어드민에 설정된 업체 출금은행 정보를 사용합니다.
+계좌 필드를 보내면 신청 당시 값으로 저장되어 도메인 어드민 구매내역에도 동일하게 표시됩니다. 생략한 값은 연결된 계좌 설정이 있으면 해당 값으로 보완됩니다.
 
 ### 보내면 안 되는 값
 
 - `domainId`, `domainName`
 - 도메인 어드민 로그인 아이디 또는 비밀번호
-- 불완전한 계좌정보(은행, 예금주, 계좌번호 중 일부만 전송)
 
 위 값들은 API 키에 연결된 WinPay 설정을 기준으로 서버가 처리합니다.
 
@@ -95,7 +94,7 @@ Mancoin 충전 생성 결과를 전달할 때는 다음과 같이 매핑합니�
 
 | HTTP | 상황 |
 | ---: | --- |
-| `400` | UUID 형식 오류, 입금자명 누락, 금액이 정수가 아님, 1만원 미만 |
+| `400` | UUID 형식 오류, 금액이 정수가 아님, 1원 미만 |
 | `401` | API 키가 없거나 유효하지 않음, 또는 중지된 키 |
 | `403` | API 연동 도메인에 API 키 없이 요청 |
 

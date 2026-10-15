@@ -1110,13 +1110,9 @@ export function ChargeRequestsBoard({
     const domainName =
       domainOptions.find((domain) => domain.id === domainId)?.name ?? "";
 
-    if (
-      !depositorName ||
-      !Number.isInteger(amount) ||
-      amount < minimumChargeAmount
-    ) {
+    if (!Number.isInteger(amount) || amount < minimumChargeAmount) {
       setCreateModalMessage(
-        "입금자명과 1원 이상의 정수 신청금액을 확인해주세요.",
+        "1원 이상의 정수 신청금액을 확인해주세요.",
       );
       return;
     }
@@ -1129,7 +1125,7 @@ export function ChargeRequestsBoard({
     try {
       await requestChargeData({
         action: "create",
-        userId: depositorName,
+        userId: depositorName || "-",
         amount,
         depositor: depositorName,
         bankName: createBankName,
@@ -1801,7 +1797,7 @@ export function ChargeRequestsBoard({
                 <input
                   value={createDepositorName}
                   onChange={(event) => setCreateDepositorName(event.target.value)}
-                  placeholder="입금자명"
+                  placeholder="입금자명 (선택)"
                   className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
                 />
               </label>

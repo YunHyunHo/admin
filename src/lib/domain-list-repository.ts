@@ -196,10 +196,6 @@ export async function createDomainEntry(input: CreateDomainEntryInput) {
     throw new Error("비밀번호는 4글자 이상 입력해주세요.");
   }
 
-  if (!input.bankName.trim() || !input.accountHolder.trim() || !input.accountNumber.trim()) {
-    throw new Error("은행, 예금주, 계좌번호를 모두 입력해주세요.");
-  }
-
   try {
     await withTransaction(async (client) => {
       const ownerResult = await client.query<{ id: string }>(
@@ -369,44 +365,53 @@ export async function createDomainEntry(input: CreateDomainEntryInput) {
         [adminId, domainId],
       );
 
-      const accountResult = await client.query<{ id: string }>(
-        `
-          insert into bank_accounts (
-            company_id,
-            distributor_id,
-            bank_name,
-            account_number,
-            account_holder,
-            created_by,
-            is_active
-          )
-          values ($1::uuid, $2::uuid, $3, $4, $5, $6::uuid, true)
-          returning id::text
-        `,
-        [
-          companyId,
-          ownerDistributorId,
-          input.bankName.trim(),
-          input.accountNumber.trim(),
+      const hasAccountDetails = Boolean(
+        input.bankName.trim() ||
+          input.accountNumber.trim() ||
           input.accountHolder.trim(),
-          input.createdById,
-        ],
       );
+      const accountResult = hasAccountDetails
+        ? await client.query<{ id: string }>(
+            `
+              insert into bank_accounts (
+                company_id,
+                distributor_id,
+                bank_name,
+                account_number,
+                account_holder,
+                created_by,
+                is_active
+              )
+              values ($1::uuid, $2::uuid, $3, $4, $5, $6::uuid, true)
+              returning id::text
+            `,
+            [
+              companyId,
+              ownerDistributorId,
+              input.bankName.trim(),
+              input.accountNumber.trim(),
+              input.accountHolder.trim(),
+              input.createdById,
+            ],
+          )
+        : null;
 
-      const linkedAccountId = accountResult.rows[0]?.id;
+      const linkedAccountId = accountResult?.rows[0]?.id;
 
-      if (!linkedAccountId) {
+      if (hasAccountDetails && !linkedAccountId) {
         throw new Error("도메인 계좌 생성에 실패했습니다.");
       }
 
-      await client.query(
-        `
-          update domains
-          set linked_bank_account_id = $2::uuid
-          where id = $1::uuid
-        `,
-        [domainId, linkedAccountId],
-      );
+      if (linkedAccountId) {
+        await client.query(
+          `
+            update domains
+            set linked_bank_account_id = $2::uuid
+            where id = $1::uuid
+          `,
+          [domainId, linkedAccountId],
+        );
+      }
     });
   } catch (error) {
     if (
@@ -577,10 +582,6 @@ export async function updateDomainEntryAccount(input: {
     throw new Error("도메인 정보를 확인해주세요.");
   }
 
-  if (!input.bankName.trim() || !input.accountHolder.trim() || !input.accountNumber.trim()) {
-    throw new Error("은행, 예금주, 계좌번호를 모두 입력해주세요.");
-  }
-
   await withTransaction(async (client) => {
     const updateAccountScopeSql =
       input.user.role === "MASTER"
@@ -693,10 +694,6 @@ export async function updateDomainWithdrawAccount(input: {
 }) {
   if (!isUuid(input.id)) {
     throw new Error("도메인 정보를 확인해주세요.");
-  }
-
-  if (!input.bankName.trim() || !input.accountHolder.trim() || !input.accountNumber.trim()) {
-    throw new Error("출금은행, 예금주, 계좌번호를 모두 입력해주세요.");
   }
 
   await withTransaction(async (client) => {

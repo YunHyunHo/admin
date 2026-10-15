@@ -65,13 +65,6 @@ export async function POST(request: Request) {
   const holder = payload.holder?.trim() ?? "";
   const accountNumber = payload.accountNumber?.trim() ?? "";
 
-  if (!bankName || !holder || !accountNumber) {
-    return NextResponse.json(
-      { message: "은행, 예금주, 계좌번호를 모두 입력해주세요." },
-      { status: 400 },
-    );
-  }
-
   if (hasDatabaseUrl()) {
     try {
       await createBankAccount(
@@ -162,16 +155,6 @@ export async function PATCH(request: Request) {
       const bankName = payload.bankName?.trim();
       const holder = payload.holder?.trim();
       const accountNumber = payload.accountNumber?.trim();
-
-      if (
-        payload.action === "update" &&
-        (!bankName || !holder || !accountNumber)
-      ) {
-        return NextResponse.json(
-          { message: "은행, 예금주, 계좌번호를 모두 입력해주세요." },
-          { status: 400 },
-        );
-      }
 
       await updateBankAccount({
         id: payload.id,

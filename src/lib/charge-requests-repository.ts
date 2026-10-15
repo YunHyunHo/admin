@@ -1141,7 +1141,7 @@ async function insertChargeRequest(input: CreateChargeRequestInput & {
         bankName,
         accountNumber,
         accountHolder,
-        input.depositor ?? null,
+        input.depositor?.trim() || null,
         input.amount,
         JSON.stringify(input.rawPayload ?? input),
       ],
@@ -1238,10 +1238,6 @@ export async function createIntegrationChargeRequest(
         distributorId,
       })
     : null;
-
-  if (input.useLinkedDepositAccount && !configuredAccount) {
-    throw new Error("마스터 어드민 계좌관리에서 입금 수신 계좌를 먼저 연동해주세요.");
-  }
 
   let requestId: string | undefined;
 

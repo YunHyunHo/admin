@@ -27,7 +27,7 @@ Content-Type: application/json
 |---|---|---:|---|
 | `externalId` | string | 선택 | 외부 사이트에서 관리하는 고유 요청 ID |
 | `domainName` | string | 필수 | 관리자에 등록된 도메인명 |
-| `depositorName` | string | 필수 | 입금자명 |
+| `depositorName` | string | 선택 | 입금자명. 생략 시 관리자 화면에 `-`로 표시 |
 | `amount` | integer | 필수 | 신청금액. 최소 1원 |
 | `bankName` | string | 선택 | 입금은행명 |
 | `accountNumber` | string | 선택 | 입금계좌번호 |
@@ -81,11 +81,11 @@ Content-Type: application/json
 }
 ```
 
-#### 2. 입금자명 또는 신청금액 오류
+#### 2. 신청금액 오류
 
 ```json
 {
-  "message": "입금자명과 신청금액을 확인해주세요."
+  "message": "신청금액을 확인해주세요."
 }
 ```
 
@@ -99,7 +99,7 @@ Content-Type: application/json
 
 ## 연동 규칙
 
-1. `depositorName`은 관리자 화면에서 `입금자명`으로 표시됩니다.
+1. `depositorName`을 보내면 관리자 화면에서 `입금자명`으로 표시되며, 생략하면 `-`로 표시됩니다.
 2. `amount`는 숫자형으로 보내야 하며, 문자열이 아닌 것을 권장합니다.
 3. `bankName`, `accountNumber`는 선택값이지만, 보내주면 관리자 거래내역에서 함께 확인할 수 있습니다.
 4. 동일한 `externalId`를 보내더라도 현재 서버에서 중복 차단 문서는 별도로 보장하지 않으므로, 상대 개발사 쪽에서 고유값으로 관리하는 것을 권장합니다.

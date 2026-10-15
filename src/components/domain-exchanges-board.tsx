@@ -619,11 +619,6 @@ export function DomainExchangesBoard({
       return;
     }
 
-    if (!bankName.trim() || !accountHolder.trim() || !accountNumber.trim()) {
-      setCreateModalMessage("출금은행, 예금주, 계좌번호를 모두 입력해주세요.");
-      return;
-    }
-
     setIsSubmitting(true);
     setCreateModalMessage("");
 
@@ -729,15 +724,9 @@ export function DomainExchangesBoard({
 
       setAvailableBalance(data.createContext.currentBalance);
       const withdrawAccount = data.createContext.withdrawAccount;
-
-      if (!withdrawAccount) {
-        setCreateModalMessage("선택한 업체의 출금계좌를 먼저 설정해주세요.");
-        return;
-      }
-
-      setBankName(withdrawAccount.bankName);
-      setAccountHolder(withdrawAccount.accountHolder);
-      setAccountNumber(withdrawAccount.accountNumber);
+      setBankName(withdrawAccount?.bankName ?? "");
+      setAccountHolder(withdrawAccount?.accountHolder ?? "");
+      setAccountNumber(withdrawAccount?.accountNumber ?? "");
     } catch (error) {
       if (requestId === createContextRequestIdRef.current) {
         setCreateModalMessage(
@@ -1045,7 +1034,7 @@ export function DomainExchangesBoard({
                 <p>출금 가능 보유금: <strong>{availableBalance.toLocaleString("ko-KR")} 원</strong></p>
                 <p className="mt-1">
                   {usesManagedWithdrawAccount
-                    ? "업체를 선택하면 등록된 최신 출금계좌가 자동으로 적용됩니다."
+                    ? "등록된 출금계좌가 있으면 자동 적용되며, 계좌정보 없이도 신청할 수 있습니다."
                     : hasConnectedDomain
                     ? "연결된 도메인이 있으면 자동으로 적용됩니다. 필요하면 다른 도메인으로 바꿀 수 있어요."
                     : "연결된 도메인이 없어도 환전신청은 가능합니다."}
@@ -1089,7 +1078,7 @@ export function DomainExchangesBoard({
                 <input
                   value={bankName}
                   onChange={(event) => setBankName(event.target.value)}
-                  placeholder="출금은행"
+                  placeholder="출금은행 (선택)"
                   readOnly={usesManagedWithdrawAccount}
                   className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500 read-only:bg-slate-100 read-only:text-slate-600"
                 />
@@ -1100,7 +1089,7 @@ export function DomainExchangesBoard({
                 <input
                   value={accountHolder}
                   onChange={(event) => setAccountHolder(event.target.value)}
-                  placeholder="예금주"
+                  placeholder="예금주 (선택)"
                   readOnly={usesManagedWithdrawAccount}
                   className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500 read-only:bg-slate-100 read-only:text-slate-600"
                 />
@@ -1111,7 +1100,7 @@ export function DomainExchangesBoard({
                 <input
                   value={accountNumber}
                   onChange={(event) => setAccountNumber(event.target.value)}
-                  placeholder="계좌번호"
+                  placeholder="계좌번호 (선택)"
                   readOnly={usesManagedWithdrawAccount}
                   className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500 read-only:bg-slate-100 read-only:text-slate-600"
                 />

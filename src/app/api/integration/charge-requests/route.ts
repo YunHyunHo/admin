@@ -152,12 +152,6 @@ export async function POST(request: Request) {
   const bankName = payload.bankName?.trim() ?? "";
   const accountHolder = payload.accountHolder?.trim() ?? "";
   const accountNumber = payload.accountNumber?.trim() ?? "";
-  const providedAccountFieldCount = [
-    bankName,
-    accountHolder,
-    accountNumber,
-  ].filter(Boolean).length;
-  const hasProvidedAccount = providedAccountFieldCount === 3;
 
   if (integration || partnerAccess.access || domainId || domainName) {
     recordRequestUsage({
@@ -222,25 +216,11 @@ export async function POST(request: Request) {
     );
   }
 
-  if (
-    !depositorName ||
-    !Number.isInteger(amount) ||
-    amount < minimumChargeAmount
-  ) {
+  if (!Number.isInteger(amount) || amount < minimumChargeAmount) {
     return NextResponse.json(
       {
         ok: false,
-        message: "입금자명과 1원 이상의 정수 충전금액을 확인해주세요.",
-      },
-      { status: 400 },
-    );
-  }
-
-  if (providedAccountFieldCount > 0 && !hasProvidedAccount) {
-    return NextResponse.json(
-      {
-        ok: false,
-        message: "은행, 예금주, 계좌번호는 모두 함께 보내주세요.",
+        message: "1원 이상의 정수 충전금액을 확인해주세요.",
       },
       { status: 400 },
     );
@@ -256,8 +236,12 @@ export async function POST(request: Request) {
   try {
     const result = await createIntegrationChargeRequest({
       externalId: payload.externalId?.trim(),
-      userId: integration?.domainAdminLoginId ?? depositorName,
-      depositor: depositorName,
+      userId:
+        (integration?.domainAdminLoginId ??
+          partnerAccess.access?.loginId ??
+          depositorName) ||
+        "-",
+      depositor: depositorName || undefined,
       amount,
       bankName,
       accountHolder,

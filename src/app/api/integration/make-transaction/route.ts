@@ -68,13 +68,12 @@ export async function POST(request: Request) {
 
   if (
     !userId ||
-    !depositorName ||
     !Number.isInteger(coinCount) ||
     coinCount <= 0 ||
     !Number.isSafeInteger(amount)
   ) {
     return NextResponse.json(
-      { code: 1, message: "Check id, coinCount and bankHolderName" },
+      { code: 1, message: "Check id and coinCount" },
       { status: 400 },
     );
   }
@@ -83,7 +82,7 @@ export async function POST(request: Request) {
     const result = await createIntegrationChargeRequest({
       externalId,
       userId,
-      depositor: depositorName,
+      depositor: depositorName || undefined,
       amount,
       domainId: integration.domainId,
       distributorId: integration.distributorId,

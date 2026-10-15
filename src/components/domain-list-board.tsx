@@ -296,12 +296,9 @@ export function DomainListBoard({
       !domainName.trim() ||
       !loginId.trim() ||
       !password.trim() ||
-      !confirmPassword.trim() ||
-      !bankName.trim() ||
-      !accountHolder.trim() ||
-      !accountNumber.trim()
+      !confirmPassword.trim()
     ) {
-      setCreateModalMessage("URL을 제외한 모든 항목을 입력해주세요.");
+      setCreateModalMessage("소속, 업체명, 로그인 아이디와 비밀번호를 입력해주세요.");
       return;
     }
 
@@ -546,15 +543,6 @@ export function DomainListBoard({
 
     const draft = getWithdrawAccountDraft(row);
 
-    if (
-      !draft.bankName.trim() ||
-      !draft.accountHolder.trim() ||
-      !draft.accountNumber.trim()
-    ) {
-      setMessage("출금은행, 예금주, 계좌번호를 모두 입력해주세요.");
-      return;
-    }
-
     setSavingWithdrawAccountId(row.id);
     setMessage("");
 
@@ -704,7 +692,7 @@ export function DomainListBoard({
                         }
                         className="h-9 rounded-lg border border-white/12 bg-black/36 px-2 text-xs text-white outline-none"
                       >
-                        <option value="">은행 선택</option>
+                        <option value="">은행 선택 (선택)</option>
                         {bankOptions.map((option) => (
                           <option key={option} value={option}>
                             {option}
@@ -719,7 +707,7 @@ export function DomainListBoard({
                               accountHolder: event.target.value,
                             })
                           }
-                          placeholder="예금주"
+                          placeholder="예금주 (선택)"
                           className="h-9 min-w-0 flex-1 rounded-lg border border-white/12 bg-black/36 px-2 text-xs text-white outline-none placeholder:text-white/30"
                         />
                         <button
@@ -740,7 +728,7 @@ export function DomainListBoard({
                             accountNumber: event.target.value,
                           })
                         }
-                        placeholder="계좌번호"
+                        placeholder="계좌번호 (선택)"
                         className="h-9 rounded-lg border border-white/12 bg-black/36 px-2 text-xs text-white outline-none placeholder:text-white/30"
                       />
                     </div>
@@ -908,7 +896,7 @@ export function DomainListBoard({
                 onChange={(event) => setBankName(event.target.value)}
                 className="h-14 w-full rounded-xl border border-slate-300 px-5 text-sm outline-none"
               >
-                <option value="">은행 선택</option>
+                <option value="">은행 선택 (선택)</option>
                 {bankOptions.map((option) => (
                   <option key={option} value={option}>
                     {option}
@@ -918,13 +906,13 @@ export function DomainListBoard({
               <input
                 value={accountHolder}
                 onChange={(event) => setAccountHolder(event.target.value)}
-                placeholder="예금주"
+                placeholder="예금주 (선택)"
                 className="h-14 w-full rounded-xl border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
               />
               <input
                 value={accountNumber}
                 onChange={(event) => setAccountNumber(event.target.value)}
-                placeholder="계좌번호 [- 넣어서 입력]"
+                placeholder="계좌번호 (선택)"
                 className="h-14 w-full rounded-xl border border-slate-300 px-5 text-sm outline-none placeholder:text-slate-400"
               />
             </div>

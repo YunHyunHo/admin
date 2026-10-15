@@ -43,8 +43,8 @@ export function ApiChargeTestBoard({ domainOptions }: ApiChargeTestBoardProps) {
       return;
     }
 
-    if (!depositorName.trim() || !Number.isFinite(numericAmount) || numericAmount <= 0) {
-      setMessage("입금자명과 신청금액을 확인해주세요.");
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      setMessage("신청금액을 확인해주세요.");
       return;
     }
 
@@ -121,7 +121,7 @@ export function ApiChargeTestBoard({ domainOptions }: ApiChargeTestBoardProps) {
 
               <label className="block">
                 <span className="mb-2 block text-sm font-semibold text-white/78">
-                  입금자명
+                  입금자명 (선택)
                 </span>
                 <input
                   value={depositorName}

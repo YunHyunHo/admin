@@ -145,13 +145,9 @@ export async function POST(request: Request) {
     const domainId = body.domainId?.trim() ?? "";
     const amount = Number(body.amount);
 
-    if (
-      !userId ||
-      !Number.isInteger(amount) ||
-      amount < minimumChargeAmount
-    ) {
+    if (!Number.isInteger(amount) || amount < minimumChargeAmount) {
       return NextResponse.json(
-        { message: "입금자명과 1원 이상의 정수 신청금액을 확인해주세요." },
+        { message: "1원 이상의 정수 신청금액을 확인해주세요." },
         { status: 400 },
       );
     }
@@ -159,7 +155,7 @@ export async function POST(request: Request) {
     try {
       await createDbChargeRequest({
         externalId: body.externalId,
-        userId,
+        userId: userId || user.loginId,
         amount,
         depositor: body.depositor,
         bankName: body.bankName,

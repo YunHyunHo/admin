@@ -519,11 +519,6 @@ export function DistributorWithdrawalHistoryBoard({
       return;
     }
 
-    if (!bankName.trim() || !accountHolder.trim() || !accountNumber.trim()) {
-      setCreateModalMessage("출금은행, 예금주, 계좌번호를 모두 입력해주세요.");
-      return;
-    }
-
     setIsSubmitting(true);
     setCreateModalMessage("");
 
@@ -917,7 +912,7 @@ export function DistributorWithdrawalHistoryBoard({
                 <input
                   value={bankName}
                   onChange={(event) => setBankName(event.target.value)}
-                  placeholder="출금은행"
+                  placeholder="출금은행 (선택)"
                   className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
                 />
               </label>
@@ -927,7 +922,7 @@ export function DistributorWithdrawalHistoryBoard({
                 <input
                   value={accountHolder}
                   onChange={(event) => setAccountHolder(event.target.value)}
-                  placeholder="예금주"
+                  placeholder="예금주 (선택)"
                   className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
                 />
               </label>
@@ -937,7 +932,7 @@ export function DistributorWithdrawalHistoryBoard({
                 <input
                   value={accountNumber}
                   onChange={(event) => setAccountNumber(event.target.value)}
-                  placeholder="계좌번호"
+                  placeholder="계좌번호 (선택)"
                   className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
                 />
               </label>

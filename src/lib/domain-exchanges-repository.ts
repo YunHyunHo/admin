@@ -1007,15 +1007,11 @@ export async function createDomainExchange(
       throw new Error("보유금보다 큰 금액은 신청할 수 없습니다.");
     }
 
-    if (!configuredAccount) {
-      throw new Error("선택한 업체의 출금계좌를 먼저 설정해주세요.");
-    }
-
     return insertExchangeRequest({
       ...input,
-      bankName: configuredAccount.bankName,
-      accountHolder: configuredAccount.accountHolder,
-      accountNumber: configuredAccount.accountNumber,
+      bankName: configuredAccount?.bankName ?? input.bankName,
+      accountHolder: configuredAccount?.accountHolder ?? input.accountHolder,
+      accountNumber: configuredAccount?.accountNumber ?? input.accountNumber,
       companyId: scope.company_id,
       domainId: scope.domain_id,
       distributorId: scope.distributor_id,
@@ -1049,15 +1045,11 @@ export async function createIntegrationDomainExchange(input: CreateDomainExchang
     throw new Error("보유금보다 큰 금액은 신청할 수 없습니다.");
   }
 
-  if (!configuredAccount) {
-    throw new Error("마스터 어드민에서 도메인 출금 수신 계좌를 먼저 설정해주세요.");
-  }
-
   return insertExchangeRequest({
     ...input,
-    bankName: configuredAccount.bankName,
-    accountHolder: configuredAccount.accountHolder,
-    accountNumber: configuredAccount.accountNumber,
+    bankName: configuredAccount?.bankName ?? input.bankName,
+    accountHolder: configuredAccount?.accountHolder ?? input.accountHolder,
+    accountNumber: configuredAccount?.accountNumber ?? input.accountNumber,
     companyId: scope.company_id,
     domainId: scope.domain_id,
     distributorId: scope.distributor_id,

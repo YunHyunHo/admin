@@ -15,18 +15,14 @@ type DomainWithdrawAccountRow = {
 function toWithdrawAccount(
   row: DomainWithdrawAccountRow | undefined,
 ): DomainWithdrawAccount | null {
-  const bankName = row?.bank_name?.trim();
-  const accountHolder = row?.account_holder?.trim();
-  const accountNumber = row?.account_number?.trim();
-
-  if (!bankName || !accountHolder || !accountNumber) {
+  if (!row) {
     return null;
   }
 
   return {
-    bankName,
-    accountHolder,
-    accountNumber,
+    bankName: row.bank_name?.trim() ?? "",
+    accountHolder: row.account_holder?.trim() ?? "",
+    accountNumber: row.account_number?.trim() ?? "",
   };
 }
 

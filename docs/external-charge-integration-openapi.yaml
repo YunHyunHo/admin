@@ -57,13 +57,8 @@ components:
     CreateChargeRequest:
       type: object
       additionalProperties: false
-      dependentRequired:
-        bankName: [accountHolder, accountNumber]
-        accountHolder: [bankName, accountNumber]
-        accountNumber: [bankName, accountHolder]
       required:
         - externalId
-        - depositorName
         - amount
       properties:
         externalId:
@@ -71,7 +66,7 @@ components:
           format: uuid
         depositorName:
           type: string
-          minLength: 1
+          description: Optional depositor name. Omitted values are displayed as '-'.
         amount:
           type: integer
           minimum: 1

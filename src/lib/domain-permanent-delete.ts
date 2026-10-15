@@ -100,6 +100,44 @@ export async function permanentlyDeleteDomain(
       return;
     }
 
+    const linkedDistributors = await client.query<{ exists: boolean }>(
+      `select exists(select 1 from distributors where company_id = $1::uuid) as exists`,
+      [domain.company_id],
+    );
+
+    if (linkedDistributors.rows[0]?.exists) {
+      if (adminIds.length) {
+        await client.query(
+          `
+            delete from admin_company_mappings
+            where company_id = $1::uuid
+              and admin_id = any($2::uuid[])
+          `,
+          [domain.company_id, adminIds],
+        );
+        await client.query(
+          `delete from admin_audit_logs where admin_id = any($1::uuid[])`,
+          [adminIds],
+        );
+        await client.query(
+          `
+            delete from admins a
+            where a.id = any($1::uuid[])
+              and a.role = 'DOMAIN_ADMIN'
+              and not exists (
+                select 1 from admin_company_mappings acm where acm.admin_id = a.id
+              )
+              and not exists (
+                select 1 from admin_domain_mappings adm where adm.admin_id = a.id
+              )
+          `,
+          [adminIds],
+        );
+      }
+
+      return;
+    }
+
     await client.query(`delete from commission_records where company_id = $1::uuid`, [domain.company_id]);
     await client.query(`delete from distributor_settlements where company_id = $1::uuid`, [domain.company_id]);
     await client.query(`delete from domain_settlements where company_id = $1::uuid`, [domain.company_id]);

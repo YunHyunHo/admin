@@ -285,15 +285,6 @@ export function AccountsBoard({
       return;
     }
 
-    if (
-      !account.bankName.trim() ||
-      !account.holder.trim() ||
-      !account.accountNumber.trim()
-    ) {
-      setMessage("은행, 예금주, 계좌번호를 모두 입력해주세요.");
-      return;
-    }
-
     void persistAccountPatch({
       id,
       action: "update",
@@ -305,11 +296,6 @@ export function AccountsBoard({
 
   async function handleCreate() {
     if (isCreating) {
-      return;
-    }
-
-    if (!bankName || !holder || !accountNumber) {
-      setCreateModalMessage("은행, 예금주, 계좌번호를 모두 입력해주세요.");
       return;
     }
 
@@ -575,7 +561,7 @@ export function AccountsBoard({
                   onChange={(event) => setBankName(event.target.value)}
                   className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none transition focus:border-slate-500"
                 >
-                  <option value="">은행 선택</option>
+                  <option value="">은행 선택 (선택)</option>
                   {bankOptions.map((bank) => (
                     <option key={bank} value={bank}>
                       {bank}
@@ -589,7 +575,7 @@ export function AccountsBoard({
                 <input
                   value={holder}
                   onChange={(event) => setHolder(event.target.value)}
-                  placeholder="예금주"
+                  placeholder="예금주 (선택)"
                   className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
                 />
               </label>
@@ -599,7 +585,7 @@ export function AccountsBoard({
                 <input
                   value={accountNumber}
                   onChange={(event) => setAccountNumber(event.target.value)}
-                  placeholder="계좌번호 [- 넣어서 입력]"
+                  placeholder="계좌번호 (선택)"
                   className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-500"
                 />
               </label>
